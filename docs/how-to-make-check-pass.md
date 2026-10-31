@@ -37,7 +37,7 @@ These names need no reason:
 - `usesAbbreviations`: Allows abbreviations in variable, function, type and other declared names.
 - `pollsWithADeadline`: Allows `Effect.repeat` with `Schedule.spaced`, under a deadline.
 - `hasAnUnlistedFileType`: Allows a file type Check doesn't list, such as Markdown.
-- `isAnUnlistedDirectory`: Allows a directory Check doesn't list, such as `vendor`.
+- `isAnUnlistedDirectory`: Allows a directory Check doesn't list, such as `.github`. Check doesn't apply its directory-shape rules inside it, but files there still need their own `hasAnUnlistedFileType` grant.
 - `patchesADependency`: Allows a patch file from `bun patch`.
 
 These names need a reason, written as `{ name: "reason" }`:

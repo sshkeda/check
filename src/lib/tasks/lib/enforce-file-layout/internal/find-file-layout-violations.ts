@@ -408,6 +408,19 @@ const PACKAGE_ROOT_DIRECTORIES: ReadonlySet<string> = new Set([
   DOCS_DIRECTORY,
 ]);
 
+const isRootDirectoryOutsideTheLayout = (directory: string) =>
+  !directory.includes("/") && !PACKAGE_ROOT_DIRECTORIES.has(directory);
+
+const directoriesExemptFromShapeRules = (
+  directories: Iterable<string>,
+  grants: Effect.Success<ReturnType<typeof loadedLintConfigIn>>,
+) =>
+  [...directories].filter(
+    (directory) =>
+      isRootDirectoryOutsideTheLayout(directory) &&
+      grants.some((grant) => grant.path === directory && grant.allow.includes(DIRECTORY)),
+  );
+
 export const directoriesHoldingOnlyADirectory = (
   paths: readonly string[],
   nestedPackageDirectories: readonly string[],
@@ -589,8 +602,8 @@ export const permissionGrantViolations = (
     ]),
     ...outermostPackageDirectories,
   ]);
-  const directoriesNeedingGrants = [...ownedDirectories].filter(
-    (directory) => !directory.includes("/") && !PACKAGE_ROOT_DIRECTORIES.has(directory),
+  const directoriesNeedingGrants = [...ownedDirectories].filter((directory) =>
+    isRootDirectoryOutsideTheLayout(directory),
   );
   const violations: (
     | CannotImportTargetMissing
@@ -770,6 +783,12 @@ export const findFileLayoutViolations = (directory: string) =>
     const ownedDirectories = new Set(
       distinctDirectoriesOf([...ownedPaths, ...nestedPackageDirectories]),
     );
+    const shapeExemptDirectories = Option.match(grants, {
+      onNone: () => [],
+      onSome: (found) => directoriesExemptFromShapeRules(ownedDirectories, found),
+    });
+    const isShapeChecked = ({ location }: { readonly location: string }) =>
+      !shapeExemptDirectories.some((exempt) => isWithin(location, exempt));
     const grantViolations = Option.match(grants, {
       onNone: () => [],
       onSome: (found) => [
@@ -812,11 +831,13 @@ export const findFileLayoutViolations = (directory: string) =>
     const violations = [
       ...fileViolations.flat(),
       ...directoryNameViolations(ownedPaths),
-      ...directoryShapeViolations(ownedPaths),
+      ...directoryShapeViolations(ownedPaths).filter((violation) => isShapeChecked(violation)),
       ...directoriesHoldingOnlyADirectory(
         [...new Set([...paths, ...generated])],
         nestedPackageDirectories,
-      ).filter(({ location }) => ownedDirectories.has(location)),
+      ).filter(
+        (violation) => ownedDirectories.has(violation.location) && isShapeChecked(violation),
+      ),
       ...packageRootViolations(ownedPaths),
       ...duplicateFileNameViolations(ownedPaths),
       ...grantViolations,

@@ -23,4 +23,6 @@ export default lintConfig({
     ],
   },
   "tests/shared/run-task-files.ts": { allow: ["usesAbbreviations"] },
+  ".github": { allow: ["isAnUnlistedDirectory"] },
+  ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] },
 });

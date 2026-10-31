@@ -93,6 +93,23 @@ export const foreignCodeAndUnknownFilesNeedExactGrants = Task.make(
   }),
 );
 
+export const aFileInAGrantedDirectoryNeedsItsOwnFileTypeGrant = Task.make(
+  "a file type inside a granted directory still needs its own grant",
+  Effect.sync(() => {
+    const workflow = ".github/workflows/publish.yml";
+    const directoryGrant = { path: ".github", allow: ["isAnUnlistedDirectory" as const] };
+    expect(
+      fileTypeViolations([workflow], [directoryGrant]).map(({ location }) => location),
+    ).toEqual([workflow]);
+    expect(
+      fileTypeViolations(
+        [workflow],
+        [directoryGrant, { path: workflow, allow: ["hasAnUnlistedFileType"] }],
+      ),
+    ).toEqual([]);
+  }),
+);
+
 export const toolLocationsRemainIndependentOfTypeGrants = Task.make(
   "supported tool names have precise locations and a file-type grant does not move code or a tool file",
   Effect.sync(() => {

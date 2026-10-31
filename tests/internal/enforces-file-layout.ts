@@ -1631,7 +1631,7 @@ export const toolOwnedDotFilesPass = Task.make(
 );
 
 export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
-  "directory grants allow exceptional paths but do not exempt hidden files from naming or directory shape rules",
+  "directory grants allow exceptional paths and their directory shape but do not exempt their files from naming rules",
   Effect.gen(function* () {
     const files = {
       ".github/workflows/CI.yml": "name: ci\n",
@@ -1641,12 +1641,10 @@ export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
       "src/index.ts": "export const MAIN = 1;\n",
     };
     const ungranted = yield* repositoryWithConfig("export default lintConfig({});", files);
-    const layoutErrors = [
-      ".github/workflows/CI.yml: error NotKebabCase: CI.yml is not kebab-case",
-      holdsOnly(".github", "workflows"),
-    ];
+    const notKebabCase = ".github/workflows/CI.yml: error NotKebabCase: CI.yml is not kebab-case";
     expect(yield* layoutViolationsIn(ungranted)).toEqual([
-      ...layoutErrors,
+      notKebabCase,
+      holdsOnly(".github", "workflows"),
       ...[".claude", ".github", ".local-packages", "vendor"].map((directory) =>
         ungrantedDirectory(directory),
       ),
@@ -1655,7 +1653,7 @@ export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
       'export default lintConfig({ ".github": { allow: ["isAnUnlistedDirectory"] }, ".claude": { allow: ["isAnUnlistedDirectory"] }, ".local-packages": { allow: ["isAnUnlistedDirectory"] }, vendor: { allow: ["isAnUnlistedDirectory"] } });',
       files,
     );
-    expect(yield* layoutViolationsIn(granted)).toEqual(layoutErrors);
+    expect(yield* layoutViolationsIn(granted)).toEqual([notKebabCase]);
   }).pipe(Effect.scoped),
 );
 
@@ -1677,8 +1675,80 @@ export const nestedPackagesDoNotHideDotDirectories = Task.make(
         `export default lintConfig({ "${parent}": { allow: ["isAnUnlistedDirectory"] } });`,
         files,
       );
-      expect(yield* layoutViolationsIn(granted)).toEqual([holdsOnly(parent, ".library")]);
+      expect(yield* layoutViolationsIn(granted)).toEqual([]);
     }
+  }).pipe(Effect.scoped),
+);
+
+const PUBLISH_WORKFLOW = {
+  ".github/workflows/publish.yml": "name: publish\non: push\njobs: {}\n",
+  "src/index.ts": "export const MAIN = 1;\n",
+} as const;
+
+export const aGrantedDirectoryHoldingOnlyADirectoryPasses = Task.make(
+  "a granted .github holding only workflows/publish.yml passes, because the tool that reads it fixes its shape",
+  Effect.gen(function* () {
+    const directory = yield* repositoryWithConfig(
+      'export default lintConfig({ ".github": { allow: ["isAnUnlistedDirectory"] }, ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] } });',
+      PUBLISH_WORKFLOW,
+    );
+    expect(yield* layoutViolationsIn(directory)).toEqual([]);
+  }).pipe(Effect.scoped),
+);
+
+export const aGrantedDirectoryKeepsItsOwnModuleShape = Task.make(
+  "lib/, internal/ and shared/ inside a granted directory keep the shape their tool gave them, while the same files ungranted are reported",
+  Effect.gen(function* () {
+    const files = {
+      "vendor/acme/lib/internal/index.ts": "export const ACME = 1;\n",
+      "vendor/acme/lib/internal/parse/read-acme.ts": "export const READ = 1;\n",
+      "src/index.ts": "export const MAIN = 1;\n",
+    };
+    const ungranted = yield* repositoryWithConfig("export default lintConfig({});", files);
+    expect(yield* layoutViolationsIn(ungranted)).toEqual([
+      "vendor/acme/lib: error LibraryDirectory: is a lib/ directory that is not directly in a module",
+      "vendor/acme/lib/internal: error DirectoryInInternalOrShared: holds the directory vendor/acme/lib/internal/parse/",
+      "vendor/acme/lib/internal/index.ts: error IndexInInternalOrShared: is an index file directly in internal/",
+      holdsOnly("vendor", "acme"),
+      holdsOnly("vendor/acme", "lib"),
+      holdsOnly("vendor/acme/lib", "internal"),
+      ungrantedDirectory("vendor"),
+    ]);
+    const granted = yield* repositoryWithConfig(
+      'export default lintConfig({ vendor: { allow: ["isAnUnlistedDirectory"] } });',
+      files,
+    );
+    expect(yield* layoutViolationsIn(granted)).toEqual([]);
+  }).pipe(Effect.scoped),
+);
+
+export const anUngrantedDirectoryHoldingOnlyADirectoryStillFails = Task.make(
+  "a directory holding only a directory still fails when it is ungranted, inside the default layout, or a default directory given a directory grant",
+  Effect.gen(function* () {
+    const ungranted = yield* repositoryWithConfig(
+      'export default lintConfig({ ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] } });',
+      PUBLISH_WORKFLOW,
+    );
+    expect(yield* layoutViolationsIn(ungranted)).toEqual([
+      holdsOnly(".github", "workflows"),
+      ungrantedDirectory(".github"),
+    ]);
+    const grantedElsewhere = yield* repositoryWithConfig(
+      'export default lintConfig({ ".github": { allow: ["isAnUnlistedDirectory"] }, ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] }, "src/shared/fixtures": { allow: ["isAnUnlistedDirectory"] } });',
+      {
+        ...PUBLISH_WORKFLOW,
+        "src/shared/load-fixtures.ts": "export const FIXTURES = 1;\n",
+        "src/shared/fixtures/data/a.json": "{}\n",
+      },
+    );
+    expect(yield* layoutViolationsIn(grantedElsewhere)).toEqual([
+      holdsOnly("src/shared/fixtures", "data"),
+    ]);
+    const grantedDefault = yield* repositoryWithConfig(
+      'export default lintConfig({ src: { allow: ["isAnUnlistedDirectory"] } });',
+      { "src/lib/a/index.ts": "export const A = 1;\n" },
+    );
+    expect(yield* layoutViolationsIn(grantedDefault)).toEqual([holdsOnly("src", "lib")]);
   }).pipe(Effect.scoped),
 );
 
