@@ -152,7 +152,7 @@ Check needs Bun 1.4.4 or newer and a Git repository.
    }
    ```
 
-6. Run it, and have your agent fix what it reports.
+6. Run it, and have your agent fix what it reports. Expect the first run to fail, even on a new project from `bun init`.
 
    ```bash
    bun scripts/ci.ts
