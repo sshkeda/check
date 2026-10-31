@@ -1,0 +1,53 @@
+{
+  "name": "@sshkeda/check",
+  "version": "1.0.0",
+  "homepage": "https://github.com/sshkeda/check#readme",
+  "bugs": {
+    "url": "https://github.com/sshkeda/check/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sshkeda/check.git"
+  },
+  "files": [
+    "docs",
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tasks": "./src/lib/tasks/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.1.0",
+    "@effect/tsgo": "0.55.0",
+    "@oxlint/plugins": "1.87.0",
+    "oxc-parser": "0.153.0",
+    "oxc-resolver": "11.24.2",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2005",
+    "typescript": "7.0.2"
+  },
+  "devDependencies": {
+    "@sshkeda/task": "^1.0.0",
+    "@types/bun": "1.4.3",
+    "effect": "4.1.0"
+  },
+  "peerDependencies": {
+    "@sshkeda/task": "^1.0.0",
+    "effect": "^4.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@sshkeda/task": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "bun": ">=1.4.4"
+  }
+}
