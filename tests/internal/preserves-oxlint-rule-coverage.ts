@@ -31,6 +31,8 @@ const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_O
 
 const COMPATIBILITY_VIOLATIONS = 2;
 
+const UNSORTED_UNIONS = 400;
+
 const LINT_TASK = stagedCheckModule("src/lib/tasks/lib/lint-with-oxlint/index.ts");
 
 const OWNER_RUNS_EVERYONE_READS = 0o755;
@@ -101,6 +103,26 @@ export const preservesEnumAssignmentsAndTypeSorting = Task.make(
       expect(output).toMatch(
         /^\[oxlint\] error ToolReportedViolations: tsgolint reported 1 violation and exited with code 0$/mu,
       );
+    }),
+  ),
+);
+
+export const readsAnOxlintReportLargerThanAPipeBuffer = Task.make(
+  "an oxlint report larger than 64 KB decodes and reports every finding",
+  Effect.scoped(
+    Effect.gen(function* () {
+      const output = yield* lintOutputOf({
+        "src/unsorted.ts": Array.from(
+          { length: UNSORTED_UNIONS },
+          (_entry, index) => `export type Choice${index} = string | number;`,
+        ).join("\n"),
+      });
+      expect(output).not.toContain("ToolReportUndecodable");
+      expect(
+        output
+          .split("\n")
+          .filter((line) => line.includes("error sshkeda(no-unsorted-type-constituents)")),
+      ).toHaveLength(UNSORTED_UNIONS);
     }),
   ),
 );

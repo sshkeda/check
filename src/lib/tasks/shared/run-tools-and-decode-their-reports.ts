@@ -1,8 +1,15 @@
-import type { Array as Arrays, Schema } from "effect";
-import { Effect, Stream } from "effect";
-import { ChildProcess } from "effect/process";
+import { open } from "node:fs/promises";
 
-import { ToolExited, ToolReportUndecodable } from "./project-config-and-tool-errors.ts";
+import type { Subprocess } from "bun";
+import type { Array as Arrays, Schema } from "effect";
+import { Effect, FileSystem } from "effect";
+
+import {
+  ToolExited,
+  ToolNotStarted,
+  ToolReportUndecodable,
+  ToolStoppedBySignal,
+} from "./project-config-and-tool-errors.ts";
 
 const LINE_BREAK = "\n";
 
@@ -48,6 +55,65 @@ export const mergedExit = (exits: Arrays.NonEmptyReadonlyArray<ToolExited>) => {
   });
 };
 
+const WINDOWS = "win32";
+
+const openedStandardOutputFile = (file: string) =>
+  Effect.acquireRelease(
+    Effect.promise(() => open(file, "w")),
+    (handle) => Effect.promise(() => handle.close()),
+  );
+
+const stopTheProcessGroupOf = (child: Subprocess) =>
+  Effect.gen(function* () {
+    if (process.platform === WINDOWS) {
+      yield* Effect.try(() =>
+        Bun.spawn(["taskkill", "/pid", `${child.pid}`, "/T", "/F"], {
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }),
+      ).pipe(
+        Effect.flatMap((taskkill) => Effect.promise(() => taskkill.exited)),
+        Effect.catchTag("UnknownError", () => Effect.void),
+      );
+      child.kill();
+    } else {
+      yield* Effect.try(() => process.kill(-child.pid, "SIGKILL")).pipe(
+        Effect.catchTag("UnknownError", () => Effect.void),
+      );
+    }
+    yield* Effect.promise(() => child.exited);
+  });
+
+const spawnedTool = (
+  command: string,
+  binary: string,
+  toolArguments: readonly string[],
+  standardOutput: number,
+  workingDirectory?: string,
+  environment?: Record<string, string>,
+) =>
+  Effect.acquireRelease(
+    Effect.try({
+      try: () =>
+        Bun.spawn([binary, ...toolArguments], {
+          ...(workingDirectory === undefined ? {} : { cwd: workingDirectory }),
+          env: { ...process.env, ...environment },
+          detached: process.platform !== WINDOWS,
+          stdin: "ignore",
+          stdout: standardOutput,
+          stderr: "pipe",
+        }),
+      catch: (cause) =>
+        new ToolNotStarted({
+          command,
+          reason:
+            cause instanceof Error ? cause.message : "the spawn threw a value that is not an Error",
+        }),
+    }),
+    stopTheProcessGroupOf,
+  );
+
 export const runTool = (
   program: string,
   binary: string,
@@ -57,25 +123,33 @@ export const runTool = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const child = yield* ChildProcess.make(binary, toolArguments, {
-        ...(workingDirectory === undefined ? {} : { cwd: workingDirectory }),
-        extendEnv: true,
-        env: environment,
-        stdin: "ignore",
-        stderr: "pipe",
-      });
-      const [standardOutput, standardError, code] = yield* Effect.all(
+      const fileSystem = yield* FileSystem.FileSystem;
+      const standardOutputFile = yield* fileSystem.makeTempFileScoped();
+      const handle = yield* openedStandardOutputFile(standardOutputFile);
+      const command = [binary, ...toolArguments].join(" ");
+      const child = yield* spawnedTool(
+        command,
+        binary,
+        toolArguments,
+        handle.fd,
+        workingDirectory,
+        environment,
+      );
+      const [standardError, code] = yield* Effect.all(
         [
-          Stream.mkString(Stream.decodeText(child.stdout)),
-          Stream.mkString(Stream.decodeText(child.stderr)),
-          child.exitCode,
+          Effect.promise(() => new Response(child.stderr).text()),
+          Effect.promise(() => child.exited),
         ],
         { concurrency: "unbounded" },
       );
+      const standardOutput = yield* fileSystem.readFileString(standardOutputFile);
+      if (child.signalCode !== null) {
+        return yield* new ToolStoppedBySignal({ program, command, signal: `${child.signalCode}` });
+      }
       if (code !== 0) {
         return yield* new ToolExited({
           program,
-          command: [binary, ...toolArguments].join(" "),
+          command,
           code,
           standardOutput,
           standardError: standardError.trim(),

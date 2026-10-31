@@ -13,7 +13,9 @@ export default lintConfig({
       },
     ],
   },
-  "src/lib/tasks/shared/run-tools-and-decode-their-reports.ts": { allow: ["spawnsCommands"] },
+  "src/lib/tasks/shared/run-tools-and-decode-their-reports.ts": {
+    allow: ["spawnsCommands", "readsConfig", "locksFiles"],
+  },
   "tests/shared/failure-as-value.ts": {
     allow: [
       {

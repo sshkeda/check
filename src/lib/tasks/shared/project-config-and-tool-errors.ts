@@ -336,6 +336,15 @@ export class ToolExited extends Schema.TaggedError<ToolExited>()("ToolExited", {
   }
 }
 
+export class ToolNotStarted extends Schema.TaggedError<ToolNotStarted>()("ToolNotStarted", {
+  command: Schema.String,
+  reason: Schema.String,
+}) {
+  public override get message() {
+    return `${this.command} did not start: ${this.reason}`;
+  }
+}
+
 export class ToolStoppedBySignal extends Schema.TaggedError<ToolStoppedBySignal>()(
   "ToolStoppedBySignal",
   { program: Schema.String, command: Schema.String, signal: Schema.String },

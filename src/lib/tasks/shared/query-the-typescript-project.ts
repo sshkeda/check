@@ -280,7 +280,11 @@ const compiledFilesOf = (
     const projectDirectory = path.dirname(yield* absolutePathOf(projectFile));
     const listedFilesOfEachProject = yield* Effect.forEach(projects, ([configFile, { program }]) =>
       typeScriptRequest("list the program files", () => program.getSourceFileNames()).pipe(
-        Effect.map((fileNames) => ({ configFile, program, fileNames })),
+        Effect.map((fileNames) => ({
+          configFile,
+          program,
+          fileNames: fileNames.filter((fileName) => path.isAbsolute(fileName)),
+        })),
       ),
     );
     const everyListedFile = listedFilesOfEachProject.flatMap(({ fileNames }) => fileNames);
