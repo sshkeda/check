@@ -8,6 +8,7 @@ import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { findTypeScriptConfigViolations } from "../../src/lib/tasks/shared/find-unmet-typescript-config-requirements.ts";
 import {
   LooseCompilerOption,
+  OPTIONS_TSC_LEAVES_UNSET,
   REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
   STRICT_OPTIONS,
 } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
@@ -100,6 +101,17 @@ export const checksExactlyTheOptionsTscDefaultsFromStrict = Task.make(
   }),
 );
 
+const OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING = {
+  noImplicitReturns: true,
+  noUnusedLocals: true,
+  noUnusedParameters: true,
+  noPropertyAccessFromIndexSignature: true,
+  noImplicitOverride: true,
+  noFallthroughCasesInSwitch: true,
+  allowUnreachableCode: false,
+  allowUnusedLabels: false,
+} as const;
+
 const REQUIRED_OPTIONS = [
   ...STRICT_OPTIONS,
   ...Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT),
@@ -112,7 +124,7 @@ export const looseCompilerOptionNamesOnlyARequiredOption = Task.make(
     expect(REQUIRED_OPTIONS.map((option) => Option.isSome(decoded(option)))).toEqual(
       REQUIRED_OPTIONS.map(() => true),
     );
-    expect(Option.isNone(decoded("noUnusedLocals"))).toBe(true);
+    expect(Option.isNone(decoded("noErrorTruncation"))).toBe(true);
   }),
 );
 
@@ -120,13 +132,16 @@ export const judgesUnsetOptionsOutsideStrictByTheirTscDefault = Task.make(
   "every option check requires outside strict defaults to false in tsc --help --all, so an unset one resolves to false",
   Effect.gen(function* () {
     const entries = yield* tscHelpEntries;
+    const optionsThatDefaultToFalse = Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT).filter(
+      (option) => !OPTIONS_TSC_LEAVES_UNSET.has(option),
+    );
     expect(
-      Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT).map((option) =>
+      optionsThatDefaultToFalse.map((option) =>
         entries.some(
           (entry) => entry.startsWith(`--${option}\n`) && entry.endsWith("default: false"),
         ),
       ),
-    ).toEqual(Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT).map(() => true));
+    ).toEqual(optionsThatDefaultToFalse.map(() => true));
   }),
 );
 
@@ -621,7 +636,7 @@ export const printsANonBooleanStrictValueOnceFromBunCheck = Task.make(
   Effect.gen(function* () {
     const printed = yield* printedCheckOf((yield* projectExtending({ strict: "yes" })).directory);
     expect(printed.split("\n").filter((line) => line.includes("error TS5024"))).toEqual([
-      "[type-check] base.json:9:15: error TS5024: Compiler option 'strict' requires a value of type boolean.",
+      "[type-check] base.json:17:15: error TS5024: Compiler option 'strict' requires a value of type boolean.",
     ]);
     expect(printed).toMatch(/^\[typescript-config\] passed in /mu);
   }).pipe(Effect.scoped),
@@ -640,6 +655,14 @@ export const typeChecksAConsumerShapedProjectWithoutStrict = Task.make(
           allowImportingTsExtensions: true,
           noUncheckedIndexedAccess: true,
           exactOptionalPropertyTypes: true,
+          noImplicitReturns: true,
+          noUnusedLocals: true,
+          noUnusedParameters: true,
+          noPropertyAccessFromIndexSignature: true,
+          noImplicitOverride: true,
+          noFallthroughCasesInSwitch: true,
+          allowUnreachableCode: false,
+          allowUnusedLabels: false,
           verbatimModuleSyntax: true,
           skipLibCheck: true,
           types: ["bun"],
@@ -663,7 +686,12 @@ export const namesIndexAndOptionalCheckingLeftUnset = Task.make(
   Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
-        compilerOptions: { strict: true, noEmit: true, skipLibCheck: true },
+        compilerOptions: {
+          ...OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING,
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+        },
         files: ["src/index.ts", "oxlint.config.ts"],
       }),
       "src/index.ts": IMPORTS_TASK,
@@ -676,11 +704,65 @@ export const namesIndexAndOptionalCheckingLeftUnset = Task.make(
   }).pipe(Effect.scoped),
 );
 
+export const namesUnreachableCodeAndUnusedLabelsLeftUnset = Task.make(
+  "a tsconfig that leaves allowUnreachableCode and allowUnusedLabels unset is reported once for each, because tsc then only suggests a fix instead of failing",
+  Effect.gen(function* () {
+    const { allowUnreachableCode, allowUnusedLabels, ...everyOtherOption } =
+      REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT;
+    const { tsconfigFile } = yield* makeProject({
+      "tsconfig.json": yield* encodeJson({
+        compilerOptions: { ...everyOtherOption, noEmit: true, skipLibCheck: true },
+        files: ["src/index.ts", "oxlint.config.ts"],
+      }),
+      "src/index.ts": IMPORTS_TASK,
+    });
+    expect([allowUnreachableCode, allowUnusedLabels]).toEqual([false, false]);
+    expect(yield* unmetRequirements(tsconfigFile)).toEqual([
+      `${tsconfigFile}: error LooseCompilerOption: allowUnreachableCode is unset`,
+      `${tsconfigFile}: error LooseCompilerOption: allowUnusedLabels is unset`,
+    ]);
+  }).pipe(Effect.scoped),
+);
+
+const unmetRequirementsWith = (compilerOptions: Readonly<Record<string, boolean | undefined>>) =>
+  Effect.gen(function* () {
+    const { tsconfigFile } = yield* makeProject({
+      "tsconfig.json": yield* encodeJson({
+        compilerOptions: { ...compilerOptions, noEmit: true, skipLibCheck: true },
+        files: ["src/index.ts", "oxlint.config.ts"],
+      }),
+      "src/index.ts": IMPORTS_TASK,
+    });
+    return { tsconfigFile, unmet: yield* unmetRequirements(tsconfigFile) };
+  });
+
+export const namesEachNewSettingLeftUnsetOrLoose = Task.make(
+  "each setting Task and Check use is reported when it is unset or written with the wrong value, and passes with the required value",
+  Effect.gen(function* () {
+    for (const [option, required] of Record.toEntries(OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING)) {
+      const { [option]: _removed, ...everyOtherOption } = REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT;
+      const unset = yield* unmetRequirementsWith(everyOtherOption);
+      expect(unset.unmet).toEqual([
+        OPTIONS_TSC_LEAVES_UNSET.has(option)
+          ? `${unset.tsconfigFile}: error LooseCompilerOption: ${option} is unset`
+          : `${unset.tsconfigFile}: error LooseCompilerOption: ${option} resolves to false`,
+      ]);
+      const loose = yield* unmetRequirementsWith({ ...everyOtherOption, [option]: !required });
+      expect(loose.unmet).toEqual([
+        `${loose.tsconfigFile}: error LooseCompilerOption: ${option} resolves to ${!required}`,
+      ]);
+      const met = yield* unmetRequirementsWith({ ...everyOtherOption, [option]: required });
+      expect(met.unmet).toEqual([]);
+    }
+  }).pipe(Effect.scoped),
+);
+
 const rewritingProject = (rewrittenImportOptions: Readonly<Record<string, boolean>>) =>
   Effect.gen(function* () {
     return yield* makeProject({
       "tsconfig.json": yield* encodeJson({
         compilerOptions: {
+          ...OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING,
           strict: true,
           noUncheckedIndexedAccess: true,
           exactOptionalPropertyTypes: true,
@@ -726,6 +808,7 @@ export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.m
       }),
       "server/tsconfig.json": yield* encodeJson({
         compilerOptions: {
+          ...OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING,
           composite: true,
           noUncheckedIndexedAccess: false,
           exactOptionalPropertyTypes: false,

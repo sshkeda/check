@@ -2,6 +2,7 @@ import { Effect, Record } from "effect";
 
 import {
   LooseCompilerOption,
+  OPTIONS_TSC_LEAVES_UNSET,
   REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
   STRICT_OPTIONS,
   TypeScriptConfigViolations,
@@ -28,10 +29,13 @@ const optionViolationsOf = (configFile: string) =>
             resolvedValue:
               (option === "allowImportingTsExtensions" &&
                 options["rewriteRelativeImportExtensions"] === true) ||
-              (options[option] ?? false),
+              (options[option] ?? (OPTIONS_TSC_LEAVES_UNSET.has(option) ? undefined : false)),
           }),
         ),
       ].flatMap(({ option, required, resolvedValue }) => {
+        if (resolvedValue === undefined) {
+          return [new LooseCompilerOption({ projectFile: configFile, option })];
+        }
         const isLoose = typeof resolvedValue === "boolean" && resolvedValue !== required;
         return isLoose
           ? [new LooseCompilerOption({ projectFile: configFile, option, resolvedValue })]

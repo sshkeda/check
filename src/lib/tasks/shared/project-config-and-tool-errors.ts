@@ -405,8 +405,21 @@ export const REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT = {
   noUncheckedIndexedAccess: true,
   exactOptionalPropertyTypes: true,
   allowImportingTsExtensions: true,
+  noImplicitReturns: true,
+  noUnusedLocals: true,
+  noUnusedParameters: true,
+  noPropertyAccessFromIndexSignature: true,
+  noImplicitOverride: true,
+  noFallthroughCasesInSwitch: true,
+  allowUnreachableCode: false,
+  allowUnusedLabels: false,
   noCheck: false,
 } as const;
+
+export const OPTIONS_TSC_LEAVES_UNSET: ReadonlySet<string> = new Set([
+  "allowUnreachableCode",
+  "allowUnusedLabels",
+]);
 
 export class LooseCompilerOption extends Schema.TaggedError<LooseCompilerOption>()(
   "LooseCompilerOption",
@@ -416,14 +429,16 @@ export class LooseCompilerOption extends Schema.TaggedError<LooseCompilerOption>
       ...STRICT_OPTIONS,
       ...Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT),
     ]),
-    resolvedValue: Schema.Boolean,
+    resolvedValue: Schema.optionalKey(Schema.Boolean),
   },
 ) {
   public get location() {
     return this.projectFile;
   }
   public override get message() {
-    return `${this.option} resolves to ${this.resolvedValue}`;
+    return this.resolvedValue === undefined
+      ? `${this.option} is unset`
+      : `${this.option} resolves to ${this.resolvedValue}`;
   }
 }
 

@@ -4,7 +4,7 @@ Check sends your AI slop code back to the kitchen!
 
 Check holds your TypeScript code to a strict standard built around Effect and Bun, so the code stays type-safe, observable and predictable.
 
-It runs a handpicked set of oxfmt, oxlint and Effect diagnostic rules, plus `bun check` and about 30 rules of its own. Your agent keeps fixing what it reports until the slop is gone.
+It runs about 310 lint rules, 62 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
 
 No comment or setting turns a rule off everywhere. A small set of rules was picked to allow an override, and you grant each one to a single file in `oxlint.config.ts`. See [Grant a permission](docs/how-to-make-check-pass.md#grant-a-permission).
 
@@ -113,6 +113,14 @@ Check needs Bun 1.4.4 or newer and a Git repository.
    "strict": true,
    "noUncheckedIndexedAccess": true,
    "exactOptionalPropertyTypes": true,
+   "noImplicitReturns": true,
+   "noUnusedLocals": true,
+   "noUnusedParameters": true,
+   "noPropertyAccessFromIndexSignature": true,
+   "noImplicitOverride": true,
+   "noFallthroughCasesInSwitch": true,
+   "allowUnreachableCode": false,
+   "allowUnusedLabels": false,
    "allowImportingTsExtensions": true,
    "types": ["bun"]
    ```
@@ -149,6 +157,10 @@ Check needs Bun 1.4.4 or newer and a Git repository.
    ```bash
    bun scripts/ci.ts
    ```
+
+## Make it yours
+
+Check's rules are one opinion. To change them, clone the repo, add or remove rules, and use your copy instead of the npm package.
 
 ## Development
 
