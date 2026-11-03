@@ -90,7 +90,7 @@ Check passes.
 - **No unchecked data.** JSON and other input pass through a Schema before the code trusts them, because a type assertion or a hand-written type guard proves nothing.
 - **No dead exports.** Check reports any export that nothing uses, or that only tests use, so unused code doesn't pile up.
 - **Effect in place of Node's built-ins.** File, path and process work goes through Effect, so its errors stay typed.
-- **Tests are tasks.** Check bans Vitest and Jest. Each test is a task in Task, so tests run in parallel and clean up after themselves.
+- **Tests are tasks.** Every test is a Task task in `tests/`, never a Vitest, Jest or `bun:test` suite. Tests run in parallel and clean up after themselves.
 - **Each service in its own layer.** Services are declared only in files you grant, which keeps their wiring in one place.
 - **No polling.** Code waits for an event or a signal instead of checking on a timer, so it reacts right away. When there's nothing to listen to, such as a server that's still starting, polling needs a grant and a time limit.
 - **No dropped failures.** Every error is handled or passed on, so nothing fails silently.
