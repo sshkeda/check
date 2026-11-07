@@ -35,6 +35,7 @@ import {
   TEST_DIRECTORY,
 } from "../../../../../shared/test-home-directories.ts";
 import {
+  MODULE_ROOT_DIRECTORIES,
   enclosingDirectoriesOf,
   isRootSupportFile,
   repeatsSourceNeverImportsScripts,
@@ -298,7 +299,8 @@ export const sourceViolations = (
   }
 
   const isSourceOutsideModuleImplementation =
-    (isWithin(path, SOURCE_DIRECTORY) || isWithin(path, TEST_DIRECTORY)) &&
+    MODULE_ROOT_DIRECTORIES.has(path.split("/")[0] ?? "") &&
+    !isTopLevelScript(path) &&
     !isLibraryDirectoryOfAModule(directoryOf(path)) &&
     !isEntryFileName(fileNameOf(path)) &&
     !isDeclarationFile(path) &&

@@ -4,8 +4,11 @@ import {
   LAYOUT_DIRECTORY_NAMES,
   LIBRARY_DIRECTORY_NAME,
 } from "../../../../../shared/match-file-names-and-path-prefixes.ts";
-import { SOURCE_DIRECTORY, TEST_DIRECTORY } from "../../../../../shared/test-home-directories.ts";
-import { directoryOf, enclosingDirectoriesOf } from "../../../shared/classify-files-by-role.ts";
+import {
+  directoryOf,
+  enclosingDirectoriesOf,
+  MODULE_ROOT_DIRECTORIES,
+} from "../../../shared/classify-files-by-role.ts";
 import {
   DirectoryOutsideModuleLayout,
   FileInLibraryDirectory,
@@ -16,8 +19,7 @@ import {
 export const isModuleDirectory = (directory: string): boolean => {
   const parent = directoryOf(directory);
   return (
-    directory === SOURCE_DIRECTORY ||
-    directory === TEST_DIRECTORY ||
+    MODULE_ROOT_DIRECTORIES.has(directory) ||
     (fileNameOf(parent) === LIBRARY_DIRECTORY_NAME && isModuleDirectory(directoryOf(parent)))
   );
 };

@@ -16,6 +16,7 @@ import * as effectNativeRestrictions from "./internal/enforces-effect-native-res
 import * as effectServices from "./internal/enforces-effect-service-boundaries.ts";
 import * as fileLayout from "./internal/enforces-file-layout.ts";
 import * as fileTypes from "./internal/enforces-file-types.ts";
+import * as scriptsModuleLayout from "./internal/enforces-scripts-module-layout.ts";
 import * as formatConfig from "./internal/formats-with-the-format-config-from-check.ts";
 import * as generatedFiles from "./internal/grants-generated-files.ts";
 import * as permissionsByFile from "./internal/grants-permissions-by-file.ts";
@@ -122,6 +123,7 @@ export const ci = Task.make(
         globalErrorFailureTypes,
         inferrableAnnotations,
         fileLayout,
+        scriptsModuleLayout,
         fileTypes,
         duplicateFunctions,
         failureReports,

@@ -99,7 +99,7 @@ export class DirectoryOutsideModuleLayout extends Schema.TaggedError<DirectoryOu
   { location: Schema.String, module: Schema.String },
 ) {
   public override get message() {
-    return `is a directory in the module ${this.module}/ other than ${INTERNAL_DIRECTORY_NAME}/, ${SHARED_DIRECTORY_NAME}/ or ${LIBRARY_DIRECTORY_NAME}/`;
+    return `is a directory in the module ${this.module}/ other than ${INTERNAL_DIRECTORY_NAME}/, ${SHARED_DIRECTORY_NAME}/ or ${LIBRARY_DIRECTORY_NAME}/. Move it to ${this.module}/${LIBRARY_DIRECTORY_NAME}/${fileNameOf(this.location)}/`;
   }
 }
 
