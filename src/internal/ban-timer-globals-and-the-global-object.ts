@@ -13,7 +13,6 @@ export const globalRule = (ruleName: keyof typeof GLOBAL_RULES) => {
   return defineRule({
     meta: {
       type: "problem",
-      docs: { description: `Refuse the globals ${[...restrictedGlobals].join(", ")}.` },
       messages: { global: "global {{name}} is used" },
     },
     create(context) {

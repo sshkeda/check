@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, Path, Schema } from "effect";
 import { ScriptKind } from "typescript/unstable/ast";
 
 import { inEachPackage } from "../../../shared/check-each-nested-package.ts";
@@ -11,6 +11,7 @@ import {
   packageSourceFilesOfEachProject,
   TYPESCRIPT_PROJECT_FILE,
 } from "../../../shared/query-the-typescript-project.ts";
+import { realPathOf } from "../../../shared/resolve-absolute-paths.ts";
 import {
   LintedDeclarationFileNotTypeChecked,
   LintedFileOutsideTypeScriptProgram,
@@ -32,9 +33,6 @@ const isTypeChecked = (
   sourceFile.isDeclarationFile
     ? options.skipLibCheck !== true
     : !JAVASCRIPT_SCRIPT_KINDS.has(sourceFile.scriptKind) || options.checkJs === true;
-
-const realPathOf = (file: string) =>
-  FileSystem.FileSystem.use((fileSystem) => fileSystem.realPath(file));
 
 const violationFor = (
   file: string,

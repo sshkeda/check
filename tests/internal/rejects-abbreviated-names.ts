@@ -135,6 +135,18 @@ export const checksOnlyDeclaredNames = Task.make(
         errors: [flagged("readStr", "string")],
       },
       {
+        code: "const readConfig = () => 1; export { readConfig as readCfg };",
+        errors: [flagged("readCfg", "config")],
+      },
+      {
+        code: "export { readFile as readStr } from 'node:fs';",
+        errors: [flagged("readStr", "string")],
+      },
+      {
+        code: "export * as utils from './utilities.ts';",
+        errors: [flagged("utils", "utilities")],
+      },
+      {
         code: "const pick = <Val,>(value: Val) => value;",
         errors: [flagged("Val", "value")],
       },

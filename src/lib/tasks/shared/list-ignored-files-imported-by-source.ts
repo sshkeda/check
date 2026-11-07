@@ -12,6 +12,8 @@ import {
 import { resolveModuleRequest } from "./resolve-module-requests.ts";
 
 const CHECK_IGNORE_EXIT_CODE_WHEN_NO_PATH_IS_IGNORED = 1;
+const CONCURRENT_SOURCE_FILE_SCANS = 32;
+
 export const ignoredPackagePathsAmong = (
   packagePaths: readonly string[],
   packageDirectory: string,
@@ -47,23 +49,30 @@ export const ignoredFilesImportedIn = (projectFile: string) =>
     const { customConditions = [] } = yield* Schema.decodeEffect(CUSTOM_CONDITIONS)(
       yield* effectiveCompilerOptions(projectFile),
     );
-    const importedPaths: string[] = [];
-    for (const displayName of yield* checkedSourceFiles(projectFile)) {
-      const importingFile = path.join(packageDirectory, displayName);
-      const parsed = parseSync(displayName, yield* fileSystem.readFileString(importingFile));
-      for (const { specifier } of moduleRequestsIn(parsed).requests) {
-        if (isFileSpecifier(specifier)) {
-          const importedFile =
-            (yield* resolveModuleRequest({
-              request: specifier,
-              importingFile,
-              customConditions,
-              projectDirectory: packageDirectory,
-            }))?.file ?? path.resolve(path.dirname(importingFile), specifier);
-          importedPaths.push(packagePathOf(path, packageDirectory, importedFile));
+    const importedPathsOf = (displayName: string) =>
+      Effect.gen(function* () {
+        const importingFile = path.join(packageDirectory, displayName);
+        const parsed = parseSync(displayName, yield* fileSystem.readFileString(importingFile));
+        const importedPaths: string[] = [];
+        for (const { specifier } of moduleRequestsIn(parsed).requests) {
+          if (isFileSpecifier(specifier)) {
+            const importedFile =
+              (yield* resolveModuleRequest({
+                request: specifier,
+                importingFile,
+                customConditions,
+                projectDirectory: packageDirectory,
+              }))?.file ?? path.resolve(path.dirname(importingFile), specifier);
+            importedPaths.push(packagePathOf(path, packageDirectory, importedFile));
+          }
         }
-      }
-    }
+        return importedPaths;
+      });
+    const importedPaths = (yield* Effect.forEach(
+      yield* checkedSourceFiles(projectFile),
+      importedPathsOf,
+      { concurrency: CONCURRENT_SOURCE_FILE_SCANS },
+    )).flat();
     const ignoredFiles: string[] = [];
     for (const ignoredPath of yield* ignoredPackagePathsAmong(importedPaths, packageDirectory)) {
       const absolutePath = path.join(packageDirectory, ignoredPath);

@@ -7,6 +7,7 @@ import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { installedBinary } from "../../src/lib/tasks/shared/find-installed-package-binaries.ts";
 import { listedPackageFiles } from "../../src/lib/tasks/shared/list-package-files.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { programFiles } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import {
@@ -168,6 +169,65 @@ export const nestedPackageNeedsItsOwnConfigFiles = Task.make(
   }).pipe(Effect.scoped),
 );
 
+export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make(
+  "check run by the workspace root's task file names a tsconfig that a nested package references outside itself by its path from the root",
+  Effect.gen(function* () {
+    const printed = yield* runCheck(
+      yield* workspaceWithNestedPackages({
+        "packages/app/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/**/*.ts"], references: [{ path: "../library" }] })}\n`,
+        "packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: { ...PACKAGE_COMPILER_OPTIONS, strictNullChecks: false }, include: ["src/**/*.ts"] })}\n`,
+      }),
+      "index.ts",
+    );
+    expect(printed).toContain(
+      "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+    );
+    expect(printed).not.toContain("packages/app/packages/library");
+  }).pipe(Effect.scoped),
+);
+
+export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make(
+  "check run by the workspace root's task file names a tsconfig that a nested package references inside itself by its path from the root, even when that path repeats the package's directory",
+  Effect.gen(function* () {
+    const printed = yield* runCheck(
+      yield* workspaceWithNestedPackages({
+        "packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/**/*.ts"], references: [{ path: "./packages/library" }] })}\n`,
+        "packages/library/packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: { ...PACKAGE_COMPILER_OPTIONS, strictNullChecks: false }, include: ["src/**/*.ts"] })}\n`,
+        "packages/library/packages/library/src/index.ts": "export const NESTED = 1;\n",
+      }),
+      "index.ts",
+    );
+    expect(printed).toContain(
+      "[typescript-config] packages/library/packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+    );
+    expect(printed).not.toContain(
+      "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+    );
+  }).pipe(Effect.scoped),
+);
+
+export const projectCheckedByTwoPackagesIsReportedOnce = Task.make(
+  "check run by the workspace root's task file reports a tsconfig problem once when the root references a nested package that is also checked on its own",
+  Effect.gen(function* () {
+    const printed = yield* runCheck(
+      yield* workspaceWithNestedPackages({
+        "tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/index.ts"], references: [{ path: "./packages/library" }] })}\n`,
+        "packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: { ...PACKAGE_COMPILER_OPTIONS, strictNullChecks: false }, include: ["src/**/*.ts"] })}\n`,
+      }),
+      "index.ts",
+    );
+    expect(
+      printed
+        .split("\n")
+        .filter((line) =>
+          line.startsWith(
+            "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+          ),
+        ),
+    ).toHaveLength(1);
+  }).pipe(Effect.scoped),
+);
+
 export const packageCheckReportsPathsFromItsDirectory = Task.make(
   "check run by a workspace package's task file reports paths from that package and reruns when a declaration file of an imported sibling package changes",
   Effect.gen(function* () {
@@ -251,7 +311,7 @@ export const packageFilesStopAtNestedPackages = Task.make(
       "marked/marked.ts",
       "oxlint.config.ts",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const packageFilesReadNestedManifestsLikeTheOtherChecks = Task.make(

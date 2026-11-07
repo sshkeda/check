@@ -5,6 +5,7 @@ import { Effect, Predicate } from "effect";
 
 import { findDeclaredUseViolations } from "../../src/lib/tasks/lib/check-uses-by-their-declarations/internal/find-declared-use-violations.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -64,5 +65,5 @@ export const loaded = new Store().loadSync("a");
       "load.ts:7 fetchSync runs synchronously",
       "other.ts:2 Store.loadSync runs synchronously",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

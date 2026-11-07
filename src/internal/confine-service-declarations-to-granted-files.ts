@@ -44,10 +44,6 @@ const grantedServices = (options: readonly unknown[]) =>
 export const noServiceDeclarations = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Declare Effect services only in files granted them by exact name with lintConfig({ [file]: { services: [names] } }).",
-    },
     messages: {
       service: "Context.{{factory}} declares service {{name}} outside a services file",
       anonymousService: "Context.{{factory}} declares a service outside a services file",
@@ -83,9 +79,6 @@ export const noServiceDeclarations = defineRule({
 export const noUnusedServiceGrants = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description: "Declare every service a file is granted in lintConfig.",
-    },
     messages: {
       missing: "granted service {{name}} is not declared here",
     },

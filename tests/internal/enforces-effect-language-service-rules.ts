@@ -19,6 +19,8 @@ const EFFECT_TSGO_SCHEMA = Schema.fromJsonString(
   }),
 );
 
+const EFFECT_TRY_CALLS_WITHOUT_CATCH = 2;
+
 const diagnose = (source: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -112,6 +114,21 @@ export const rejectsUnknownInTheErrorChannel = Task.make(
       Effect.catchTag("ToolExited", (exited) => Effect.succeed(exited.standardOutput)),
     );
     expect(report).toContain('"name": "anyUnknownInErrorContext"');
+  }),
+);
+
+export const rejectsEffectTryWithoutCatch = Task.make(
+  "Effect diagnostics reject Effect.try and Effect.tryPromise without a catch handler",
+  Effect.gen(function* () {
+    const report = yield* diagnose(
+      'import { Effect } from "effect"; export const parsed = Effect.try(() => Number("1")); export const fetched = Effect.tryPromise(() => Promise.resolve(1));',
+    ).pipe(
+      Effect.as(""),
+      Effect.catchTag("ToolExited", (exited) => Effect.succeed(exited.standardOutput)),
+    );
+    expect(
+      report.split("\n").filter((line) => line.includes('"name": "effectTryWithoutCatch"')),
+    ).toHaveLength(EFFECT_TRY_CALLS_WITHOUT_CATCH);
   }),
 );
 

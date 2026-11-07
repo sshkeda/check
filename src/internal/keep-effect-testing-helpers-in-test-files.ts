@@ -6,6 +6,8 @@ import {
   importsEmptyBraces,
   memberName,
   moduleExportName,
+  typeNameParts,
+  typeNameRoot,
 } from "./resolve-what-an-expression-imports.ts";
 
 const EFFECT_PACKAGE = "effect";
@@ -58,16 +60,6 @@ const testingHelperAt = (effectPath: readonly string[]) =>
     })
     .at(0);
 
-const typeNameParts = (name: ESTree.Node): readonly string[] => {
-  if (name.type === "TSQualifiedName") {
-    return [...typeNameParts(name.left), name.right.name];
-  }
-  return name.type === "Identifier" ? [name.name] : [];
-};
-
-const typeNameRoot = (name: ESTree.Node): ESTree.Node =>
-  name.type === "TSQualifiedName" ? typeNameRoot(name.left) : name;
-
 const effectPathOfImported = (imported: ReturnType<typeof importedExpression>) => {
   const modulePath = imported && effectPathOf(imported.module);
   return imported && modulePath && [...modulePath, ...imported.members];
@@ -76,10 +68,6 @@ const effectPathOfImported = (imported: ReturnType<typeof importedExpression>) =
 export const noTestingHelpers = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Keep Effect's testing helpers, the effect/testing modules and exports effect and @effect packages tag @category testing, in test files.",
-    },
     messages: {
       testingHelper: "uses Effect's testing helper {{helper}} outside a test file",
     },

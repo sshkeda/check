@@ -2,6 +2,7 @@ import { defineRule } from "@oxlint/plugins";
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
 import { serviceFactoryOf } from "./match-effect-service-factories.ts";
+import { constantValue } from "./resolve-what-an-expression-imports.ts";
 
 const isServiceFactoryCall = (expression: ESTree.Node, sourceCode: SourceCode): boolean =>
   expression.type === "CallExpression"
@@ -28,7 +29,6 @@ const staticKeySuffix = (expression: ESTree.Node | undefined): string | undefine
 export const noMismatchedServiceKeys = defineRule({
   meta: {
     type: "problem",
-    docs: { description: "Require Effect service keys to end with their class name." },
     messages: {
       key: "the service key ends with {{suffix}}, not {{className}}",
       unknownKey: "the service key of {{className}} has no static last segment",
@@ -51,7 +51,10 @@ export const noMismatchedServiceKeys = defineRule({
       if (declaration.id === null) {
         return;
       }
-      const suffix = staticKeySuffix(parent.arguments[0]);
+      const [key] = parent.arguments;
+      const suffix = staticKeySuffix(
+        key === undefined ? undefined : constantValue(key, context.sourceCode),
+      );
       const className = declaration.id.name;
       if (suffix === undefined) {
         context.report({ node: parent, messageId: "unknownKey", data: { className } });

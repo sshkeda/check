@@ -9,6 +9,7 @@ import {
   LintConfigRefused,
   REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
 } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { recordedGrantsOf } from "../../src/shared/record-and-grant-permissions-by-path.ts";
 import {
   makeProject as makeProjectWith,
@@ -42,16 +43,16 @@ export const generatedGrantsAreExactAndExclusive = Task.make(
   Effect.sync(() => {
     expect(
       recordedGrantsOf({
-        "docs/output.md": { allow: [{ isGeneratedByATool: "written by a code generator" }] },
+        "docs/output.md": { allow: ["isGeneratedByATool"] },
       }),
     ).toMatchObject({
       grants: [{ path: "docs/output.md", allow: ["isGeneratedByATool"] }],
     });
     for (const entry of [
-      { allow: [{ isGeneratedByATool: "written by a code generator" }, "writesToTheTerminal"] },
-      { allow: [{ isGeneratedByATool: "written by a code generator" }], services: ["Store"] },
+      { allow: ["isGeneratedByATool", "writesToTheTerminal"] },
+      { allow: ["isGeneratedByATool"], services: ["Store"] },
       {
-        allow: [{ isGeneratedByATool: "written by a code generator" }],
+        allow: ["isGeneratedByATool"],
         cannotImport: ["src/private"],
       },
     ]) {
@@ -59,7 +60,7 @@ export const generatedGrantsAreExactAndExclusive = Task.make(
     }
     expect(
       recordedGrantsOf({
-        "outputs/*": { allow: [{ isGeneratedByATool: "written by a code generator" }] },
+        "outputs/*": { allow: ["isGeneratedByATool"] },
       }).violations?.length,
     ).toBeGreaterThan(0);
   }),
@@ -71,13 +72,13 @@ export const generatedGrantsRequireFiles = Task.make(
     for (const file of ["src", "missing.d.ts"]) {
       const { directory } = yield* makeProject(
         { "src/index.ts": "export const VALUE = 1;\n" },
-        `lintConfig({ "${file}": { allow: [{ isGeneratedByATool: "written by a code generator" }] } })`,
+        `lintConfig({ "${file}": { allow: ["isGeneratedByATool"] } })`,
       );
       const failure = yield* loadedLintConfigIn(directory).pipe(failureAsValue);
       expect(failure).toBeInstanceOf(LintConfigRefused);
       expect(failure.message).toContain("grants isGeneratedByATool, but is not an existing file");
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
@@ -103,7 +104,7 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
           'import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\n\nexport const test = Task.make("example", Effect.void);\n',
         "src/internal/read.ts": READ,
       },
-      `lintConfig({ "src/index.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "scripts/generated.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "${DECLARATION_PATH}": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "${RUNTIME_PATH}": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "${HIDDEN_PATH}": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "vendor/output.json": { allow: [{ isGeneratedByATool: "written by a code generator" }] } })`,
+      `lintConfig({ "src/index.ts": { allow: ["isGeneratedByATool"] }, "scripts/generated.ts": { allow: ["isGeneratedByATool"] }, "${DECLARATION_PATH}": { allow: ["isGeneratedByATool"] }, "${RUNTIME_PATH}": { allow: ["isGeneratedByATool"] }, "${HIDDEN_PATH}": { allow: ["isGeneratedByATool"] }, "vendor/output.json": { allow: ["isGeneratedByATool"] } })`,
       {
         files: ["src/index.ts"],
         include: ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"],
@@ -173,15 +174,15 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
   }).pipe(Effect.scoped),
 );
 
-export const reasonedPermissionsDecodeToTheirNames = Task.make(
-  "trustsUnverifiedTypes and generated are granted as keys of an object whose values are their reasons, alone or beside plain permissions",
+export const plainPermissionsDecodeToTheirNames = Task.make(
+  "trustsUnverifiedTypes and isGeneratedByATool are granted by name, alone or beside other permissions",
   Effect.sync(() => {
     expect(
       recordedGrantsOf({
         "port.ts": {
-          allow: ["usesSqlDatabases", { trustsUnverifiedTypes: "ports cross threads as JSON" }],
+          allow: ["usesSqlDatabases", "trustsUnverifiedTypes"],
         },
-        "output.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] },
+        "output.ts": { allow: ["isGeneratedByATool"] },
       }),
     ).toMatchObject({
       grants: [

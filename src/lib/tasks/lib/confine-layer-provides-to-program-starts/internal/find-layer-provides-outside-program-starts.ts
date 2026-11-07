@@ -29,6 +29,7 @@ import type { Checker, Symbol as TypeScriptSymbol, Type } from "typescript/unsta
 
 import { isUnderTestDirectory } from "../../../shared/classify-files-by-role.ts";
 import {
+  callsIn,
   CONCURRENT_TYPESCRIPT_REQUESTS,
   nodePosition,
   packageCalleeOf,
@@ -46,6 +47,7 @@ import {
   EFFECT_MODULE,
   importedPackageApis,
   LAYER_MODULE,
+  STREAM_MODULE,
 } from "./resolve-imported-package-apis.ts";
 
 const LAYER_TYPE_ID = "~effect/Layer" satisfies keyof Layer.Any;
@@ -73,7 +75,9 @@ const EFFECT_OPERATIONS = [
     ]),
   },
   { module: LAYER_MODULE, names: LAYER_BUILDERS },
+  { module: STREAM_MODULE, names: PROVIDE_OPERATIONS },
 ];
+const PROVIDING_MODULES = [EFFECT_MODULE, STREAM_MODULE];
 const PIPE = "pipe";
 const PROVIDED_ARGUMENTS = 2;
 
@@ -96,18 +100,6 @@ const outermostWrapperOf = (node: Node): Node =>
 
 const isFunctionLike = (node: Node) =>
   isFunctionDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node);
-
-const callsIn = (sourceFile: SourceFile) => {
-  const calls: CallExpression[] = [];
-  const visit = (node: Node) => {
-    if (isCallExpression(node)) {
-      calls.push(node);
-    }
-    node.forEachChild(visit);
-  };
-  sourceFile.forEachChild(visit);
-  return calls;
-};
 
 const returnedBy = (callable: Node) => {
   const body = isFunctionLike(callable) ? callable.body : undefined;
@@ -549,9 +541,13 @@ const provideOperationsIn = (
     return named.flatMap(({ call }, index) => {
       const symbol = symbols[index];
       const target = symbol === undefined ? undefined : (aliased.get(symbol.id) ?? symbol);
-      const isProvide =
-        target !== undefined && isExportOf(apis, target, EFFECT_MODULE, PROVIDE_OPERATIONS);
-      return isProvide ? [{ call, operation: target.name }] : [];
+      if (target === undefined) {
+        return [];
+      }
+      const module = PROVIDING_MODULES.find((candidate) =>
+        isExportOf(apis, target, candidate, PROVIDE_OPERATIONS),
+      );
+      return module === undefined ? [] : [{ call, module, operation: target.name }];
     });
   });
 
@@ -584,7 +580,7 @@ const fileViolations = (
 ) =>
   Effect.gen(function* () {
     const provides = yield* provideOperationsIn(checker, apis, callsIn(sourceFile));
-    const violations = yield* Effect.forEach(provides, ({ call, operation }) =>
+    const violations = yield* Effect.forEach(provides, ({ call, module, operation }) =>
       Effect.gen(function* () {
         const provided = yield* providedValueOf(checker, isBuiltContext, call, operation);
         if (provided === undefined) {
@@ -597,6 +593,7 @@ const fileViolations = (
         return [
           new LayerProvidedOutsideProgramStart({
             location: `${displayName}:${line}:${column}`,
+            module,
             operation,
             provided,
           }),

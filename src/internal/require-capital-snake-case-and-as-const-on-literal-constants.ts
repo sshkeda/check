@@ -84,10 +84,6 @@ const isMutableCollectionType = (annotation: ESTree.TSType) =>
 export const noLooseLiteralConstants = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Write module constants that hold fixed data in CAPITAL_SNAKE_CASE ending in as const, and check literal constants with satisfies instead of a type annotation, so their type is the exact data.",
-    },
     messages: {
       constant: "const {{name}} {{violations}}",
     },

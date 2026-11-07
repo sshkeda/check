@@ -5,6 +5,7 @@ import { Effect, Array as Arrays, flow } from "effect";
 
 import { findUngrantedStdioUses } from "../../src/lib/tasks/lib/confine-stdio-to-granted-files/internal/find-ungranted-stdio-uses.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
@@ -165,7 +166,7 @@ export const stdioArgumentReadsAreRefused = Task.make(
           `${location}: error StdioArgumentsReadWithoutGrant: Stdio.args reads configuration`,
       ),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const stdioTerminalWritesAreRefused = Task.make(
@@ -187,14 +188,14 @@ export const stdioTerminalWritesAreRefused = Task.make(
         return `${location}: error StdioTerminalWriteWithoutGrant: Stdio.${member} writes to the terminal`;
       }),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const stdioUsesOtherThanArgumentReadsAreAllowed = Task.make(
   "stdin and the isTerminal checks, spreading Stdio into Stdio.make, providing it, args on a type that is not Stdio, args in files granted readsConfig and stdout or stderr in files granted writesToTheTerminal are allowed",
   Effect.gen(function* () {
     expect(yield* stdioUses(ALLOWED_USES)).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const terminalWritesNeedTheConsolePermission = Task.make(

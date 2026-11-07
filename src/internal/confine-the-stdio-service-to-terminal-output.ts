@@ -5,9 +5,11 @@ import {
   effectOperation,
   importedExpression,
   isImportBinding,
+  isPipeFunction,
   isReferencePosition,
   memberName,
   propertyKeyName,
+  rootOf,
 } from "./resolve-what-an-expression-imports.ts";
 
 const MEMBERS_THAT_WRITE_NOTHING = new Set([
@@ -23,9 +25,6 @@ const SERVICE_USE = "use";
 const PIPE = "pipe";
 
 const OPERATIONS_THAT_PASS_THE_SERVICE = new Set(["map", "flatMap", "andThen"]);
-
-const rootOf = (node: ESTree.Node): ESTree.Node =>
-  node.type === "MemberExpression" ? rootOf(node.object) : node;
 
 const isStdioTag = (node: ESTree.Node, sourceCode: SourceCode) => {
   if (!isImportBinding(rootOf(node), sourceCode)) {
@@ -108,15 +107,6 @@ const stepWritesNothing = (step: ESTree.Node | undefined, sourceCode: SourceCode
   return passesTheServiceOn && callbackWritesNothing(step.arguments[0], sourceCode);
 };
 
-const isPipeFunction = (callee: ESTree.Node, sourceCode: SourceCode) => {
-  const imported = importedExpression(callee, sourceCode);
-  const path = imported?.members.join(".");
-  const isFromEffect =
-    imported?.module === "effect" && (path === PIPE || path === `Function.${PIPE}`);
-  const isFromFunction = imported?.module === "effect/Function" && path === PIPE;
-  return isFromEffect || isFromFunction;
-};
-
 const tagUseWritesNothing = (tag: ESTree.Node, sourceCode: SourceCode) => {
   const { parent } = tag;
   const isYielded =
@@ -153,10 +143,6 @@ const tagUseWritesNothing = (tag: ESTree.Node, sourceCode: SourceCode) => {
 export const noStdioService = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Use the Effect Stdio service only in files allowed writesToTheTerminal, except to read stdin, args or whether a stream is a terminal.",
-    },
     messages: {
       stdioService:
         "{{usage}} is used for more than reading stdin, args or whether a stream is a terminal",

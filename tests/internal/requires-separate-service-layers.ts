@@ -5,6 +5,7 @@ import { Effect } from "effect";
 
 import { findServiceLayerViolations } from "../../src/lib/tasks/lib/require-separate-service-layers/internal/find-service-layer-violations.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -50,7 +51,7 @@ export const separateLayers = Task.make(
         "alias.ts": `import { Context as Services, Layer as Layers } from "effect"; export class Store extends Services.Service<Store, {}>()("Store") {} export const StoreLive = Layers.succeed(Store, {});`,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const staticLayers = Task.make(
@@ -87,7 +88,7 @@ export const staticLayers = Task.make(
     expect(observed).toHaveLength(cases.length + Object.keys(externalSources).length);
     expect(observed.every(({ tag }) => tag === "ServiceLayerNotSeparate")).toBe(true);
     expect(observed.every(({ service }) => service === "Store")).toBe(true);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const unrestrictedNames = Task.make(
@@ -111,7 +112,7 @@ export const unrestrictedNames = Task.make(
       ),
     );
     expect(observed).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const logicalAssignments = Task.make(
@@ -141,5 +142,5 @@ export const logicalAssignments = Task.make(
         "scalar.ts": `${IMPORTS}export class Store extends Context.Service<Store, {}>()("Store") { static count?: number; static initialize() { Store.count ??= 1; } }`,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

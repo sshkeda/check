@@ -25,7 +25,7 @@ const vagueSuffix = (path: string, suffix: string) => ({
 });
 
 export const rejectsVagueFileNames = Task.make(
-  "no-vague-file-names rejects utils, helpers, common, misc, types, logic and impl as names, a .logic or .impl suffix, and index files that are not index.ts or index.tsx entries",
+  "no-vague-file-names rejects utils, helpers, common, misc, types, logic and impl as names or dotted suffixes, and index files that are not index.ts or index.tsx entries",
   ruleTest("no-vague-file-names", {
     valid: [
       { code: CODE, filename: "src/lib/encode-json.ts" },
@@ -37,6 +37,7 @@ export const rejectsVagueFileNames = Task.make(
       { code: CODE, filename: "scripts/ci.ts" },
       { code: CODE, filename: "src/lib/logic-gates.ts" },
       { code: CODE, filename: "src/lib/implement-retries.ts" },
+      { code: CODE, filename: "src/lib/error-types.d.ts" },
     ],
     invalid: [
       vague("src/lib/utils.ts", "utils"),
@@ -50,6 +51,11 @@ export const rejectsVagueFileNames = Task.make(
       vagueSuffix("src/orders/pricing.logic.ts", "logic"),
       vagueSuffix("src/orders/store.impl.ts", "impl"),
       vagueSuffix("src/orders/store.impl.tsx", "impl"),
+      vagueSuffix("src/greeting.helpers.ts", "helpers"),
+      vagueSuffix("src/orders/order.types.ts", "types"),
+      vagueSuffix("src/orders/order.utils.tsx", "utils"),
+      vagueSuffix("src/orders/order.common.ts", "common"),
+      vagueSuffix("src/orders/order.misc.ts", "misc"),
       {
         code: CODE,
         filename: "src/lib/index.js",

@@ -6,6 +6,7 @@ import { Effect, FileSystem, Path, Predicate, Array as Arrays, flow } from "effe
 import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-import-boundaries/internal/find-import-boundary-violations.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -147,7 +148,7 @@ export const importsAcrossBoundariesAreRefused = Task.make(
         worker("src/worker-thread/typed.ts:1", "src/main-thread/y.ts"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const crossingTheBuiltInBanIsReportedOnce = Task.make(
@@ -171,7 +172,7 @@ export const crossingTheBuiltInBanIsReportedOnce = Task.make(
     expect(violations).toEqual([
       crossed("src/reader.ts:1", "scripts/shared/helper.ts", "src", "scripts"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const projectsWithoutBoundariesPass = Task.make(
@@ -199,7 +200,7 @@ export const projectsWithoutBoundariesPass = Task.make(
       'lintConfig({ src: { cannotImport: ["src/generated"] } })',
     );
     yield* findImportBoundaryViolations(insideTarget.tsconfigFile);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const sourceImportsOfDevOnlyPackagesAreRefused = Task.make(
@@ -251,7 +252,7 @@ export const sourceImportsOfDevOnlyPackagesAreRefused = Task.make(
           `${location}: error DevDependencyImported: imports ${specifier}, but package.json lists @sshkeda/task only in devDependencies, and src cannot import a dev dependency`,
       ),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const localModulesNamedLikeDevOnlyPackagesPass = Task.make(
@@ -276,7 +277,7 @@ export const localModulesNamedLikeDevOnlyPackagesPass = Task.make(
       },
     );
     yield* findImportBoundaryViolations(tsconfigFile);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const dependencyAliasesUseTheirManifestKeys = Task.make(
@@ -330,5 +331,47 @@ export const dependencyAliasesUseTheirManifestKeys = Task.make(
           `${location}: error DevDependencyImported: imports ${specifier}, but package.json lists ${dependency} only in devDependencies, and src cannot import a dev dependency`,
       ),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const sourceFilesAreCheckedTogether = Task.make(
+  "the import-boundary check reads its source files at the same time instead of one after another, and finds the real path of a file many files import once",
+  Effect.gen(function* () {
+    const importers = ["src/first.ts", "src/second.ts", "src/third.ts"];
+    const { directory, tsconfigFile } = yield* makeProject({
+      ...Object.fromEntries(
+        importers.map((importer) => [
+          importer,
+          'import { SHARED } from "./shared.ts";\nexport const IMPORTED = SHARED;\n',
+        ]),
+      ),
+      "src/shared.ts": "export const SHARED = 1;\n",
+    });
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const sharedFile = yield* fileSystem.realPath(path.join(directory, "src/shared.ts"));
+    const lookups = { reading: 0, mostReadingAtOnce: 0, realPathsOfTheSharedFile: 0 };
+    const readFileString: typeof fileSystem.readFileString = (file, encoding) =>
+      file.endsWith(".ts")
+        ? Effect.gen(function* () {
+            lookups.reading += 1;
+            lookups.mostReadingAtOnce = Math.max(lookups.mostReadingAtOnce, lookups.reading);
+            yield* Effect.yieldNow;
+            return yield* fileSystem.readFileString(file, encoding);
+          }).pipe(Effect.ensuring(Effect.sync(() => (lookups.reading -= 1))))
+        : fileSystem.readFileString(file, encoding);
+    const realPath: typeof fileSystem.realPath = (file) =>
+      fileSystem.realPath(file).pipe(
+        Effect.tap((real) =>
+          Effect.sync(() => {
+            lookups.realPathsOfTheSharedFile += real === sharedFile ? 1 : 0;
+          }),
+        ),
+      );
+    yield* findImportBoundaryViolations(tsconfigFile).pipe(
+      Effect.provideService(FileSystem.FileSystem, { ...fileSystem, readFileString, realPath }),
+    );
+    expect(lookups.mostReadingAtOnce).toBeGreaterThan(1);
+    expect(lookups.realPathsOfTheSharedFile).toBeLessThan(importers.length);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

@@ -63,6 +63,14 @@ export const droppedFailuresOutsideEffect = Task.make(
         code: 'import { type getOrElse, getOrThrow } from "effect/Option";',
         errors: [{ message: "Option.getOrThrow is banned" }],
       },
+      {
+        code: 'import { UndefinedOr } from "effect"; const value = UndefinedOr.getOrThrow(name);',
+        errors: [{ message: "UndefinedOr.getOrThrow is banned" }],
+      },
+      {
+        code: 'import { getOrThrowWith } from "effect/UndefinedOr";',
+        errors: [{ message: "UndefinedOr.getOrThrowWith is banned" }],
+      },
     ],
   }),
 );

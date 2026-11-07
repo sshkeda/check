@@ -1,7 +1,7 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
 
-import { effectModuleOperation } from "./resolve-what-an-expression-imports.ts";
+import { effectModuleOperation, staticKeyName } from "./resolve-what-an-expression-imports.ts";
 
 const isUnknownAnnotation = (annotation: ESTree.TSTypeAnnotation | null | undefined) =>
   annotation?.typeAnnotation.type === "TSUnknownKeyword";
@@ -29,9 +29,30 @@ const isCallback = (node: ESTree.ArrowFunctionExpression | ESTree.Function) =>
   node.parent.type === "CallExpression" ||
   (node.parent.type === "Property" && node.parent.value === node);
 
+const CLASS_MEMBERS: ReadonlySet<string> = new Set(["MethodDefinition", "PropertyDefinition"]);
+
+const memberOfFunction = (node: Parameters<typeof isCallback>[0]) => {
+  const parent = node.parent;
+  const isMemberValue =
+    (CLASS_MEMBERS.has(parent.type) || parent.type === "Property") &&
+    "value" in parent &&
+    parent.value === node;
+  return isMemberValue ? parent : undefined;
+};
+
+const memberKeyName = (member: NonNullable<ReturnType<typeof memberOfFunction>>) => {
+  const { computed, key } = member;
+  const isUncomputedIdentifierKey = !computed && key.type === "Identifier";
+  return isUncomputedIdentifierKey ? key.name : staticKeyName(key);
+};
+
 const reportedFunctionName = (node: Parameters<typeof isCallback>[0]) => {
   if (node.id) {
     return node.id.name;
+  }
+  const member = memberOfFunction(node);
+  if (member !== undefined) {
+    return memberKeyName(member) ?? "this function";
   }
   const parent = node.parent;
   if (parent.type !== "VariableDeclarator") {
@@ -41,31 +62,46 @@ const reportedFunctionName = (node: Parameters<typeof isCallback>[0]) => {
   return declared.type === "Identifier" ? declared.name : "this function";
 };
 
-const isDeclaredForExport = (node: Parameters<typeof isCallback>[0]) => {
-  const isFunctionDeclaration =
-    node.type === "FunctionDeclaration" || node.type === "TSDeclareFunction";
-  if (isFunctionDeclaration) {
-    return true;
-  }
+const isExportedValue = (node: ESTree.Node) => {
   const parent = node.parent;
-  if (parent.type === "ExportDefaultDeclaration") {
+  if (parent?.type === "ExportDefaultDeclaration") {
     return true;
   }
   return (
-    parent.type === "VariableDeclarator" &&
+    parent?.type === "VariableDeclarator" &&
     parent.init === node &&
     parent.parent.type === "VariableDeclaration" &&
     parent.parent.parent.type === "ExportNamedDeclaration"
   );
 };
 
+const isMemberOfAnExport = (member: NonNullable<ReturnType<typeof memberOfFunction>>) => {
+  if (member.type === "Property") {
+    return member.parent.type === "ObjectExpression" && isExportedValue(member.parent);
+  }
+  const isPrivate = member.accessibility === "private" || member.key.type === "PrivateIdentifier";
+  if (isPrivate) {
+    return false;
+  }
+  const owner = member.parent.parent;
+  return (
+    owner?.parent?.type === "ExportNamedDeclaration" || (owner !== null && isExportedValue(owner))
+  );
+};
+
+const isDeclaredForExport = (node: Parameters<typeof isCallback>[0]) => {
+  const isFunctionDeclaration =
+    node.type === "FunctionDeclaration" || node.type === "TSDeclareFunction";
+  if (isFunctionDeclaration) {
+    return true;
+  }
+  const member = memberOfFunction(node);
+  return member === undefined ? isExportedValue(node) : isMemberOfAnExport(member);
+};
+
 export const noUnknownBoundaries = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Keep unknown out of function signatures; decode unknown input with Schema where it enters.",
-    },
     messages: {
       parameter: "parameter {{name}} is typed unknown",
       returnType: "{{name}} returns unknown",

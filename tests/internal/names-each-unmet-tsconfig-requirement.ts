@@ -12,6 +12,7 @@ import {
   REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
   STRICT_OPTIONS,
 } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import {
@@ -153,7 +154,7 @@ export const acceptsAConfigThatLeavesStrictUnset = Task.make(
       moduleResolution: "Bundler",
     });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesStrictTurnedOffInAnExtendedBase = Task.make(
@@ -163,7 +164,7 @@ export const namesStrictTurnedOffInAnExtendedBase = Task.make(
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([
       `${tsconfigFile}: error LooseCompilerOption: strict resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesEveryStrictOptionTurnedOffUnderStrict = Task.make(
@@ -180,7 +181,7 @@ export const namesEveryStrictOptionTurnedOffUnderStrict = Task.make(
         .map((option) => `${tsconfigFile}: error LooseCompilerOption: ${option} resolves to false`)
         .toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const followsOverridesAlongTheExtendsChain = Task.make(
@@ -211,7 +212,7 @@ export const followsOverridesAlongTheExtendsChain = Task.make(
     expect(yield* unmetRequirements(turnedOff.tsconfigFile)).toEqual([
       `${turnedOff.tsconfigFile}: error LooseCompilerOption: noImplicitAny resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const followsExtendsIntoAPackage = Task.make(
@@ -236,7 +237,7 @@ export const followsExtendsIntoAPackage = Task.make(
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([
       `${tsconfigFile}: error LooseCompilerOption: strictFunctionTypes resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
@@ -245,13 +246,14 @@ export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
-        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
         files: ["oxlint.config.ts"],
         references: [{ path: "./server" }, { path: "./web/jsconfig.json" }, { path: "./tools" }],
       }),
       "server/tsconfig.json": yield* encodeJson({
         compilerOptions: {
           composite: true,
+          emitDeclarationOnly: true,
           ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           strictNullChecks: false,
         },
@@ -261,6 +263,7 @@ export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
       "web/jsconfig.json": yield* encodeJson({
         compilerOptions: {
           composite: true,
+          emitDeclarationOnly: true,
           checkJs: true,
           ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           strict: false,
@@ -269,7 +272,11 @@ export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
       }),
       "web/main.js": "export const WEB = 1;\n",
       "tools/tsconfig.json": yield* encodeJson({
-        compilerOptions: { composite: true, ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: {
+          composite: true,
+          emitDeclarationOnly: true,
+          ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
+        },
         files: ["main.ts"],
       }),
       "tools/main.ts": IMPORTS_TASK,
@@ -278,7 +285,7 @@ export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
       `${path.join(directory, "server/tsconfig.json")}: error LooseCompilerOption: strictNullChecks resolves to false`,
       `${path.join(directory, "web/jsconfig.json")}: error LooseCompilerOption: strict resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const solutionStyleProject = (referencedStrict: boolean) =>
@@ -292,6 +299,7 @@ const solutionStyleProject = (referencedStrict: boolean) =>
       "server/tsconfig.json": yield* encodeJson({
         compilerOptions: {
           composite: true,
+          emitDeclarationOnly: true,
           ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           strict: referencedStrict,
         },
@@ -310,7 +318,29 @@ export const judgesOnlyProjectsThatCompileFiles = Task.make(
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([
       `${path.join(directory, "server/tsconfig.json")}: error LooseCompilerOption: strict resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const refusesAnAbsoluteReferencePath = Task.make(
+  "a reference whose path is absolute is reported at the referencing tsconfig and not followed, whether or not a project exists there, so it is neither judged nor reported missing under the referencing project's directory",
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { directory, tsconfigFile } = yield* solutionStyleProject(false);
+    for (const referenced of [path.join(directory, "server"), path.join(directory, "missing")]) {
+      yield* fileSystem.writeFileString(
+        tsconfigFile,
+        yield* encodeJson({
+          compilerOptions: { strict: false },
+          files: [],
+          references: [{ path: referenced }],
+        }),
+      );
+      expect(yield* unmetRequirements(tsconfigFile)).toEqual([
+        `${tsconfigFile}: error AbsoluteProjectReference: references ${referenced} by an absolute path`,
+      ]);
+    }
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const acceptsACheckedJsconfigThatLeavesStrictUnset = Task.make(
@@ -318,13 +348,14 @@ export const acceptsACheckedJsconfigThatLeavesStrictUnset = Task.make(
   Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
-        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
         files: ["oxlint.config.ts"],
         references: [{ path: "./web/jsconfig.json" }],
       }),
       "web/jsconfig.json": yield* encodeJson({
         compilerOptions: {
           composite: true,
+          emitDeclarationOnly: true,
           checkJs: true,
           ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
         },
@@ -333,7 +364,7 @@ export const acceptsACheckedJsconfigThatLeavesStrictUnset = Task.make(
       "web/main.js": "export const WEB = 1;\n",
     });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesNoCheckInTheRootAndReferencedProjects = Task.make(
@@ -356,6 +387,7 @@ export const namesNoCheckInTheRootAndReferencedProjects = Task.make(
       yield* encodeJson({
         compilerOptions: {
           composite: true,
+          emitDeclarationOnly: true,
           ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           noCheck: true,
         },
@@ -367,7 +399,7 @@ export const namesNoCheckInTheRootAndReferencedProjects = Task.make(
       `${tsconfigFile}: error LooseCompilerOption: noCheck resolves to true`,
       `${path.join(directory, "server/tsconfig.json")}: error LooseCompilerOption: noCheck resolves to true`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const printedCheckOf = (directory: string) =>
@@ -424,7 +456,7 @@ export const namesReferencesOfTheWrongShape = Task.make(
     expect(malformed).toStartWith(
       `${tsconfigFile}: error ProjectReferencesUndecodable: references do not decode:`,
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const acceptsAnUnbuiltBaseConfigWithNoInputs = Task.make(
@@ -441,7 +473,7 @@ export const acceptsAnUnbuiltBaseConfigWithNoInputs = Task.make(
       { extends: "./config/tsconfig.base.json", include: ["src/**/*.ts", "oxlint.config.ts"] },
     );
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const judgesABaseConfigOnlyThroughTheProjectThatExtendsIt = Task.make(
@@ -458,7 +490,7 @@ export const judgesABaseConfigOnlyThroughTheProjectThatExtendsIt = Task.make(
       { extends: "./tsconfig.base.json", include: ["src/**/*.ts", "oxlint.config.ts"] },
     );
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const leavesConfigErrorsOfAReferencedProjectToBunCheck = Task.make(
@@ -466,13 +498,14 @@ export const leavesConfigErrorsOfAReferencedProjectToBunCheck = Task.make(
   Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
-        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
         files: ["oxlint.config.ts"],
         references: [{ path: "./server" }],
       }),
       "server/tsconfig.json": yield* encodeJson({
         compilerOptions: {
           composite: true,
+          emitDeclarationOnly: true,
           ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           strict: "yes",
         },
@@ -481,7 +514,7 @@ export const leavesConfigErrorsOfAReferencedProjectToBunCheck = Task.make(
       "server/main.ts": IMPORTS_TASK,
     });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const leavesJavaScriptToTheLintedFilesCheck = Task.make(
@@ -491,18 +524,22 @@ export const leavesJavaScriptToTheLintedFilesCheck = Task.make(
     expect(yield* unmetRequirements(withoutJavaScript.tsconfigFile)).toEqual([]);
     const withJavaScript = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
-        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
         files: ["oxlint.config.ts"],
         references: [{ path: "./web/jsconfig.json" }],
       }),
       "web/jsconfig.json": yield* encodeJson({
-        compilerOptions: { composite: true, ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: {
+          composite: true,
+          emitDeclarationOnly: true,
+          ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
+        },
         files: ["main.js"],
       }),
       "web/main.js": "export const WEB = 1;\n",
     });
     expect(yield* unmetRequirements(withJavaScript.tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesAnUnparsableReferencedProject = Task.make(
@@ -517,7 +554,7 @@ export const namesAnUnparsableReferencedProject = Task.make(
     expect(unparsable).toStartWith(
       `${path.join(directory, "server/tsconfig.json")}: error TypeScriptConfigUnparsable: does not parse as JSONC:`,
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesAMissingReferencedProject = Task.make(
@@ -531,7 +568,7 @@ export const namesAMissingReferencedProject = Task.make(
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([
       `${path.join(directory, "server/tsconfig.json")}: error TypeScriptProjectFileMissing: does not exist`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const requiresNothingMoreOfAProjectImportingTask = Task.make(
@@ -539,7 +576,7 @@ export const requiresNothingMoreOfAProjectImportingTask = Task.make(
   Effect.gen(function* () {
     const { tsconfigFile } = yield* projectExtending({ strict: true });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const strictKeepsUndefinedOutOfInferrableAnnotations = Task.make(
@@ -570,7 +607,7 @@ export const strictKeepsUndefinedOutOfInferrableAnnotations = Task.make(
     expect((yield* violationsUnder(false)).join("\n")).toContain(
       "main.ts:3:16: error InferrableTypeAnnotation: found has a type annotation TypeScript can infer",
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesAMissingProjectFile = Task.make(
@@ -582,7 +619,7 @@ export const namesAMissingProjectFile = Task.make(
     expect(yield* unmetRequirements(missingProjectFile)).toEqual([
       `${missingProjectFile}: error TypeScriptProjectFileMissing: does not exist`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.make(
@@ -595,7 +632,7 @@ export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.mak
       "[typescript-config] tsconfig.json: error LooseCompilerOption: strictNullChecks resolves to false",
     );
     expect(printed).toContain("[typed-checks] error AwaitedTaskFailed: typescript-config failed");
-    expect(printed).toContain("[check] error SettledTasksFailed: 2 of 6 tasks failed");
+    expect(printed).toContain("[check] error SettledTasksFailed: 2 of 7 tasks failed");
     expect(printed).not.toContain("[type-check]");
     expect(
       printed
@@ -701,7 +738,7 @@ export const namesIndexAndOptionalCheckingLeftUnset = Task.make(
       `${tsconfigFile}: error LooseCompilerOption: exactOptionalPropertyTypes resolves to false`,
       `${tsconfigFile}: error LooseCompilerOption: allowImportingTsExtensions resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesUnreachableCodeAndUnusedLabelsLeftUnset = Task.make(
@@ -721,7 +758,7 @@ export const namesUnreachableCodeAndUnusedLabelsLeftUnset = Task.make(
       `${tsconfigFile}: error LooseCompilerOption: allowUnreachableCode is unset`,
       `${tsconfigFile}: error LooseCompilerOption: allowUnusedLabels is unset`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const unmetRequirementsWith = (compilerOptions: Readonly<Record<string, boolean | undefined>>) =>
@@ -754,7 +791,7 @@ export const namesEachNewSettingLeftUnsetOrLoose = Task.make(
       const met = yield* unmetRequirementsWith({ ...everyOtherOption, [option]: required });
       expect(met.unmet).toEqual([]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const rewritingProject = (rewrittenImportOptions: Readonly<Record<string, boolean>>) =>
@@ -766,6 +803,7 @@ const rewritingProject = (rewrittenImportOptions: Readonly<Record<string, boolea
           strict: true,
           noUncheckedIndexedAccess: true,
           exactOptionalPropertyTypes: true,
+          noEmit: true,
           skipLibCheck: true,
           ...rewrittenImportOptions,
         },
@@ -793,7 +831,7 @@ export const acceptsRewrittenImportExtensions = Task.make(
         `${tsconfigFile}: error LooseCompilerOption: allowImportingTsExtensions resolves to false`,
       ]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.make(
@@ -802,7 +840,7 @@ export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.m
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
-        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT },
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
         files: ["oxlint.config.ts"],
         references: [{ path: "./server" }],
       }),
@@ -810,6 +848,7 @@ export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.m
         compilerOptions: {
           ...OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING,
           composite: true,
+          emitDeclarationOnly: true,
           noUncheckedIndexedAccess: false,
           exactOptionalPropertyTypes: false,
           allowImportingTsExtensions: false,
@@ -824,7 +863,7 @@ export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.m
       `${server}: error LooseCompilerOption: exactOptionalPropertyTypes resolves to false`,
       `${server}: error LooseCompilerOption: allowImportingTsExtensions resolves to false`,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const checkRefusesUncheckedIndexAccessOverAPossiblyMissingElement = Task.make(
@@ -855,4 +894,76 @@ export const checkRefusesUncheckedIndexAccessOverAPossiblyMissingElement = Task.
     );
     expect(printed).toContain("[typed-checks] error AwaitedTaskFailed: typescript-config failed");
   }).pipe(Effect.scoped),
+);
+
+const buildOutput = (projectFile: string, option: string) =>
+  `${projectFile}: error BuildOutputCompilerOption: ${option} is set, but the package ships its TypeScript source and builds nothing`;
+
+export const namesEveryBuildOptionOfTheRootProject = Task.make(
+  "a root project that leaves noEmit unset, or resolves it to false and sets outDir, declaration, declarationDir and emitDeclarationOnly, is named for each, while declaration written as false passes",
+  Effect.gen(function* () {
+    const emitting = yield* makeProjectWith(
+      {
+        ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
+        noEmit: false,
+        outDir: "dist",
+        declaration: true,
+        declarationDir: "types",
+        emitDeclarationOnly: true,
+      },
+      { "src/index.ts": IMPORTS_TASK },
+    );
+    expect(yield* unmetRequirements(emitting.tsconfigFile)).toEqual([
+      `${emitting.tsconfigFile}: error LooseCompilerOption: noEmit resolves to false`,
+      buildOutput(emitting.tsconfigFile, "outDir"),
+      buildOutput(emitting.tsconfigFile, "declaration"),
+      buildOutput(emitting.tsconfigFile, "declarationDir"),
+      buildOutput(emitting.tsconfigFile, "emitDeclarationOnly"),
+    ]);
+    const unset = yield* makeProject({
+      "tsconfig.json": yield* encodeJson({
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, declaration: false },
+        files: ["src/index.ts", "oxlint.config.ts"],
+      }),
+      "src/index.ts": IMPORTS_TASK,
+    });
+    expect(yield* unmetRequirements(unset.tsconfigFile)).toEqual([
+      `${unset.tsconfigFile}: error LooseCompilerOption: noEmit is unset`,
+    ]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+const referencedProject = (emitDeclarationOnly: Readonly<Record<string, boolean>>) =>
+  encodeJson({
+    compilerOptions: {
+      composite: true,
+      ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
+      outDir: "../.declarations",
+      ...emitDeclarationOnly,
+    },
+    files: ["main.ts"],
+  });
+
+export const requiresReferencedProjectsToEmitOnlyDeclarations = Task.make(
+  "a referenced project, which bun check --build must let emit, passes with emitDeclarationOnly and an outDir, and is named when it leaves emitDeclarationOnly unset or false",
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const { directory, tsconfigFile } = yield* makeProject({
+      "tsconfig.json": yield* encodeJson({
+        compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
+        files: ["oxlint.config.ts"],
+        references: [{ path: "./server" }, { path: "./tools" }, { path: "./web" }],
+      }),
+      "server/tsconfig.json": yield* referencedProject({ emitDeclarationOnly: true }),
+      "server/main.ts": IMPORTS_TASK,
+      "tools/tsconfig.json": yield* referencedProject({}),
+      "tools/main.ts": IMPORTS_TASK,
+      "web/tsconfig.json": yield* referencedProject({ emitDeclarationOnly: false }),
+      "web/main.ts": IMPORTS_TASK,
+    });
+    expect(yield* unmetRequirements(tsconfigFile)).toEqual([
+      `${path.join(directory, "tools/tsconfig.json")}: error LooseCompilerOption: emitDeclarationOnly is unset`,
+      `${path.join(directory, "web/tsconfig.json")}: error LooseCompilerOption: emitDeclarationOnly resolves to false`,
+    ]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

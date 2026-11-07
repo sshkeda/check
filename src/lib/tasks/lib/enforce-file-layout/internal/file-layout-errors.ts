@@ -220,6 +220,15 @@ export class ExportPathMismatch extends Schema.TaggedError<ExportPathMismatch>()
   }
 }
 
+export class PackageEntryNotTypeScript extends Schema.TaggedError<PackageEntryNotTypeScript>()(
+  "PackageEntryNotTypeScript",
+  { location: Schema.String, field: Schema.String, target: Schema.String },
+) {
+  public override get message() {
+    return `${this.field} points to ${this.target}, which is not a TypeScript source file`;
+  }
+}
+
 export class RepositoryRootNotFound extends Schema.TaggedError<RepositoryRootNotFound>()(
   "RepositoryRootNotFound",
   { directory: Schema.String, reason: Schema.String },
@@ -395,6 +404,7 @@ export class FileLayoutViolations extends Schema.TaggedError<FileLayoutViolation
         PackageScriptsField,
         DependencyOutsideRepository,
         ExportPathMismatch,
+        PackageEntryNotTypeScript,
         UngrantedDocument,
         UngrantedDirectory,
         DirectoryGrantOnFile,

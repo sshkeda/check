@@ -7,7 +7,7 @@ import {
   FORMAT_CONFIG_FILE,
   LINT_CONFIG_FILE,
 } from "../../../shared/config-file-names.ts";
-import { lineNumberAt } from "./count-the-line-of-an-offset.ts";
+import { lineNumbersIn } from "./count-the-line-of-an-offset.ts";
 import { runtimeModuleResolver } from "./create-the-module-resolver.ts";
 import type { CONFIG_FILE_VIOLATION } from "./project-config-and-tool-errors.ts";
 import {
@@ -23,6 +23,7 @@ import {
   ModuleRequestUnresolvable,
 } from "./project-config-and-tool-errors.ts";
 import { namedPackageManifestAt } from "./read-named-package-manifests.ts";
+import { realPathOf } from "./resolve-absolute-paths.ts";
 
 export const LINT_CONFIG = {
   file: LINT_CONFIG_FILE,
@@ -37,9 +38,6 @@ export const FORMAT_CONFIG = {
 } as const;
 
 const INSTALLED_PACKAGES_DIRECTORY = "node_modules";
-
-const realPathOf = (file: string) =>
-  FileSystem.FileSystem.use((fileSystem) => fileSystem.realPath(file));
 
 const defaultExportOf = (config: typeof FORMAT_CONFIG | typeof LINT_CONFIG) =>
   config.argumentShapes === undefined
@@ -184,7 +182,8 @@ export const parsedConfigFile = (
       parsed.errors.map((error) => new ConfigFileUnparsable({ file, reason: error.message })),
     );
   }
-  const lineOf = (offset: number) => `${file}:${lineNumberAt(text, offset)}`;
+  const lineAt = lineNumbersIn(text);
+  const lineOf = (offset: number) => `${file}:${lineAt(offset)}`;
   const { body } = parsed.program;
   const exported = body.find((statement) => statement.type === "ExportDefaultDeclaration");
   const bindingImport = body
@@ -245,9 +244,9 @@ const importViolationsOf = (
     const projectDirectory = yield* realPathOf(directory);
     const request = bindingImport.source.value;
     const location = lineOf(bindingImport.start);
+    const resolver = yield* runtimeModuleResolver;
     const resolved = yield* Effect.tryPromise({
-      try: () =>
-        runtimeModuleResolver().resolveFileAsync(path.join(projectDirectory, config.file), request),
+      try: () => resolver.resolveFileAsync(path.join(projectDirectory, config.file), request),
       catch: (cause) =>
         new ModuleRequestUnresolvable({ request, importingFile: location, reason: String(cause) }),
     });

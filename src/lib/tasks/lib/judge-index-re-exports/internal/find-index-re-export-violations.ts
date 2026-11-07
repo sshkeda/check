@@ -14,7 +14,7 @@ import {
   LAYOUT_DIRECTORY_NAMES,
   SHARED_DIRECTORY_NAME,
 } from "../../../../../shared/match-file-names-and-path-prefixes.ts";
-import { lineNumberAt } from "../../../shared/count-the-line-of-an-offset.ts";
+import { lineNumbersIn } from "../../../shared/count-the-line-of-an-offset.ts";
 import { moduleResolverFor } from "../../../shared/create-the-module-resolver.ts";
 import {
   directoriesAFailedResolutionReads,
@@ -32,7 +32,7 @@ const OWN_LAYOUT_DIRECTORIES = `${INTERNAL_DIRECTORY_NAME}/ and ${SHARED_DIRECTO
 const RE_EXPORTABLE_EXTENSIONS = ".ts or .tsx";
 const RE_EXPORTABLE_FILE = /^.+\.tsx?$/u;
 const INDEX_FILE = /^index(?:\.d)?\.tsx?$/u;
-const NAMESPACE_INDEX = /^\.\/lib\/[^/.][^/]*\/index\.ts$/u;
+const NAMESPACE_INDEX = /^\.\/lib\/[^/.][^/]*\/index\.tsx?$/u;
 const INSTALLED_PACKAGES_DIRECTORY = "node_modules";
 const FILE_SYSTEM_ROOT = "/";
 const GIT_DIRECTORY_NAME = ".git";
@@ -77,9 +77,7 @@ const repositoryRootHolding = Effect.fn("repositoryRootHolding")(function* (dire
   const fileSystem = yield* FileSystem.FileSystem;
   for (const manifestFile of enclosingPackageManifestsOf(directory, FILE_SYSTEM_ROOT)) {
     const enclosing = directoryHolding(manifestFile);
-    const holdsGit = yield* fileSystem
-      .exists(`${enclosing}/${GIT_DIRECTORY_NAME}`)
-      .pipe(Effect.catchTag("PlatformError", () => Effect.succeed(false)));
+    const holdsGit = yield* fileSystem.exists(`${enclosing}/${GIT_DIRECTORY_NAME}`);
     if (holdsGit) {
       return enclosing;
     }
@@ -121,11 +119,15 @@ const badManifestOf = (directory: string, failure: PackageManifestUnreadable) =>
   }) as const;
 
 const resolvedRequest = (importingFile: string, request: string) =>
-  Effect.tryPromise({
-    try: () => moduleResolverFor([]).resolveFileAsync(importingFile, request),
-    catch: (cause) =>
-      new ModuleRequestUnresolvable({ request, importingFile, reason: String(cause) }),
-  });
+  moduleResolverFor([]).pipe(
+    Effect.flatMap((resolver) =>
+      Effect.tryPromise({
+        try: () => resolver.resolveFileAsync(importingFile, request),
+        catch: (cause) =>
+          new ModuleRequestUnresolvable({ request, importingFile, reason: String(cause) }),
+      }),
+    ),
+  );
 
 const unresolvedFactOf = Effect.fn("unresolvedFactOf")(function* (
   index: Effect.Success<ReturnType<typeof realIndexOf>>,
@@ -224,16 +226,18 @@ const exportsOwnInternalNames = Effect.fn("exportsOwnInternalNames")(function* (
       return false;
     }
     const fact = yield* resolvedFactOf(index, source.value);
+    const resolved = (yield* resolvedRequest(index.file, source.value)).path;
+    const ownInternalDirectory = `${index.directory}/${INTERNAL_DIRECTORY_NAME}`;
+    const isInOwnInternalDirectory =
+      resolved !== undefined &&
+      directoryHolding(yield* fileSystem.realPath(resolved)) === ownInternalDirectory;
     const exportsUnrenamedNames =
       statement.specifiers.length > 0 &&
       statement.specifiers.every(
         (specifier) => exportedName(specifier.local) === exportedName(specifier.exported),
       );
     const isOwnInternalReExport =
-      fact !== undefined &&
-      "allowed" in fact &&
-      exportsUnrenamedNames &&
-      source.value.startsWith(`./${INTERNAL_DIRECTORY_NAME}/`);
+      fact !== undefined && "allowed" in fact && exportsUnrenamedNames && isInOwnInternalDirectory;
     if (!isOwnInternalReExport) {
       return false;
     }
@@ -266,7 +270,7 @@ export const indexReExportJudgmentsOf = Effect.fn("indexReExportJudgmentsOf")(fu
   indexFile: string,
   text: string,
 ) {
-  moduleResolverFor([]).clearCache();
+  (yield* moduleResolverFor([])).clearCache();
   const { program } = parseSync(indexFile, text);
   const judgments: { readonly start: number; readonly judgment: string }[] = [];
   const exportsFromAModule = program.body.some(
@@ -280,13 +284,14 @@ export const indexReExportJudgmentsOf = Effect.fn("indexReExportJudgmentsOf")(fu
   const index = yield* realIndexOf(indexFile);
   for (const statement of program.body) {
     if (statement.type === "ExportAllDeclaration") {
-      const source = statement.source.value;
-      const isNamespaceOfAChildModule =
-        statement.exported === null || (yield* exportsChildModuleNamespace(index, source));
-      if (!isNamespaceOfAChildModule) {
+      const namespace = statement.exported;
+      const namespaceSource = statement.source.value;
+      const isChildModuleNamespace =
+        namespace === null || (yield* exportsChildModuleNamespace(index, namespaceSource));
+      if (!isChildModuleNamespace) {
         judgments.push({
           start: statement.start,
-          judgment: `export * from ${source} re-exports another module`,
+          judgment: `export * as ${text.slice(namespace.start, namespace.end)} from ${namespaceSource} re-exports another module`,
         });
       }
       continue;
@@ -337,10 +342,11 @@ export const findIndexReExportViolations = (projectFile: string) =>
           path.join(packageDirectory, displayName),
           text,
         );
+        const lineAt = lineNumbersIn(text);
         return judgments.map(
           ({ start, judgment }) =>
             new IndexReExportRefused({
-              location: `${displayName}:${lineNumberAt(text, start)}`,
+              location: `${displayName}:${lineAt(start)}`,
               judgment,
             }),
         );

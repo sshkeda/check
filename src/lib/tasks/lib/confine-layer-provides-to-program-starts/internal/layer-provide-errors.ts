@@ -8,12 +8,13 @@ export class LayerProvidedOutsideProgramStart extends Schema.TaggedError<LayerPr
   "LayerProvidedOutsideProgramStart",
   {
     location: Schema.String,
+    module: Schema.String,
     operation: Schema.String,
     provided: Schema.Literals(PROVIDED_VALUES),
   },
 ) {
   public override get message() {
-    return `Effect.${this.operation} with ${this.provided} outside the call that starts the program`;
+    return `${this.module}.${this.operation} with ${this.provided} outside the call that starts the program`;
   }
 }
 

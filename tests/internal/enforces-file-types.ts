@@ -15,6 +15,7 @@ import {
 } from "../../src/lib/tasks/lib/enforce-file-types/internal/find-file-type-violations.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { recordedGrantsOf } from "../../src/shared/record-and-grant-permissions-by-path.ts";
 import {
   makeProject as makeProjectWith,
@@ -207,7 +208,7 @@ export const listedPackageFilesDriveTheTypeCheck = Task.make(
     }
     yield* writtenFiles(directory, { "oxlint.config.ts": "not a valid config\n" });
     expect(yield* findFileTypeViolations(directory)).toBeUndefined();
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const untrackedForbiddenFilesFailTheNextRun = Task.make(
@@ -280,5 +281,5 @@ export const fileTypesReadThePatchesTheManifestLists = Task.make(
         { location: "patches/notes.patch", fileType: ".patch" },
       ]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

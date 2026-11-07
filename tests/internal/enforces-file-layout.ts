@@ -20,6 +20,7 @@ import {
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { loadedLintConfigIn } from "../../src/lib/tasks/shared/load-the-lint-config.ts";
 import { bunPatchFileNameOf } from "../../src/lib/tasks/shared/match-granted-patch-files.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import {
   DIRECTORY,
@@ -1153,7 +1154,7 @@ export const dependenciesAreJudgedFromTheRealRepositoryRoot = Task.make(
     expect(yield* layoutViolationsIn(symlinked)).toEqual([
       outside("dependencies.sibling", "file:../sibling"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const directoriesOutsideAGitRepositoryFailLoudly = Task.make(
@@ -1165,7 +1166,7 @@ export const directoriesOutsideAGitRepositoryFailLoudly = Task.make(
     yield* fileSystem.writeFileString(path.join(directory, "package.json"), '{ "name": "a" }\n');
     const failure = yield* failureAsValue(findFileLayoutViolations(directory));
     expect(failure._tag).toBe("RepositoryRootNotFound");
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const rootGrantsMatchOnlyTheRootFile = Task.make(
@@ -1181,7 +1182,7 @@ export const rootGrantsMatchOnlyTheRootFile = Task.make(
     expect(yield* layoutViolationsIn(directory)).toEqual([
       "docs/notes.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const patchesAreCheckedAgainstTheGrantsInTheConfig = Task.make(
@@ -1229,7 +1230,7 @@ export const patchesAreCheckedAgainstTheGrantsInTheConfig = Task.make(
       { "package.json": yield* encodeJson({ name: "unpatched" }), "patches/a.patch": "" },
     );
     expect(yield* layoutViolationsIn(unlistedDirectory)).toEqual([unlisted("patches")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyBunsOwnPatchFileNamesSkipKebabCase = Task.make(
@@ -1266,7 +1267,7 @@ export const onlyBunsOwnPatchFileNamesSkipKebabCase = Task.make(
       "pkg@https%3A%2F%2Fregistry.example.com%2Fpkg.tgz#sha.patch",
       "pkg@github%3Auser%2Frepo#a1b2.patch",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const theLayoutCheckRefusesGrantedCheckAndTaskPatches = Task.make(
@@ -1287,7 +1288,7 @@ export const theLayoutCheckRefusesGrantedCheckAndTaskPatches = Task.make(
     expect(yield* layoutViolationsIn(directory)).toEqual(
       dependencies.map((dependency) => checkOrTaskPatched(dependency, patchPath)),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const configViolationsIn = (directory: string) =>
@@ -1328,7 +1329,7 @@ export const configsOtherThanALiteralLintConfigCallAreReportedInsteadOfGrantedFi
       "src/index.ts": "export const MAIN = 1;\n",
     });
     expect(yield* configViolationsIn(nothingGranted)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const boundaryPathsAreVerifiedOnDisk = Task.make(
@@ -1354,7 +1355,7 @@ export const boundaryPathsAreVerifiedOnDisk = Task.make(
       "oxlint.config.ts: error DirectoryGrantedPermissions: src/lib/store is a directory but is granted file permissions or services",
       "oxlint.config.ts: error GrantedPathMissing: src/lib/worker is listed but is not a repository file or directory",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const bunTestNamesAreRefusedEverywhere = Task.make(
@@ -1584,7 +1585,7 @@ export const layoutCheckListsGitFiles = Task.make(
         "oxlint.config.ts: error GrantedPathMissing: ignored/NOTES.md is listed but is not a repository file or directory",
       );
     }),
-  ),
+  ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const ignoredFilesDoNotKeepADirectoryFromHoldingOnlyADirectory = Task.make(
@@ -1597,7 +1598,7 @@ export const ignoredFilesDoNotKeepADirectoryFromHoldingOnlyADirectory = Task.mak
       "src/lib/memo/index.ts": "export const MAIN = 1;\n",
     });
     expect(yield* layoutViolationsIn(directory)).toEqual([holdsOnly("src", "lib")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aNestedPackageKeepsItsParentFromHoldingOnlyADirectory = Task.make(
@@ -1612,7 +1613,7 @@ export const aNestedPackageKeepsItsParentFromHoldingOnlyADirectory = Task.make(
       "src/shared/fixtures/pkg/index.ts": "export const MAIN = 1;\n",
     });
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const toolOwnedDotFilesPass = Task.make(
@@ -1627,7 +1628,7 @@ export const toolOwnedDotFilesPass = Task.make(
       },
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
@@ -1654,7 +1655,7 @@ export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
       files,
     );
     expect(yield* layoutViolationsIn(granted)).toEqual([notKebabCase]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const nestedPackagesDoNotHideDotDirectories = Task.make(
@@ -1677,7 +1678,7 @@ export const nestedPackagesDoNotHideDotDirectories = Task.make(
       );
       expect(yield* layoutViolationsIn(granted)).toEqual([]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const PUBLISH_WORKFLOW = {
@@ -1693,7 +1694,7 @@ export const aGrantedDirectoryHoldingOnlyADirectoryPasses = Task.make(
       PUBLISH_WORKFLOW,
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aGrantedDirectoryKeepsItsOwnModuleShape = Task.make(
@@ -1719,7 +1720,7 @@ export const aGrantedDirectoryKeepsItsOwnModuleShape = Task.make(
       files,
     );
     expect(yield* layoutViolationsIn(granted)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anUngrantedDirectoryHoldingOnlyADirectoryStillFails = Task.make(
@@ -1749,7 +1750,7 @@ export const anUngrantedDirectoryHoldingOnlyADirectoryStillFails = Task.make(
       { "src/lib/a/index.ts": "export const A = 1;\n" },
     );
     expect(yield* layoutViolationsIn(grantedDefault)).toEqual([holdsOnly("src", "lib")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const ignoredDotDirectoriesStayOutsideTheLayout = Task.make(
@@ -1765,7 +1766,7 @@ export const ignoredDotDirectoriesStayOutsideTheLayout = Task.make(
       },
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const documentsDirectoryHoldsOnlyMarkdown = Task.make(
@@ -1842,7 +1843,7 @@ export const sourcePlacementUsesExistingFileScopeAndGrants = Task.make(
   "source placement keeps assets, generated files, ignored files and nested packages outside its scope",
   Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
-      'export default lintConfig({ "src/generated.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] } });',
+      'export default lintConfig({ "src/generated.ts": { allow: ["isGeneratedByATool"] } });',
       {
         ".gitignore": "node_modules\nsrc/ignored.ts\n",
         "src/index.ts": "export const MAIN = 1;\n",
@@ -1856,7 +1857,7 @@ export const sourcePlacementUsesExistingFileScopeAndGrants = Task.make(
       },
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([outsideImplementation("src/parser.ts")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const rootCodeBelongsInScriptsOrSource = Task.make(
@@ -1896,7 +1897,7 @@ const mismatch = (field: string, target: string, index: string) =>
   `package.json: error ExportPathMismatch: ${field} points to ${target}, which is not ${index}`;
 
 export const exportsPointingAtTheIndexOfTheDirectoryTheyNamePass = Task.make(
-  "each exports subpath ./X pointing at lib/X/index in its source or build directory, and ./X/Y at lib/X/lib/Y/index, passes under every condition, as does . pointing at the root index, while non-code targets and null exclusions are not judged",
+  "each exports subpath ./X pointing at lib/X/index in its source directory, and ./X/Y at lib/X/lib/Y/index, passes under every condition, as does . pointing at the root index, while non-code targets and null exclusions are not judged",
   Effect.gen(function* () {
     const passing = [
       {
@@ -1906,34 +1907,21 @@ export const exportsPointingAtTheIndexOfTheDirectoryTheyNamePass = Task.make(
         "./monitor": "./src/lib/monitor/index.ts",
       },
       {
-        ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
-        "./tasks": {
-          types: "./dist/lib/tasks/index.d.ts",
-          bun: "./src/lib/tasks/index.ts",
-          default: "./dist/lib/tasks/index.js",
-        },
+        ".": "./src/index.ts",
+        "./tasks": { bun: "./src/lib/tasks/index.ts", default: "./src/lib/tasks/index.ts" },
       },
       {
-        ".": {
-          "@sshkeda/task-source": "./src/index.ts",
-          types: "./dist/index.d.ts",
-          default: "./src/index.ts",
-        },
+        ".": { "@sshkeda/task-source": "./src/index.ts", default: "./src/index.ts" },
       },
       {
-        "./a/b": {
-          import: {
-            types: "./dist/lib/a/lib/b/index.d.mts",
-            default: "./dist/lib/a/lib/b/index.mjs",
-          },
-        },
-        "./view": ["./src/lib/view/index.tsx", "./dist/lib/view/index.cjs"],
+        "./a/b": { import: { default: "./src/lib/a/lib/b/index.ts" } },
+        "./view": ["./src/lib/view/index.tsx"],
         "./package.json": "./package.json",
         "./styles": "./src/styles/theme.css",
         "./hidden": null,
       },
-      "./dist/index.js",
-      { types: "./dist/index.d.ts", default: "./src/index.ts" },
+      "./src/index.ts",
+      { types: "./src/index.ts", default: "./src/index.ts" },
     ];
     for (const exports of passing) {
       expect(yield* exportViolationsOf(exports)).toEqual([]);
@@ -1942,23 +1930,17 @@ export const exportsPointingAtTheIndexOfTheDirectoryTheyNamePass = Task.make(
 );
 
 export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported = Task.make(
-  "an exports target that is not the index of the module in lib/ its subpath names is reported under each condition, including a directory outside lib/, a renamed directory, a non-index file, a nested subpath pointing a level off and a target with no source or build directory",
+  "an exports target that is not the index of the module in lib/ its subpath names is reported under each condition, including a directory outside lib/, a renamed directory, a non-index file, a nested subpath pointing a level off and a target with no source directory",
   Effect.gen(function* () {
     expect(
       yield* exportViolationsOf({
-        ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
+        ".": "./src/index.ts",
         "./tasks": {
-          types: "./dist/lib/everything-the-check-task-runs/index.d.ts",
           bun: "./src/lib/everything-the-check-task-runs/index.ts",
-          default: "./dist/lib/everything-the-check-task-runs/index.js",
+          default: "./src/lib/everything-the-check-task-runs/index.ts",
         },
       }),
     ).toEqual([
-      mismatch(
-        'exports["./tasks"].types',
-        "./dist/lib/everything-the-check-task-runs/index.d.ts",
-        "lib/tasks/index",
-      ),
       mismatch(
         'exports["./tasks"].bun',
         "./src/lib/everything-the-check-task-runs/index.ts",
@@ -1966,7 +1948,7 @@ export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported
       ),
       mismatch(
         'exports["./tasks"].default',
-        "./dist/lib/everything-the-check-task-runs/index.js",
+        "./src/lib/everything-the-check-task-runs/index.ts",
         "lib/tasks/index",
       ),
     ]);
@@ -1975,7 +1957,6 @@ export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported
         ".": { "@sshkeda/task-source": "./src/index.ts", default: "./src/index.ts" },
         "./errors": {
           "@sshkeda/task-source": "./src/lib/errors/errors.ts",
-          types: "./dist/lib/errors/errors.d.ts",
           default: "./src/lib/errors/errors.ts",
         },
       }),
@@ -1985,7 +1966,6 @@ export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported
         "./src/lib/errors/errors.ts",
         "lib/errors/index",
       ),
-      mismatch('exports["./errors"].types', "./dist/lib/errors/errors.d.ts", "lib/errors/index"),
       mismatch('exports["./errors"].default', "./src/lib/errors/errors.ts", "lib/errors/index"),
     ]);
     expect(
@@ -2010,22 +1990,67 @@ export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported
         "./a": "../a/index.ts",
         "./b": "/b/index.ts",
         "./c": "././c/index.ts",
-        "./d": "./dist/wrong.js?version=1",
-        "./e": "./dist/wrong.js#e",
-        "./f": "./dist/lib/f/index.js?version=1",
+        "./d": "./src/wrong.ts?version=1",
+        "./e": "./src/wrong.ts#e",
+        "./f": "./src/lib/f/index.ts?version=1",
       }),
     ).toEqual([
       mismatch('exports["./a"]', "../a/index.ts", "lib/a/index"),
       mismatch('exports["./b"]', "/b/index.ts", "lib/b/index"),
       mismatch('exports["./c"]', "././c/index.ts", "lib/c/index"),
-      mismatch('exports["./d"]', "./dist/wrong.js?version=1", "lib/d/index"),
-      mismatch('exports["./e"]', "./dist/wrong.js#e", "lib/e/index"),
+      mismatch('exports["./d"]', "./src/wrong.ts?version=1", "lib/d/index"),
+      mismatch('exports["./e"]', "./src/wrong.ts#e", "lib/e/index"),
     ]);
-    expect(yield* exportViolationsOf("./index.js")).toEqual([
-      mismatch("exports", "./index.js", "the root index"),
+    expect(yield* exportViolationsOf("./index.ts")).toEqual([
+      mismatch("exports", "./index.ts", "the root index"),
+    ]);
+    expect(yield* exportViolationsOf({ default: "./src/cli.ts" })).toEqual([
+      mismatch("exports.default", "./src/cli.ts", "the root index"),
+    ]);
+  }),
+);
+
+const notTypeScript = (field: string, target: string) =>
+  `package.json: error PackageEntryNotTypeScript: ${field} points to ${target}, which is not a TypeScript source file`;
+
+export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make(
+  "a main, module, types, typings or exports target that is JavaScript, a declaration file or a file with no extension is PackageEntryNotTypeScript under every condition, and is not also judged as an export path, while a pattern with no extension, non-code targets and null exclusions pass",
+  Effect.gen(function* () {
+    const manifest = yield* encodeJson({
+      name: "a",
+      main: "./dist/index.js",
+      module: "./dist/index.mjs",
+      types: "./dist/index.d.ts",
+      typings: "./src/index.ts",
+      exports: {
+        ".": { types: "./dist/index.d.ts", require: "./dist/index.cjs", bun: "./src/index.ts" },
+        "./a": { import: { types: "./dist/lib/a/index.d.mts" } },
+        "./b": ["./src/lib/b/index.tsx", "./src/lib/b/index.jsx"],
+        "./c": "./src/lib/c/index.mts",
+        "./d": "./dist/lib/d/index",
+        "./e": "./dist/wrong.js?version=1",
+        "./tests/*": "./tests/*",
+        "./package.json": "./package.json",
+        "./styles": "./src/styles/theme.css",
+        "./hidden": null,
+      },
+    });
+    expect(
+      taggedViolations(yield* manifestViolations("package.json", manifest, AT_REPOSITORY_ROOT)),
+    ).toEqual([
+      notTypeScript("main", "./dist/index.js"),
+      notTypeScript("module", "./dist/index.mjs"),
+      notTypeScript("types", "./dist/index.d.ts"),
+      notTypeScript('exports["."].types', "./dist/index.d.ts"),
+      notTypeScript('exports["."].require', "./dist/index.cjs"),
+      notTypeScript('exports["./a"].import.types', "./dist/lib/a/index.d.mts"),
+      notTypeScript('exports["./b"][1]', "./src/lib/b/index.jsx"),
+      notTypeScript('exports["./c"]', "./src/lib/c/index.mts"),
+      notTypeScript('exports["./d"]', "./dist/lib/d/index"),
+      notTypeScript('exports["./e"]', "./dist/wrong.js?version=1"),
     ]);
     expect(yield* exportViolationsOf({ default: "./dist/cli.js" })).toEqual([
-      mismatch("exports.default", "./dist/cli.js", "the root index"),
+      notTypeScript("exports.default", "./dist/cli.js"),
     ]);
   }),
 );
@@ -2075,7 +2100,7 @@ export const taskBindingsThroughANestedPackageKeepTheirLayout = Task.make(
       );
       expect(found).toEqual([withoutMain("scripts/unrelated.ts")]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const taskSelfImportsKeepTheirLayout = Task.make(
@@ -2086,7 +2111,7 @@ export const taskSelfImportsKeepTheirLayout = Task.make(
     yield* linkNodeModulesWithCheck(directory);
     yield* writtenFiles(directory, {
       "package.json":
-        '{"name":"@sshkeda/task","type":"module","exports":{"types":"./dist/index.d.ts","default":"./src/index.ts"}}',
+        '{"name":"@sshkeda/task","type":"module","exports":{"default":"./src/index.ts"}}',
       ".gitignore": "node_modules\n",
       "oxlint.config.ts":
         'import { lintConfig } from "@sshkeda/check"; export default lintConfig({});',
@@ -2107,5 +2132,5 @@ export const taskSelfImportsKeepTheirLayout = Task.make(
       ),
     );
     expect(found).toEqual([withoutMain("scripts/unrelated.ts")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

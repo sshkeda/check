@@ -2,33 +2,24 @@ import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
 
 import { FORMAT_CONFIG_BINDING, FORMAT_CONFIG_FILE } from "../shared/config-file-names.ts";
-import {
-  fileNameOf,
-  INTERNAL_DIRECTORY_NAME,
-  isEntryFileName,
-  LIBRARY_DIRECTORY_NAME,
-  SHARED_DIRECTORY_NAME,
-} from "../shared/match-file-names-and-path-prefixes.ts";
+import { fileNameOf, isEntryFileName } from "../shared/match-file-names-and-path-prefixes.ts";
 import {
   DEFAULT_EXPORT,
   importedBindingOf,
   importedExpression,
+  propertyKeyName,
   resolvedVariable,
+  textOnOneLine,
   unwrappedExpression,
 } from "./resolve-what-an-expression-imports.ts";
-
-const OWN_LAYOUT_DIRECTORIES = `${INTERNAL_DIRECTORY_NAME}/ and ${SHARED_DIRECTORY_NAME}/`;
-const RE_EXPORTABLE_EXTENSIONS = ".ts or .tsx";
 
 export const noReExports = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description: `Define each export where it is written; an exception is an index.ts or index.tsx that re-exports names, unrenamed, with export { … } from or export type { … } from a path that resolves to a ${RE_EXPORTABLE_EXTENSIONS} file, not an index or a .d.ts, directly in its own ${OWN_LAYOUT_DIRECTORIES}. An index.ts may also export * as Name from the index.ts of a module directly in its own ${LIBRARY_DIRECTORY_NAME}/ that only re-exports unrenamed names from its own internal files. export { … } or export default naming an imported binding, or export default of a direct static member of an imported binding, is a re-export too, and so is an exported declaration initialized to one of them. ${FORMAT_CONFIG_FILE} may export default the imported ${FORMAT_CONFIG_BINDING}, which the format-config check requires. The re-exports check judges where an index's export from and export * as resolve.`,
-    },
     messages: {
       fromModule: "export from {{source}} re-exports another module",
       everything: "export * from {{source}} re-exports another module",
+      namespace: "export * as {{name}} from {{source}} re-exports another module",
       importedValue: "export {{exported}} re-exports {{binding}}, imported from {{source}}",
       importedMember:
         "export {{exported}} re-exports {{member}}, a member of {{binding}} imported from {{source}}",
@@ -90,6 +81,37 @@ export const noReExports = defineRule({
         );
       }
     };
+    const reportDestructuredImport = (
+      pattern: ESTree.ObjectPattern,
+      imported: NonNullable<ReturnType<typeof importedBindingOf>>,
+    ) => {
+      const object = imported.member ?? imported.name;
+      for (const property of pattern.properties) {
+        const key = propertyKeyName(property);
+        if (property.type !== "Property") {
+          continue;
+        }
+        if (key === undefined) {
+          continue;
+        }
+        const isNamedKey = !property.computed && property.key.type === "Identifier";
+        const member = isNamedKey
+          ? `${object}.${key}`
+          : `${object}[${textOnOneLine(property.key, context.sourceCode)}]`;
+        const { value } = property;
+        if (value.type === "Identifier") {
+          reportImport(
+            property,
+            value.name,
+            { ...imported, member },
+            "initializedToImport",
+            "initializedToMember",
+          );
+        } else if (value.type === "ObjectPattern") {
+          reportDestructuredImport(value, { ...imported, member });
+        }
+      }
+    };
     const reportImported = (node: ESTree.Node, exported: string, value: ESTree.Node) => {
       const imported = importedBindingOf(value, context.sourceCode);
       if (imported !== undefined) {
@@ -105,15 +127,20 @@ export const noReExports = defineRule({
       Program(program) {
         for (const statement of program.body) {
           if (statement.type === "ExportAllDeclaration") {
+            const source = statement.source.value;
             const isLeftToTheReExportsCheck = isIndexFile && statement.exported !== null;
             if (isLeftToTheReExportsCheck) {
               continue;
             }
-            context.report({
-              node: statement,
-              messageId: "everything",
-              data: { source: statement.source.value },
-            });
+            context.report(
+              statement.exported === null
+                ? { node: statement, messageId: "everything", data: { source } }
+                : {
+                    node: statement,
+                    messageId: "namespace",
+                    data: { name: context.sourceCode.getText(statement.exported), source },
+                  },
+            );
           } else if (statement.type === "ExportNamedDeclaration") {
             if (statement.source !== null) {
               if (!isIndexFile) {
@@ -139,6 +166,15 @@ export const noReExports = defineRule({
                 const isInitializedName = id.type === "Identifier" && initializer !== null;
                 if (isInitializedName) {
                   reportInitializedToImport(declarator, id.name, initializer);
+                }
+                if (id.type === "ObjectPattern") {
+                  const destructured =
+                    initializer === null
+                      ? undefined
+                      : importedBindingOf(initializer, context.sourceCode);
+                  if (destructured !== undefined) {
+                    reportDestructuredImport(id, destructured);
+                  }
                 }
               }
             }

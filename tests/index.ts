@@ -39,12 +39,15 @@ import * as assertions from "./internal/refuses-test-runners-and-assertions-outs
 import * as testingHelpers from "./internal/refuses-testing-helpers-outside-test-files.ts";
 import * as identifierNaming from "./internal/rejects-abbreviated-names.ts";
 import * as bunModuleImports from "./internal/rejects-bun-module-imports.ts";
+import * as sharedHolders from "./internal/rejects-captured-writes-inside-effect-callbacks.ts";
 import * as commentRestrictions from "./internal/rejects-comments.ts";
 import * as testTimeouts from "./internal/rejects-deadlines-inside-tests.ts";
 import * as declaredValues from "./internal/rejects-declared-values.ts";
 import * as droppedFailuresOutsideEffect from "./internal/rejects-dropped-failures-in-layers-streams-and-options.ts";
+import * as duplicateFunctions from "./internal/rejects-duplicate-functions.ts";
 import * as dynamicRuntimeCalls from "./internal/rejects-dynamic-runtime-calls.ts";
 import * as globalErrorFailureTypes from "./internal/rejects-global-error-failure-types.ts";
+import * as instantRetries from "./internal/rejects-instant-retries.ts";
 import * as letAndMutableRef from "./internal/rejects-let-and-mutable-ref.ts";
 import * as indexLogic from "./internal/rejects-logic-in-index-files.ts";
 import * as signatureRestrictions from "./internal/rejects-loose-type-annotations.ts";
@@ -54,6 +57,7 @@ import * as namespaceAliases from "./internal/rejects-namespace-aliases.ts";
 import * as nodeBuiltinImports from "./internal/rejects-node-builtin-imports.ts";
 import * as permissionEscapes from "./internal/rejects-permission-escapes.ts";
 import * as reExports from "./internal/rejects-re-exports.ts";
+import * as recoveredExists from "./internal/rejects-recovered-file-system-exists.ts";
 import * as retiredWords from "./internal/rejects-retired-words.ts";
 import * as scheduleRestrictions from "./internal/rejects-schedules-without-signals.ts";
 import * as shebangLines from "./internal/rejects-shebang-lines.ts";
@@ -106,6 +110,7 @@ export const ci = Task.make(
         effectLanguageServiceRules,
         effectNativeRestrictions,
         scheduleRestrictions,
+        instantRetries,
         nodeBuiltinImports,
         generatedFiles,
         permissionsByFile,
@@ -118,6 +123,7 @@ export const ci = Task.make(
         inferrableAnnotations,
         fileLayout,
         fileTypes,
+        duplicateFunctions,
         failureReports,
         literalConstants,
         packedTarball,
@@ -127,6 +133,7 @@ export const ci = Task.make(
         namespaceAliases,
         uncalledCheckedMembers,
         unnamedFallbacks,
+        recoveredExists,
         unnamedRecovery,
         droppedFailuresOutsideEffect,
         bunModuleImports,
@@ -148,6 +155,7 @@ export const ci = Task.make(
         reExports,
         unnamedCompoundConditions,
         letAndMutableRef,
+        sharedHolders,
         whileLoops,
         shebangLines,
         sharedTypeScriptProject,

@@ -58,10 +58,6 @@ const namedFunctionMember = (
 export const noOverloads = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Give each function one signature, written on its implementation, so ReturnType and Parameters see the signature callers use instead of only the last overload.",
-    },
     messages: {
       overload: "{{name}} is overloaded",
     },

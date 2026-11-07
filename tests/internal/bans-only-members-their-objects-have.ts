@@ -9,6 +9,7 @@ import type { Checker } from "typescript/unstable/async";
 import { RESTRICTED_PROPERTIES } from "../../src/index.ts";
 import { bansByKind } from "../../src/internal/match-banned-modules-and-globals.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import {
   openTypeScriptProjects,
   typeScriptRequest,
@@ -84,5 +85,5 @@ export const bannedMembersExistOnTheirObjects = Task.make(
     expect(resolvedObjects).toContain("Bun");
     expect(resolvedObjects).toContain(IMPORT_META);
     expect(missingMembers).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { findFileLayoutViolations } from "../../src/lib/tasks/lib/enforce-file-layout/internal/find-file-layout-violations.ts";
 import { loadedLintConfigIn } from "../../src/lib/tasks/shared/load-the-lint-config.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 
@@ -43,5 +44,5 @@ export const filePlacementCannotBeGranted = Task.make(
     expect(refusal._tag).toBe("LintConfigRefused");
     expect(refusal.message).toContain('"custom.config.ts".allow[0]: Expected "readsConfig"');
     expect(refusal.message).toContain('got "file-location"');
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

@@ -8,7 +8,7 @@ Check may not catch every violation of these principles. Review your code agains
 
 - Use a grant only for an unavoidable exception.
 - Design for the current requirement as if you were starting fresh. Delete code the new design doesn't need.
-- Grant `isGeneratedByATool` only to a file a tool generates, and name the tool in its reason.
+- Grant `isGeneratedByATool` only to a file a tool generates.
 
 ## Grant a permission
 
@@ -17,15 +17,9 @@ Grant a permission to one file or directory in `oxlint.config.ts`. The key is th
 ```ts
 export default lintConfig({
   "src/config.ts": { allow: ["readsConfig"] },
-  "src/internal/run-all-checks.ts": {
-    allow: [
-      { handlesEveryFailure: "reports every check's failures together, so none hides another" },
-    ],
-  },
+  "src/internal/run-all-checks.ts": { allow: ["handlesEveryFailure"] },
 });
 ```
-
-These names need no reason:
 
 - `readsConfig`: Allows Effect `Config`, `process.env` and `process.argv`.
 - `spawnsCommands`: Allows Effect `ChildProcess`, `Bun.spawn` and `spawn` from `node:child_process`.
@@ -35,18 +29,14 @@ These names need no reason:
 - `usesSqlDatabases`: Allows Effect SQL.
 - `writesToTheTerminal`: Allows Effect `Stdio`.
 - `usesAbbreviations`: Allows abbreviations in variable, function, type and other declared names.
-- `pollsWithADeadline`: Allows `Effect.repeat` with `Schedule.spaced`, under a deadline.
+- `pollsWithADeadline`: Allows `Effect.repeat` and `Effect.retry` with `Schedule.spaced` or `Schedule.exponential`, under a deadline. `Schedule.exponential` may be wrapped in or piped through `Schedule.jittered`.
+- `waitsOnTimers`: Allows `Effect.sleep`, `Effect.delay`, `Clock.sleep` and the Stream operations that wait on a timer, such as `Stream.tick`.
 - `hasAnUnlistedFileType`: Allows a file type Check doesn't list, such as Markdown.
 - `isAnUnlistedDirectory`: Allows a directory Check doesn't list, such as `.github`. Check doesn't apply its directory-shape rules inside it, but files there still need their own `hasAnUnlistedFileType` grant.
 - `patchesADependency`: Allows a patch file from `bun patch`.
-
-These names need a reason, written as `{ name: "reason" }`:
-
 - `trustsUnverifiedTypes`: Allows trusting a value's type without checking it, through `Schema.declare`.
 - `handlesEveryFailure`: Allows catching every error, through `Effect.catch`, `Effect.exit`, a forked fiber or `Effect.runPromise`.
 - `isGeneratedByATool`: Check skips this path, so it can't have any other permission.
-
-A reason can't be blank.
 
 ## Make the code explain itself
 

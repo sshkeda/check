@@ -252,3 +252,8 @@ export const ruleTestWith =
       ),
       Effect.asVoid,
     );
+
+export const wordInName = (name: string, word: string) => ({
+  messageId: "name",
+  data: { name, word },
+});

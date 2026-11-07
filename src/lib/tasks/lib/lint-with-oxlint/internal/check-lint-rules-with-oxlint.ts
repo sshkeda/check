@@ -88,7 +88,7 @@ const checkLintRulesWithOxlintOn = (directory: string, files: readonly string[])
         ...files.filter((file) => file.includes("\\")).map((file) => [file]),
       ],
       exitsOfOxlintOn(directory),
-    ).pipe(quietViolations(OXLINT_TASK));
+    ).pipe(Effect.withSpan("lint-rules"), quietViolations(OXLINT_TASK));
     const flatExits = exits.flat();
     if (Arrays.isReadonlyArrayNonEmpty(flatExits)) {
       return yield* Effect.fail(mergedExit(flatExits)).pipe(
@@ -108,14 +108,17 @@ const reportedErrorsOf = <Requirements>(check: Effect.Effect<void, ReportedError
 export const checkLintRulesWithOxlintIn = (directory: string) =>
   Effect.gen(function* () {
     const files = yield* filesToLintIn(directory);
-    const reportedErrors = yield* Effect.all([
-      reportedErrorsOf(checkLintRulesWithOxlintOn(directory, files)),
-      reportedErrorsOf(
-        checkUnsafeEnumAssignmentsIn(directory, files).pipe(
-          Effect.withSpan("unsafe-enum-assignments"),
+    const reportedErrors = yield* Effect.all(
+      [
+        reportedErrorsOf(checkLintRulesWithOxlintOn(directory, files)),
+        reportedErrorsOf(
+          checkUnsafeEnumAssignmentsIn(directory, files).pipe(
+            Effect.withSpan("unsafe-enum-assignments"),
+          ),
         ),
-      ),
-    ]);
+      ],
+      { concurrency: "unbounded" },
+    );
     const allReportedErrors = reportedErrors.flat();
     if (Arrays.isReadonlyArrayNonEmpty(allReportedErrors)) {
       return yield* new ReportedErrors({ reportedErrors: allReportedErrors });

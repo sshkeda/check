@@ -3,7 +3,7 @@ import { parseSync } from "oxc-parser";
 
 import { FORMAT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
 import { isDirective } from "../../../../../shared/lint-rule-messages-and-patterns.ts";
-import { lineNumberAt } from "../../../shared/count-the-line-of-an-offset.ts";
+import { lineNumbersIn, lineOfTheFirstLabel } from "../../../shared/count-the-line-of-an-offset.ts";
 import { lintedFiles } from "../../../shared/list-linted-files.ts";
 import { isFormatConfigTextRefusedIn } from "../../../shared/parse-config-files-that-import-from-check.ts";
 import { quietViolations } from "../../../shared/print-failures-and-keep-detail-in-the-trace.ts";
@@ -25,16 +25,22 @@ export const disableDirectivesIn = (file: string, directory = ".") =>
     const parsed = parseSync(file, text);
     if (parsed.errors.length > 0) {
       return parsed.errors.map(
-        (error) => new SourceFileUnparsable({ file, reason: error.message }),
+        (error) =>
+          new SourceFileUnparsable({
+            file,
+            ...lineOfTheFirstLabel(text, error.labels),
+            reason: error.message,
+          }),
       );
     }
+    const lineAt = lineNumbersIn(text);
     return parsed.comments
       .filter((comment) => isDirective(comment.value))
       .map(
         (comment) =>
           new DisableDirective({
             file,
-            line: lineNumberAt(text, comment.start),
+            line: lineAt(comment.start),
             directive: comment.value.trim(),
           }),
       );

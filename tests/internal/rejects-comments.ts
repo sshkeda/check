@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 
 import { Task } from "@sshkeda/task";
-import { Effect, FileSystem, Path, Array as Arrays, flow } from "effect";
+import { Duration, Effect, FileSystem, Path, Array as Arrays, flow } from "effect";
 
 import { disableDirectivesIn } from "../../src/lib/tasks/lib/refuse-disable-directives/internal/find-disable-directives.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
@@ -14,6 +14,12 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
 const taggedViolations = Arrays.map(flow(printableError, formattedError));
 
 const EFFECT_DIRECTIVE = "@effect-diagnostics-next-line";
+
+const DIRECTIVES_IN_A_LARGE_FILE = 25_000;
+
+const MOST_MILLISECONDS_TO_SCAN_A_LARGE_FILE = 5000;
+
+const LINES_PER_DIRECTIVE = 2;
 
 const OVERRIDE = (comment: string) => `export default defineConfig({
   overrides: [
@@ -125,6 +131,32 @@ export const directivesTaskFindsEveryDisableDirective = Task.make(
   }).pipe(Effect.scoped),
 );
 
+export const directivesTaskCountsLinesOncePerFile = Task.make(
+  "the directives task reports the line of each of 25,000 directives in a 50,000-line file in under 5 seconds",
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const file = path.join(directory, "main.ts");
+    yield* fileSystem.writeFileString(
+      file,
+      Array.from(
+        { length: DIRECTIVES_IN_A_LARGE_FILE },
+        (_directive, index) =>
+          `// oxlint-disable-next-line no-console\nexport const VALUE_${index} = ${index};\n`,
+      ).join(""),
+    );
+    const [elapsed, violations] = yield* Effect.timed(disableDirectivesIn(file));
+    expect(taggedViolations(violations).map((violation) => violation.split(": error ")[0])).toEqual(
+      Array.from(
+        { length: DIRECTIVES_IN_A_LARGE_FILE },
+        (_directive, index) => `${file}:${index * LINES_PER_DIRECTIVE + 1}`,
+      ),
+    );
+    expect(Duration.toMillis(elapsed)).toBeLessThan(MOST_MILLISECONDS_TO_SCAN_A_LARGE_FILE);
+  }).pipe(Effect.scoped),
+);
+
 export const directivesTaskFindsSuppressionsInsideBlockComments = Task.make(
   "the directives task finds a TypeScript suppression on the last line of a block comment, where TypeScript reads one too, and reports the line the comment starts on",
   Effect.gen(function* () {
@@ -152,5 +184,23 @@ export const directivesTaskFindsSuppressionsInsideBlockComments = Task.make(
     expect(taggedViolations(violations).map((violation) => violation.split(": error ")[0])).toEqual(
       [`${file}:1`, `${file}:4`],
     );
+  }).pipe(Effect.scoped),
+);
+
+export const directivesTaskReportsTheLineThatDoesNotParse = Task.make(
+  "the directives task reports a file that does not parse at the line of each parse error",
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const file = path.join(directory, "main.ts");
+    yield* fileSystem.writeFileString(
+      file,
+      ['export const GREETING = "hello";', "", "export const FAREWELL = ;", ""].join("\n"),
+    );
+    const violations = yield* disableDirectivesIn(file);
+    expect(taggedViolations(violations)).toEqual([
+      `${file}:3: error SourceFileUnparsable: does not parse: Unexpected token`,
+    ]);
   }).pipe(Effect.scoped),
 );

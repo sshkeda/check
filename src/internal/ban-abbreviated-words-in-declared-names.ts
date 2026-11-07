@@ -131,10 +131,6 @@ const allowList = (options: readonly unknown[]): ReadonlySet<string> =>
 export const noAbbreviations = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Disallow abbreviated words in the names a file declares, in camelCase, PascalCase and snake_case.",
-    },
     messages: {
       abbreviation: "`{{name}}` contains {{abbreviations}} of {{fullWords}}",
     },

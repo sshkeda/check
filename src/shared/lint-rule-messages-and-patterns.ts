@@ -10,8 +10,6 @@ export const isDirective = (commentText: string) =>
 
 export const EFFECT_OPERATION_RULES = {
   "no-dropped-failures": {
-    description:
-      "Handle Effect, Layer, Stream and Channel failures instead of dying, and read an Option or Result without throwing.",
     operations: {
       Effect: ["orDie", "orDieWith"],
       Layer: ["orDie"],
@@ -19,25 +17,25 @@ export const EFFECT_OPERATION_RULES = {
       Channel: ["orDie"],
       Option: ["getOrThrow", "getOrThrowWith"],
       Result: ["getOrThrow", "getOrThrowWith"],
+      UndefinedOr: ["getOrThrow", "getOrThrowWith"],
     },
   },
   "no-detached-fibers": {
-    description: "Fork fibers into a scope instead of detaching them.",
     operations: { Effect: ["forkDetach"] },
   },
   "no-sleep": {
-    description: "Wait on signals instead of sleeping.",
-    operations: { Effect: ["sleep", "delay"] },
+    operations: {
+      Effect: ["sleep", "delay"],
+      Stream: ["tick", "debounce", "throttle", "throttleEffect"],
+    },
   },
   "no-untraced-functions": {
-    description: "Trace Effect functions.",
-    operations: { Effect: ["fnUntraced"] },
+    operations: { Effect: ["fnUntraced", "fnUntracedEager"] },
   },
 } as const satisfies Readonly<
   Record<
     string,
     {
-      readonly description: string;
       readonly operations: Readonly<Record<string, readonly string[]>>;
     }
   >
@@ -61,10 +59,7 @@ export const SCHEDULE_MESSAGES = {
   polling: "{{usage}} polls on a timer",
   deadline: "{{usage}} polls without a deadline",
   retrying: "{{usage}} retries on a timer",
-  retryingEvenWhenGranted:
-    "{{usage}} retries on a timer, which no file may do, even with a deadline",
-  scheduleEvenWhenGranted:
-    "{{usage}} is a timed schedule no file may use; repeat with Schedule.spaced under a deadline in a file allowed pollsWithADeadline",
+  scheduleEvenWhenGranted: "{{usage}} is a timed schedule no file may use",
 } as const;
 
 export const BUN_TEST = "bun:test";

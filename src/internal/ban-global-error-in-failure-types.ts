@@ -5,9 +5,18 @@ import {
   importedExpression,
   isGlobalReference,
   staticKeyName,
+  typeNameParts,
+  typeNameRoot,
 } from "./resolve-what-an-expression-imports.ts";
 
-const FAILING_TYPES = new Set(["Effect.Effect", "Stream.Stream", "Layer.Layer"]);
+const FAILING_TYPES = new Set([
+  "Effect.Effect",
+  "Effect.fn.Return",
+  "Effect.gen.Return",
+  "Exit.Exit",
+  "Stream.Stream",
+  "Layer.Layer",
+]);
 
 const FAILURE_TYPE_ARGUMENT = 1;
 
@@ -16,16 +25,6 @@ const GLOBAL_ERROR = "Error";
 const GLOBAL_OBJECT = "globalThis";
 
 const UNNAMED = "this type";
-
-const typeNameParts = (name: ESTree.Node): readonly string[] => {
-  if (name.type === "TSQualifiedName") {
-    return [...typeNameParts(name.left), name.right.name];
-  }
-  return name.type === "Identifier" ? [name.name] : [];
-};
-
-const typeNameRoot = (name: ESTree.Node): ESTree.Node =>
-  name.type === "TSQualifiedName" ? typeNameRoot(name.left) : name;
 
 const effectModulePath = (module: string) => {
   if (module === "effect") {
@@ -113,10 +112,6 @@ const enclosingName = (node: ESTree.Node): string => {
 export const noPlainErrorFailures = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Name each tagged error an Effect, Stream or Layer fails with instead of the global Error.",
-    },
     messages: {
       plainError: "{{name}} fails with Error",
     },

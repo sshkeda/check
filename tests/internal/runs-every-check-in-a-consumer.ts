@@ -55,6 +55,46 @@ const consumerCheckout = (directory: string, packageName: string) =>
 const runCheckIn = (directory: string, taskStateDirectory: string) =>
   runTaskFile("bun run.ts", { cwd: directory, taskStateDirectory });
 
+const IMPORTS_OF_ONE_MODULE = 1000;
+
+const MOST_SPANS_THE_IMPORTS_ADD = 100;
+
+const spansInTheTraceOfACheckWith = (imports: number) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const taskStateDirectory = yield* fileSystem.makeTempDirectoryScoped();
+    yield* consumerCheckout(directory, path.basename(directory));
+    const names = Array.from({ length: imports }, (_name, index) => `VALUE_${index}`);
+    yield* writtenFiles(directory, {
+      "src/internal/value.ts": 'export const VALUE = "valid";\n',
+      "src/index.ts": [
+        ...names.map((name) => `import { VALUE as ${name} } from "./internal/value.ts";`),
+        `export const VALUES = [${names.join(", ")}];`,
+        "",
+      ].join("\n"),
+    });
+    const output = yield* runCheckIn(directory, taskStateDirectory).pipe(
+      Effect.catchTag("CommandFailed", (failure) => Effect.succeed(failure.standardOutput)),
+    );
+    const trace = yield* fileSystem.readFileString(
+      /wrote the trace to (?<file>\S+)/u.exec(output)?.groups?.["file"] ?? "",
+    );
+    return trace.split('"spanId":').length;
+  });
+
+export const tracesNoSpanPerImport = Task.make(
+  "a check run's trace holds about as many spans when a file imports a module 1,000 times as when it imports it once",
+  Effect.scoped(
+    Effect.gen(function* () {
+      const spansWithOneImport = yield* spansInTheTraceOfACheckWith(1);
+      const spansWithManyImports = yield* spansInTheTraceOfACheckWith(IMPORTS_OF_ONE_MODULE);
+      expect(spansWithManyImports - spansWithOneImport).toBeLessThan(MOST_SPANS_THE_IMPORTS_ADD);
+    }),
+  ),
+);
+
 export const ignoredProjectConfigsAreRead = Task.make(
   "every source check can read valid gitignored root and referenced tsconfig files",
   Effect.gen(function* () {

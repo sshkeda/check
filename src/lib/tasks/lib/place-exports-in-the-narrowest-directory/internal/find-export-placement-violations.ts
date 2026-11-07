@@ -11,15 +11,23 @@ import type {
   Statement,
 } from "oxc-parser";
 
-import { isWithin } from "../../../../../shared/match-file-names-and-path-prefixes.ts";
-import { SCRIPTS_DIRECTORY } from "../../../../../shared/test-home-directories.ts";
 import {
+  fileNameOf,
+  isEntryFileName,
+  isWithin,
+} from "../../../../../shared/match-file-names-and-path-prefixes.ts";
+import {
+  SCRIPTS_DIRECTORY,
+  SOURCE_DIRECTORY,
+} from "../../../../../shared/test-home-directories.ts";
+import {
+  directoryOf,
   isTopLevelScript,
   isDeclarationFile,
   isTestEntryFile,
   isUnderTestDirectory,
 } from "../../../shared/classify-files-by-role.ts";
-import { lineNumberAt } from "../../../shared/count-the-line-of-an-offset.ts";
+import { lineNumbersIn } from "../../../shared/count-the-line-of-an-offset.ts";
 import { ownedFilesAmong } from "../../../shared/list-owned-files.ts";
 import { projectSymbolsIn } from "../../../shared/query-the-typescript-project.ts";
 import type { openTypeScriptProjects } from "../../../shared/query-the-typescript-project.ts";
@@ -27,6 +35,7 @@ import { absolutePathOf } from "../../../shared/resolve-absolute-paths.ts";
 import {
   ExportPlacementViolations,
   PackageEntryWithoutSource,
+  ScriptOnlyExport,
   TestNotRun,
   TestOnlyExport,
   UnusedExport,
@@ -75,8 +84,18 @@ const parsedFile = (
 ) =>
   Effect.gen(function* () {
     const body = parsed.program.body;
-    const statementAt = (offset: number) =>
-      body.findIndex((statement) => statement.start <= offset && offset < statement.end);
+    const statementAt = (offset: number, low = 0, high = body.length): number => {
+      if (low >= high) {
+        return -1;
+      }
+      const middle = (low + high) >>> 1;
+      if (offset < (body[middle]?.start ?? offset)) {
+        return statementAt(offset, low, middle);
+      }
+      return offset < (body[middle]?.end ?? offset)
+        ? middle
+        : statementAt(offset, middle + 1, high);
+    };
     const statementOfLocal = new Map(
       [...body.entries()].flatMap(([index, statement]) =>
         declaredNamesOf(statement).map((name) => [name, index] as const),
@@ -88,6 +107,7 @@ const parsedFile = (
       entry.localName.name === null
         ? statementAt(entry.start)
         : statementOfLocal.get(entry.localName.name);
+    const lineAt = lineNumbersIn(text);
     const exports = new Map<
       string,
       { statement: ReturnType<typeof exportedStatement>; line: number }
@@ -103,7 +123,7 @@ const parsedFile = (
           continue;
         }
         const statement = exportedStatement(entry);
-        exports.set(exportedName, { statement, line: lineNumberAt(text, entry.start) });
+        exports.set(exportedName, { statement, line: lineAt(entry.start) });
         if (localName !== null) {
           localNameOfExport.set(exportedName, localName);
         }
@@ -275,12 +295,13 @@ const parsedFile = (
       }
     } else {
       const exportedLocals = new Set(localNameOfExport.values());
+      const candidatesNamed = Map.groupBy(candidates, (identifier) => identifier.name);
       const declarationOf = new Map(
         [...exportedLocals].flatMap((name) => {
           const declaring = statementOfLocal.get(name);
-          const declared = candidates.find(
-            (identifier) => identifier.name === name && statementAt(identifier.start) === declaring,
-          );
+          const declared = candidatesNamed
+            .get(name)
+            ?.find((identifier) => statementAt(identifier.start) === declaring);
           return declared === undefined ? [] : [[name, declared.start] as const];
         }),
       );
@@ -316,6 +337,17 @@ const parsedFile = (
       exportsOfStatement,
     };
   });
+
+const violationOfAnExportUsedOnlyBy = (
+  users: readonly string[],
+  exported: { readonly location: string; readonly exportName: string },
+) =>
+  users.some((user) => isWithin(user, SCRIPTS_DIRECTORY))
+    ? new ScriptOnlyExport({
+        ...exported,
+        isUsedByTests: users.some((user) => isUnderTestDirectory(user)),
+      })
+    : new TestOnlyExport(exported);
 
 export const findExportPlacementViolations = <Failure, Requirements>(
   projectFile: string,
@@ -363,6 +395,18 @@ export const findExportPlacementViolations = <Failure, Requirements>(
       (use) => use.kind !== "type",
     );
 
+    const builtByScripts = new Set(
+      [...files].flatMap(([file, parsed]) =>
+        isWithin(file, SCRIPTS_DIRECTORY)
+          ? parsed.uses.filter((use) => use.kind === "build").map((use) => use.file)
+          : [],
+      ),
+    );
+    const isServedOnlyToScripts = (file: string) =>
+      isWithin(file, SOURCE_DIRECTORY) &&
+      !builtByScripts.has(file) &&
+      !(directoryOf(file) === SOURCE_DIRECTORY && isEntryFileName(fileNameOf(file)));
+
     const users = new Map<string, Map<string, Set<string>>>();
     const usersOf = (file: string, name: string) => {
       const byName = users.get(file) ?? new Map<string, Set<string>>();
@@ -371,8 +415,8 @@ export const findExportPlacementViolations = <Failure, Requirements>(
       byName.set(name, found);
       return found;
     };
-    const exportedNamesOf = (file: string): ReadonlySet<string> =>
-      new Set(files.get(file)?.exports.keys());
+    const isExportedFrom = (file: string, name: string) =>
+      files.get(file)?.exports.has(name) ?? false;
     const everyExportUsers = new Map<string, Set<string>>();
     const everyExportUsersOf = (file: string) => {
       const found = everyExportUsers.get(file) ?? new Set<string>();
@@ -398,7 +442,7 @@ export const findExportPlacementViolations = <Failure, Requirements>(
     }
     const allUsersOf = (file: string, name: string): ReadonlySet<string> => {
       const named = users.get(file)?.get(name);
-      const everyUser = exportedNamesOf(file).has(name) ? everyExportUsers.get(file) : undefined;
+      const everyUser = isExportedFrom(file, name) ? everyExportUsers.get(file) : undefined;
       if (everyUser === undefined) {
         return named ?? new Set();
       }
@@ -407,15 +451,21 @@ export const findExportPlacementViolations = <Failure, Requirements>(
 
     for (const [file, parsed] of files) {
       const inherits: { readonly from: string; readonly to: string }[] = [];
+      const statementsReferencing = new Map<string, number[]>();
+      for (const [index, references] of parsed.referencesByStatement.entries()) {
+        for (const reference of references) {
+          const statements = statementsReferencing.get(reference) ?? [];
+          statements.push(index);
+          statementsReferencing.set(reference, statements);
+        }
+      }
       for (const [name, exported] of parsed.exports) {
         const localName = parsed.localNameOfExport.get(name);
         if (localName === undefined) {
           continue;
         }
-        for (const [index, references] of parsed.referencesByStatement.entries()) {
-          const isReferencedFromAnotherStatement =
-            exported.statement !== index && references.has(localName);
-          if (!isReferencedFromAnotherStatement) {
+        for (const index of statementsReferencing.get(localName) ?? []) {
+          if (exported.statement === index) {
             continue;
           }
           const exportingNames = (parsed.exportsOfStatement.get(index) ?? []).filter(
@@ -445,7 +495,7 @@ export const findExportPlacementViolations = <Failure, Requirements>(
       inheritUsersUntilStable();
     }
 
-    const exportViolations: (TestOnlyExport | UnusedExport)[] = [];
+    const exportViolations: (ScriptOnlyExport | TestOnlyExport | UnusedExport)[] = [];
     for (const [file, parsed] of files) {
       const isExemptFromExportChecks =
         !owned.has(file) ||
@@ -464,11 +514,15 @@ export const findExportPlacementViolations = <Failure, Requirements>(
           .toSorted();
         const elsewhere = everyUser.filter((user) => user !== file);
         const usedInOwnFile = everyUser.includes(file);
-        const isUnusedOrUsedOnlyByTests =
-          elsewhere.every((user) => isUnderTestDirectory(user)) &&
+        const isUnusedOrUsedOnlyByTestsAndScripts =
+          elsewhere.every(
+            (user) =>
+              isUnderTestDirectory(user) ||
+              (isWithin(user, SCRIPTS_DIRECTORY) && isServedOnlyToScripts(file)),
+          ) &&
           !(usedInOwnFile && elsewhere.length > 0) &&
           (elsewhere.length === 0 || !isWithin(file, SCRIPTS_DIRECTORY));
-        if (isUnusedOrUsedOnlyByTests) {
+        if (isUnusedOrUsedOnlyByTestsAndScripts) {
           exportViolations.push(
             elsewhere.length === 0
               ? new UnusedExport({
@@ -476,7 +530,7 @@ export const findExportPlacementViolations = <Failure, Requirements>(
                   exportName: name,
                   ...(unreachableUser === undefined ? {} : { unreachableUser }),
                 })
-              : new TestOnlyExport({ location, exportName: name }),
+              : violationOfAnExportUsedOnlyBy(elsewhere, { location, exportName: name }),
           );
         }
       }

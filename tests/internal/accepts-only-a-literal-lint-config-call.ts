@@ -14,6 +14,7 @@ import {
   parsedConfigFile,
 } from "../../src/lib/tasks/shared/parse-config-files-that-import-from-check.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -129,7 +130,7 @@ export const lintConfigImportedFromOutsideCheckIsRefused = Task.make(
     ).toEqual([
       "oxlint.config.ts:1: error ConfigFileImportsFromOutsideCheck: imports lintConfig from @sshkeda/check, which resolves to loose-lint-config.ts instead of a file of @sshkeda/check",
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const LOOSE_LINT_CONFIG =
@@ -153,7 +154,7 @@ export const lintConfigFromAnImportsEntryWithATypesConditionIsRefused = Task.mak
           'import { lintConfig } from "#check";\n\nexport default lintConfig({});\n',
       }),
     ).toEqual([importsFromOutsideCheck("#check", "loose-lint-config.ts")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const lintConfigFromANestedPackageNamedCheckIsRefused = Task.make(
@@ -167,15 +168,15 @@ export const lintConfigFromANestedPackageNamedCheckIsRefused = Task.make(
           'import { lintConfig } from "./src/vendored/index.ts";\n\nexport default lintConfig({});\n',
       }),
     ).toEqual([importsFromOutsideCheck("./src/vendored/index.ts", "src/vendored/index.ts")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const literalLintConfigCallLoadsItsGrants = Task.make(
-  "a literal lintConfig() call with quoted and bare keys and a reasoned permission loads every grant and boundary",
+  "a literal lintConfig() call with quoted and bare keys loads every grant and boundary",
   Effect.gen(function* () {
     expect(
       yield* loadedFrom(
-        'lintConfig({ "main.ts": { allow: ["usesSqlDatabases"], services: ["Store"] }, src: { cannotImport: ["main.ts"] }, "port.ts": { allow: ["usesSqlDatabases", { trustsUnverifiedTypes: "ports cross threads as JSON" }] } })',
+        'lintConfig({ "main.ts": { allow: ["usesSqlDatabases"], services: ["Store"] }, src: { cannotImport: ["main.ts"] }, "port.ts": { allow: ["usesSqlDatabases", "trustsUnverifiedTypes"] } })',
       ),
     ).toEqual({
       violations: [],
@@ -190,25 +191,27 @@ export const literalLintConfigCallLoadsItsGrants = Task.make(
         },
       ],
     });
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const repeated = (key: string) =>
   `oxlint.config.ts:2: error LintConfigKeyRepeated: names ${key} more than once in one object passed to lintConfig()`;
 
 export const repeatedKeysInLintConfigAreRefused = Task.make(
-  "a key named twice in one object passed to lintConfig(), a reason object, a grant or the path map, is refused instead of the last one winning",
+  "a key named twice in one object passed to lintConfig(), a grant or the path map, is refused at the line that names it again instead of the last one winning",
   Effect.sync(() => {
-    expect(
-      literalFormViolations(
-        `${IMPORT}export default lintConfig({ "a.ts": { allow: [{ trustsUnverifiedTypes: "", trustsUnverifiedTypes: "valid" }] } });\n`,
-      ),
-    ).toEqual([repeated("trustsUnverifiedTypes")]);
     expect(
       literalFormViolations(
         `${IMPORT}export default lintConfig({ "a.ts": { allow: ["usesSqlDatabases"], allow: [] }, "a.ts": {} });\n`,
       ),
     ).toEqual([repeated("a.ts"), repeated("allow")]);
+    expect(
+      literalFormViolations(
+        `${IMPORT}\nexport default lintConfig({\n  "a.ts": { allow: ["usesSqlDatabases"] },\n  "b.ts": { allow: ["usesSqlDatabases"] },\n  "a.ts": { allow: ["trustsUnverifiedTypes"] },\n});\n`,
+      ),
+    ).toEqual([
+      "oxlint.config.ts:6: error LintConfigKeyRepeated: names a.ts more than once in one object passed to lintConfig()",
+    ]);
   }),
 );
 
@@ -298,7 +301,7 @@ export const refusedGrantsAreReportedFromTheParsedLiteral = Task.make(
     expect(() => lintConfig({ "app/[a-z]*.tsx": { allow: ["writesToTheTerminal"] } })).toThrow(
       /MalformedGrant: "app\/\[a-z\]\*\.tsx": is a glob/u,
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const configNeverLintsNodeModules = Task.make(

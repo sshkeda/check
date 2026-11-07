@@ -21,6 +21,7 @@ import {
   nodePosition,
   requiredTypeScriptRequest,
   resolvedSymbols,
+  typeMembers,
   typeScriptRequest,
 } from "../../../shared/query-the-typescript-project.ts";
 import type { openTypeScriptProjects } from "../../../shared/query-the-typescript-project.ts";
@@ -34,11 +35,6 @@ const LAYER_ASSIGNMENTS = new Set([
   SyntaxKind.BarBarEqualsToken,
   SyntaxKind.AmpersandAmpersandEqualsToken,
 ]);
-
-const typeMembers = (type: Type) =>
-  type.isUnionType()
-    ? typeScriptRequest("read union members", () => type.getTypes())
-    : Effect.succeed([type]);
 
 const hasTypeProperty = (checker: Checker, type: Type, name: string) =>
   typeScriptRequest("read a service layer property", () =>

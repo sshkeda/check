@@ -1,11 +1,7 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
-import {
-  effectOperation,
-  enclosingFunction,
-  resolvedVariable,
-} from "./resolve-what-an-expression-imports.ts";
+import { effectOperation, resolvedVariable } from "./resolve-what-an-expression-imports.ts";
 
 const innermostMemberObject = (node: ESTree.Node): ESTree.Node =>
   node.type === "MemberExpression" ? innermostMemberObject(node.object) : node;
@@ -13,7 +9,6 @@ const innermostMemberObject = (node: ESTree.Node): ESTree.Node =>
 export const noErrorInstanceof = defineRule({
   meta: {
     type: "problem",
-    docs: { description: "Use tagged failures in Effect recovery callbacks." },
     messages: {
       tagged: "instanceof tests a value reached from the parameter of Effect.{{operation}}",
     },
@@ -24,8 +19,21 @@ export const noErrorInstanceof = defineRule({
         if (node.operator !== "instanceof") {
           return;
         }
-        const callback = enclosingFunction(node);
-        if (!callback) {
+        const subject = innermostMemberObject(node.left);
+        if (subject.type !== "Identifier") {
+          return;
+        }
+        const definition = resolvedVariable(subject, context.sourceCode)?.defs[0];
+        if (definition?.type !== "Parameter") {
+          return;
+        }
+        const callback = definition.node;
+        const isNamedParameter =
+          (callback.type === "ArrowFunctionExpression" ||
+            callback.type === "FunctionExpression" ||
+            callback.type === "FunctionDeclaration") &&
+          callback.params.some((parameter) => parameter === definition.name);
+        if (!isNamedParameter) {
           return;
         }
         const call = callback.parent;
@@ -37,24 +45,7 @@ export const noErrorInstanceof = defineRule({
           return;
         }
         const isRecoveryOperation = operation.startsWith("catch") || operation === "mapError";
-        if (!isRecoveryOperation) {
-          return;
-        }
-        const subject = innermostMemberObject(node.left);
-        if (subject.type !== "Identifier") {
-          return;
-        }
-        const subjectName = subject.name;
-        const parameter = callback.params.find(
-          (candidate) => candidate.type === "Identifier" && candidate.name === subjectName,
-        );
-        if (parameter?.type !== "Identifier") {
-          return;
-        }
-        const parameterVariable = context.sourceCode
-          .getDeclaredVariables(callback)
-          .find((variable) => variable.identifiers.includes(parameter));
-        if (resolvedVariable(subject, context.sourceCode) === parameterVariable) {
+        if (isRecoveryOperation) {
           context.report({ node, messageId: "tagged", data: { operation } });
         }
       },

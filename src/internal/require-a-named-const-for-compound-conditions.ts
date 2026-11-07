@@ -11,10 +11,6 @@ const unwrappedNegation = (node: ESTree.Expression): ESTree.Expression => {
 export const noUnnamedCompoundConditions = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Name an if or ternary condition that joins checks with && or || by declaring it as a const first.",
-    },
     messages: {
       unnamed: "{{test}} condition joins checks with {{operator}} without a name",
     },

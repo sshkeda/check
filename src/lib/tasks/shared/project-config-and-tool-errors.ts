@@ -282,10 +282,10 @@ export class FormatInputsRefused extends Schema.TaggedError<FormatInputsRefused>
 
 export class SourceFileUnparsable extends Schema.TaggedError<SourceFileUnparsable>()(
   "SourceFileUnparsable",
-  { file: Schema.String, reason: Schema.String },
+  { file: Schema.String, line: Schema.optionalKey(Schema.Int), reason: Schema.String },
 ) {
   public get location() {
-    return this.file;
+    return this.line === undefined ? this.file : `${this.file}:${this.line}`;
   }
   public override get message() {
     return `does not parse: ${this.reason}`;
@@ -342,6 +342,15 @@ export class ToolNotStarted extends Schema.TaggedError<ToolNotStarted>()("ToolNo
 }) {
   public override get message() {
     return `${this.command} did not start: ${this.reason}`;
+  }
+}
+
+export class ToolNotStopped extends Schema.TaggedError<ToolNotStopped>()("ToolNotStopped", {
+  command: Schema.String,
+  reason: Schema.String,
+}) {
+  public override get message() {
+    return `${this.command} could not be stopped: ${this.reason}`;
   }
 }
 
@@ -416,6 +425,13 @@ export const REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT = {
   noCheck: false,
 } as const;
 
+export const BUILD_OUTPUT_OPTIONS = [
+  "outDir",
+  "declaration",
+  "declarationDir",
+  "emitDeclarationOnly",
+] as const;
+
 export const OPTIONS_TSC_LEAVES_UNSET: ReadonlySet<string> = new Set([
   "allowUnreachableCode",
   "allowUnusedLabels",
@@ -428,6 +444,8 @@ export class LooseCompilerOption extends Schema.TaggedError<LooseCompilerOption>
     option: Schema.Literals([
       ...STRICT_OPTIONS,
       ...Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT),
+      "noEmit",
+      "emitDeclarationOnly",
     ]),
     resolvedValue: Schema.optionalKey(Schema.Boolean),
   },
@@ -442,6 +460,18 @@ export class LooseCompilerOption extends Schema.TaggedError<LooseCompilerOption>
   }
 }
 
+export class BuildOutputCompilerOption extends Schema.TaggedError<BuildOutputCompilerOption>()(
+  "BuildOutputCompilerOption",
+  { projectFile: Schema.String, option: Schema.Literals(BUILD_OUTPUT_OPTIONS) },
+) {
+  public get location() {
+    return this.projectFile;
+  }
+  public override get message() {
+    return `${this.option} is set, but the package ships its TypeScript source and builds nothing`;
+  }
+}
+
 export class ProjectReferencesUndecodable extends Schema.TaggedError<ProjectReferencesUndecodable>()(
   "ProjectReferencesUndecodable",
   { projectFile: Schema.String, reason: Schema.String },
@@ -451,6 +481,18 @@ export class ProjectReferencesUndecodable extends Schema.TaggedError<ProjectRefe
   }
   public override get message() {
     return `references do not decode: ${this.reason}`;
+  }
+}
+
+export class AbsoluteProjectReference extends Schema.TaggedError<AbsoluteProjectReference>()(
+  "AbsoluteProjectReference",
+  { projectFile: Schema.String, reference: Schema.String },
+) {
+  public get location() {
+    return this.projectFile;
+  }
+  public override get message() {
+    return `references ${this.reference} by an absolute path`;
   }
 }
 
@@ -474,7 +516,9 @@ export class TypeScriptConfigViolations extends Schema.TaggedError<TypeScriptCon
         TypeScriptProjectFileMissing,
         TypeScriptConfigUnparsable,
         ProjectReferencesUndecodable,
+        AbsoluteProjectReference,
         LooseCompilerOption,
+        BuildOutputCompilerOption,
       ]),
     ),
   },

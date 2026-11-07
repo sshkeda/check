@@ -5,6 +5,7 @@ import { Effect, FileSystem, Path, Array as Arrays, flow } from "effect";
 
 import { findLayerProvidesOutsideProgramStarts } from "../../src/lib/tasks/lib/confine-layer-provides-to-program-starts/internal/find-layer-provides-outside-program-starts.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { writtenFiles } from "../shared/checked-project.ts";
@@ -135,7 +136,7 @@ run(work.pipe(Effect.provide(clockServices)));
         ["node_modules", "@sshkeda", "task"],
       ),
     ).toEqual([`src/main.ts:4:15: ${LAYER_OUTSIDE_START}`]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const programStarts = Task.make(
@@ -163,7 +164,7 @@ Effect.runPromise((wrapped satisfies typeof work));
 `,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const relaidEffectStarts = Task.make(
@@ -195,7 +196,7 @@ export const built = Effect.gen(function* () {
       `src/main.ts:10:33: ${LAYER_OUTSIDE_START}`,
       `src/main.ts:12:17: ${BUILT_PROVIDED_OUTSIDE_START}`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const providesOutsideStarts = Task.make(
@@ -224,7 +225,27 @@ export const later = () => Effect.runPromise(work.pipe(Effect.provide(clockServi
       `src/helpers.ts:11:46: ${LAYER_OUTSIDE_START}`,
       `src/helpers.ts:12:109: ${LAYER_OUTSIDE_START}`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const streamProvidesOutsideStarts = Task.make(
+  "layers provided to a Stream outside the call that starts the program are reported like Effect.provide, and one provided inside a runner's argument is not",
+  Effect.gen(function* () {
+    expect(
+      yield* violations({
+        "src/streams.ts": `import { Effect, Stream } from "effect";
+import { provide as supply } from "effect/Stream";
+import { clockServices, work } from "./services.ts";
+export const now = Stream.fromEffect(work).pipe(Stream.provide(clockServices));
+export const supplied = Stream.fromEffect(work).pipe(supply(clockServices));
+export const started = () => Effect.runPromise(Stream.runCollect(Stream.fromEffect(work).pipe(Stream.provide(clockServices))));
+`,
+      }),
+    ).toEqual([
+      "src/streams.ts:4:49: error LayerProvidedOutsideProgramStart: Stream.provide with a layer outside the call that starts the program",
+      "src/streams.ts:5:54: error LayerProvidedOutsideProgramStart: Stream.provide with a layer outside the call that starts the program",
+    ]);
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const layersFromOtherFiles = Task.make(
@@ -242,7 +263,7 @@ export const made = Effect.provide(work, clockServicesFor(3));
       `src/imported.ts:3:32: ${LAYER_OUTSIDE_START}`,
       `src/imported.ts:4:21: ${LAYER_OUTSIDE_START}`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const handBuiltContexts = Task.make(
@@ -304,7 +325,7 @@ export const fromSecond = Effect.gen(function* () {
       `src/cycle.ts:11:17: ${BUILT_CONTEXT_OUTSIDE_START}`,
       `src/cycle.ts:14:17: ${BUILT_CONTEXT_OUTSIDE_START}`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const contextsAndSingleServices = Task.make(
@@ -329,7 +350,7 @@ export const recovery = Layer.build(Layer.effectContext(Effect.fail(plain))).pip
 `,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const TASK_SCRIPT = `import { Task } from "@sshkeda/task";
@@ -351,7 +372,29 @@ export const taskRuns = Task.make(
         `scripts/main.ts:9:33: ${LAYER_OUTSIDE_START}`,
       ]);
     }
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const taskBodiesStartPrograms = Task.make(
+  "a layer provided in the body of a task made in src, which a script directly in scripts/ runs with Task.main, passes, since Task runs each task body as its own program, and a helper beside the task is still reported",
+  Effect.gen(function* () {
+    expect(
+      yield* violations({
+        "src/tasks.ts": `import { Task } from "@sshkeda/task";
+import { Effect } from "effect";
+import { clockServices, work } from "./services.ts";
+export const measure = Task.make("measure", work.pipe(Effect.provide(clockServices)));
+export const helper = work.pipe(Effect.provide(clockServices));
+`,
+        "scripts/measure.ts": `import { Task } from "@sshkeda/task";
+import { measure } from "../src/tasks.ts";
+if (import.meta.main) {
+  Task.main(measure);
+}
+`,
+      }),
+    ).toEqual([`src/tasks.ts:5:33: ${LAYER_OUTSIDE_START}`]);
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const testFilesStartPrograms = Task.make(
@@ -373,7 +416,7 @@ export const measured = work.pipe(Effect.provide(clockServices));
 `,
       }),
     ).toEqual([`scripts/measure.ts:3:35: ${LAYER_OUTSIDE_START}`]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const taskNamespaceRunsStartPrograms = Task.make(
@@ -418,5 +461,5 @@ export const helper = work.pipe(Effect.provide(clockServices));
         }),
       ).toEqual([`scripts/main.ts:8:33: ${LAYER_OUTSIDE_START}`]);
     }
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

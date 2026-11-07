@@ -1,4 +1,13 @@
-import { Array as Arrays, Effect, FileSystem, Path, Predicate, Schema } from "effect";
+import {
+  Array as Arrays,
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Predicate,
+  Schema,
+} from "effect";
 import type {
   CallExpression,
   Node,
@@ -25,7 +34,7 @@ import {
   isVariableDeclaration,
 } from "typescript/unstable/ast/is";
 import { API, SymbolFlags } from "typescript/unstable/async";
-import type { Checker, Program, Symbol as TypeScriptSymbol } from "typescript/unstable/async";
+import type { Checker, Program, Symbol as TypeScriptSymbol, Type } from "typescript/unstable/async";
 
 import { isDeclarationFile, isScript, packagePathOf } from "./classify-files-by-role.ts";
 import { ownedFilesAmong } from "./list-owned-files.ts";
@@ -35,6 +44,7 @@ import {
   nestedPackageDirectoriesAmong,
 } from "./list-package-files.ts";
 import {
+  AbsoluteProjectReference,
   ProgramFilesOutsideProject,
   ProjectReferencesUndecodable,
   TypeScriptApiFailed,
@@ -86,6 +96,23 @@ export const typeScriptRequest = <Value>(operation: string, request: () => Promi
     try: request,
     catch: (cause) => new TypeScriptApiFailed({ operation, reason: String(cause) }),
   });
+
+export const typeMembers = (type: Type) =>
+  type.isUnionType()
+    ? typeScriptRequest("read union members", () => type.getTypes())
+    : Effect.succeed([type]);
+
+export const callsIn = (sourceFile: SourceFile) => {
+  const calls: CallExpression[] = [];
+  const visit = (node: Node) => {
+    if (isCallExpression(node)) {
+      calls.push(node);
+    }
+    node.forEachChild(visit);
+  };
+  sourceFile.forEachChild(visit);
+  return calls;
+};
 
 export const requiredTypeScriptRequest = <Value>(
   operation: string,
@@ -159,6 +186,12 @@ export const projectConfigFiles = (projectFile: string) =>
     const configFiles = [path.normalize(projectFile)];
     for (const configFile of configFiles) {
       for (const reference of yield* referencesOf(configFile)) {
+        if (path.isAbsolute(reference.path)) {
+          return yield* new AbsoluteProjectReference({
+            projectFile: configFile,
+            reference: reference.path,
+          });
+        }
         const referenced = path.join(path.dirname(configFile), reference.path);
         const referencedConfigFile = referenced.endsWith(".json")
           ? referenced
@@ -209,26 +242,6 @@ const parseCompilerOptionsAndInputs = (configFile: string) =>
     );
     return { effectiveOptions, compilesFiles };
   }).pipe(Effect.scoped);
-
-const COMPILER_OPTIONS_AND_INPUTS_BY_CONFIG_FILE = new Map<
-  string,
-  ReturnType<typeof parseCompilerOptionsAndInputs>
->();
-
-const compilerOptionsAndInputs = (configFile: string) =>
-  Effect.gen(function* () {
-    const cachedParse =
-      COMPILER_OPTIONS_AND_INPUTS_BY_CONFIG_FILE.get(configFile) ??
-      (yield* Effect.cached(parseCompilerOptionsAndInputs(configFile)));
-    COMPILER_OPTIONS_AND_INPUTS_BY_CONFIG_FILE.set(configFile, cachedParse);
-    return yield* cachedParse;
-  });
-
-export const effectiveCompilerOptions = (configFile: string) =>
-  compilerOptionsAndInputs(configFile).pipe(Effect.map(({ effectiveOptions }) => effectiveOptions));
-
-export const compilesFiles = (configFile: string) =>
-  compilerOptionsAndInputs(configFile).pipe(Effect.map((parsed) => parsed.compilesFiles));
 
 export const includedFiles = (projectFile: string) =>
   Effect.gen(function* () {
@@ -360,16 +373,61 @@ const listProgramFiles = (projectFile: string) =>
     return { ...compiledFiles, packageSourceFilesOfEachProject };
   }).pipe(Effect.scoped);
 
-const PROGRAM_FILES_BY_PROJECT = new Map<string, ReturnType<typeof listProgramFiles>>();
+const makeTypeScriptProjectListings = Effect.gen(function* () {
+  const services = yield* Effect.context<
+    | Effect.Services<ReturnType<typeof listProgramFiles>>
+    | Effect.Services<ReturnType<typeof parseCompilerOptionsAndInputs>>
+  >();
+  const parsedWithTheRunServices = (configFile: string) =>
+    parseCompilerOptionsAndInputs(configFile).pipe(Effect.provide(services));
+  const listedWithTheRunServices = (projectFile: string) =>
+    listProgramFiles(projectFile).pipe(Effect.provide(services));
+  const compilerOptionsAndInputsByConfigFile = new Map<
+    string,
+    ReturnType<typeof parsedWithTheRunServices>
+  >();
+  const programFilesByProject = new Map<string, ReturnType<typeof listedWithTheRunServices>>();
+  return {
+    compilerOptionsAndInputs: (configFile: string) =>
+      Effect.gen(function* () {
+        const cachedParse =
+          compilerOptionsAndInputsByConfigFile.get(configFile) ??
+          (yield* Effect.cached(parsedWithTheRunServices(configFile)));
+        compilerOptionsAndInputsByConfigFile.set(configFile, cachedParse);
+        return yield* cachedParse;
+      }),
+    programFileListing: (projectFile: string) =>
+      Effect.gen(function* () {
+        const cachedListing =
+          programFilesByProject.get(projectFile) ??
+          (yield* Effect.cached(listedWithTheRunServices(projectFile)));
+        programFilesByProject.set(projectFile, cachedListing);
+        return yield* cachedListing;
+      }),
+  };
+});
+
+class TypeScriptProjectListings extends Context.Service<
+  TypeScriptProjectListings,
+  Effect.Success<typeof makeTypeScriptProjectListings>
+>()("@sshkeda/check/TypeScriptProjectListings") {}
+
+export const TypeScriptProjectListingsLive = Layer.effect(
+  TypeScriptProjectListings,
+  makeTypeScriptProjectListings,
+);
+
+const compilerOptionsAndInputs = (configFile: string) =>
+  TypeScriptProjectListings.use((listings) => listings.compilerOptionsAndInputs(configFile));
+
+export const effectiveCompilerOptions = (configFile: string) =>
+  compilerOptionsAndInputs(configFile).pipe(Effect.map(({ effectiveOptions }) => effectiveOptions));
+
+export const compilesFiles = (configFile: string) =>
+  compilerOptionsAndInputs(configFile).pipe(Effect.map((parsed) => parsed.compilesFiles));
 
 const cachedProgramFileListing = (projectFile: string) =>
-  Effect.gen(function* () {
-    const cachedListing =
-      PROGRAM_FILES_BY_PROJECT.get(projectFile) ??
-      (yield* Effect.cached(listProgramFiles(projectFile)));
-    PROGRAM_FILES_BY_PROJECT.set(projectFile, cachedListing);
-    return yield* cachedListing;
-  });
+  TypeScriptProjectListings.use((listings) => listings.programFileListing(projectFile));
 
 export const programFiles = (projectFile: string) =>
   cachedProgramFileListing(projectFile).pipe(Effect.map(({ packageFiles }) => packageFiles));
@@ -572,7 +630,7 @@ export const packageCalleeOf = (
 
 const isAnyPackageFile = () => true;
 
-export const packageCalleesIn = (
+const listPackageCalleesIn = (
   checker: Checker,
   projectDirectory: string,
   sourceFile: SourceFile,
@@ -581,20 +639,27 @@ export const packageCalleesIn = (
     packageCalleeOf(checker, projectDirectory, call, isAnyPackageFile).pipe(
       Effect.map((callee) => (callee === undefined ? [] : [callee])),
     );
-  return Effect.gen(function* () {
-    const calls: CallExpression[] = [];
-    const visit = (node: Node) => {
-      if (isCallExpression(node)) {
-        calls.push(node);
-      }
-      node.forEachChild(visit);
-    };
-    sourceFile.forEachChild(visit);
-    return (yield* Effect.forEach(calls, calleeOf, {
+  return Effect.suspend(() =>
+    Effect.forEach(callsIn(sourceFile), calleeOf, {
       concurrency: CONCURRENT_TYPESCRIPT_REQUESTS,
-    })).flat();
-  });
+    }),
+  ).pipe(Effect.map((callees) => callees.flat()));
 };
+
+const PACKAGE_CALLEES_BY_FILE = new WeakMap<SourceFile, ReturnType<typeof listPackageCalleesIn>>();
+
+export const packageCalleesIn = (
+  checker: Checker,
+  projectDirectory: string,
+  sourceFile: SourceFile,
+) =>
+  Effect.gen(function* () {
+    const cachedCallees =
+      PACKAGE_CALLEES_BY_FILE.get(sourceFile) ??
+      (yield* Effect.cached(listPackageCalleesIn(checker, projectDirectory, sourceFile)));
+    PACKAGE_CALLEES_BY_FILE.set(sourceFile, cachedCallees);
+    return yield* cachedCallees;
+  });
 
 export const openTypeScriptProjects = (
   projectFile: string,

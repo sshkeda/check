@@ -2,15 +2,10 @@ import { expect } from "bun:test";
 
 import { Task } from "@sshkeda/task";
 
-import { ruleTestWith } from "../shared/rule-test.ts";
+import { ruleTestWith, wordInName } from "../shared/rule-test.ts";
 
 const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
-});
-
-const named = (name: string, word: string) => ({
-  messageId: "name",
-  data: { name, word },
 });
 
 export const rejectsRetiredWordsInDeclaredNames = Task.make(
@@ -38,52 +33,52 @@ export const rejectsRetiredWordsInDeclaredNames = Task.make(
     invalid: [
       {
         code: "const fileFingerprints = [];",
-        errors: [named("fileFingerprints", "fingerprints")],
+        errors: [wordInName("fileFingerprints", "fingerprints")],
       },
-      { code: "const outputFolder = '.';", errors: [named("outputFolder", "folder")] },
+      { code: "const outputFolder = '.';", errors: [wordInName("outputFolder", "folder")] },
       {
         code: "const settings = {};",
-        errors: [named("settings", "settings")],
+        errors: [wordInName("settings", "settings")],
       },
       {
         code: "function check(findings: Array<string>) {}",
-        errors: [named("findings", "findings")],
+        errors: [wordInName("findings", "findings")],
       },
       {
         code: "class ProblemReport {}",
-        errors: [named("ProblemReport", "problem")],
+        errors: [wordInName("ProblemReport", "problem")],
       },
       {
         code: "interface Report { readonly findings: Array<string> }",
-        errors: [named("findings", "findings")],
+        errors: [wordInName("findings", "findings")],
       },
       {
         code: "const MAX_FINDINGS = 3;",
-        errors: [named("MAX_FINDINGS", "findings")],
+        errors: [wordInName("MAX_FINDINGS", "findings")],
       },
       {
         code: "const { settings: editorSettings } = editor;",
-        errors: [named("editorSettings", "settings")],
+        errors: [wordInName("editorSettings", "settings")],
       },
       {
         code: 'import { join as folderJoin } from "node:path";',
-        errors: [named("folderJoin", "folder")],
+        errors: [wordInName("folderJoin", "folder")],
       },
       {
         code: "export interface Editor { getSettings(): number } class Panel implements Editor { getSettings() { return 1; } }",
-        errors: [named("getSettings", "settings")],
+        errors: [wordInName("getSettings", "settings")],
       },
       {
         code: "interface Editor { readonly settings: object } class Panel implements Editor { settings = {}; folderName = ''; }",
-        errors: [named("settings", "settings"), named("folderName", "folder")],
+        errors: [wordInName("settings", "settings"), wordInName("folderName", "folder")],
       },
       {
         code: "class Panel { getSettings() { return 1; } }",
-        errors: [named("getSettings", "settings")],
+        errors: [wordInName("getSettings", "settings")],
       },
       {
         code: "type Settings = Record<string, string>;",
-        errors: [named("Settings", "settings")],
+        errors: [wordInName("Settings", "settings")],
       },
     ],
   }),

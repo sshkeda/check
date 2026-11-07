@@ -1,13 +1,14 @@
 import { expect } from "bun:test";
 
 import { Task } from "@sshkeda/task";
-import { Effect, Schema, Array as Arrays, flow } from "effect";
+import { Duration, Effect, Schema, Array as Arrays, flow } from "effect";
 
 import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-import-boundaries/internal/find-import-boundary-violations.ts";
 import { TestNotRun } from "../../src/lib/tasks/lib/place-exports-in-the-narrowest-directory/internal/export-placement-errors.ts";
 import { findExportPlacementViolations } from "../../src/lib/tasks/lib/place-exports-in-the-narrowest-directory/internal/find-export-placement-violations.ts";
 import { isSubdividedAmong } from "../../src/lib/tasks/lib/place-exports-in-the-narrowest-directory/internal/find-subdivided-directories.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
@@ -59,9 +60,16 @@ const deadUsed = (location: string, name: string, user: string) =>
 const testOnly = (location: string, name: string) =>
   `${location}: error TestOnlyExport: export ${name} is used only by tests`;
 
+const scriptOnly = (location: string, name: string, users: string) =>
+  `${location}: error ScriptOnlyExport: export ${name} is used only by ${users}`;
+
 const directoryOfPath = (path: string) => path.split("/").slice(0, -1).join("/");
 
 const UNCOUNTED_USERS = "outside tests and unreached code";
+
+const EXPORTS_IN_A_LARGE_FILE = 20_000;
+
+const MOST_MILLISECONDS_TO_PLACE_EXPORTS_OF_A_LARGE_FILE = 30_000;
 
 const besideSubdirectories = (path: string) =>
   `${path}: error FileBesideSubdirectories: sits directly in ${directoryOfPath(path)}/, which has subdirectories that hold code`;
@@ -92,7 +100,50 @@ export const scriptHelpersMayServeOnlyTests = Task.make(
       unused("scripts/shared/fixture.ts:2", "UNUSED"),
       testOnly("src/internal/only.ts:1", "SOURCE"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const sourceExportsOnlyScriptsUseAreReported = Task.make(
+  "an export in src/ that only scripts, or only tests and scripts, use is ScriptOnlyExport, while a script that uses what src/index.ts exports, as an app's entry point does, or builds a src/ file passes, and a src/ user still counts",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        "package.json": '{ "name": "placement", "type": "module" }\n',
+        "src/index.ts": 'export { app } from "./internal/app.ts";\n',
+        "src/internal/app.ts": [
+          'import { CONFIG } from "../lib/config/index.ts";',
+          "export const app = () => CONFIG;",
+          "",
+        ].join("\n"),
+        "src/lib/config/index.ts": "export const CONFIG = 1;\n",
+        "src/lib/deploy/index.ts":
+          "export const deploy = () => 1;\nexport const harness = () => 2;\n",
+        "src/lib/edge/index.ts": "export default { fetch: () => 1 };\n",
+        "scripts/main.ts": [
+          'import { app } from "../src/index.ts";',
+          'import { CONFIG } from "../src/lib/config/index.ts";',
+          "export const MAIN = [app, CONFIG];",
+          "",
+        ].join("\n"),
+        "scripts/internal/deploy-stage.ts":
+          'import { deploy, harness } from "../../src/lib/deploy/index.ts";\nexport const stage = [deploy, harness];\n',
+        "scripts/deploy.ts": [
+          'import { stage } from "./internal/deploy-stage.ts";',
+          'export const BUILT = Bun.build({ entrypoints: ["src/lib/edge/index.ts"], outdir: "dist" });',
+          "export const DEPLOY = stage;",
+          "",
+        ].join("\n"),
+        "tests/harness.ts":
+          'import { harness } from "../src/lib/deploy/index.ts";\nexport const test = harness;\n',
+        "scripts/ci.ts": 'import { test } from "../tests/harness.ts";\nexport const CI = test;\n',
+      }),
+    ).toEqual(
+      [
+        scriptOnly("src/lib/deploy/index.ts:1", "deploy", "scripts"),
+        scriptOnly("src/lib/deploy/index.ts:2", "harness", "tests and scripts"),
+      ].toSorted(),
+    );
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const unusedAndTestOnlyExportsAreReported = Task.make(
@@ -123,7 +174,33 @@ export const unusedAndTestOnlyExportsAreReported = Task.make(
         testOnly("src/shared/values.ts:3", "TESTED"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const exportsOfALargeFileArePlacedInLinearTime = Task.make(
+  "export placement reports each of 20,000 unused exports in one file, each with its line, in under 30 seconds",
+  Effect.gen(function* () {
+    const [elapsed, violations] = yield* Effect.timed(
+      placementViolationsIn({
+        "src/index.ts":
+          'import { VALUE_0 } from "./internal/table.ts";\nexport const MAIN = VALUE_0;\n',
+        "src/internal/table.ts": Array.from(
+          { length: EXPORTS_IN_A_LARGE_FILE },
+          (_value, index) => `export const VALUE_${index} = ${index};\n`,
+        ).join(""),
+      }),
+    );
+    expect(violations).toEqual(
+      Array.from({ length: EXPORTS_IN_A_LARGE_FILE }, (_value, index) =>
+        unused(`src/internal/table.ts:${index + 1}`, `VALUE_${index}`),
+      )
+        .slice(1)
+        .toSorted(),
+    );
+    expect(Duration.toMillis(elapsed)).toBeLessThan(
+      MOST_MILLISECONDS_TO_PLACE_EXPORTS_OF_A_LARGE_FILE,
+    );
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const sharedFilesUsedByOneChildModuleAreReported = Task.make(
@@ -181,7 +258,7 @@ export const sharedFilesUsedByOneChildModuleAreReported = Task.make(
         ].join("\n"),
       }),
     ).toEqual([sharedByOne("src/shared/moved.ts", "src", "src/tasks")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const sameFileUsersKeepExportsInPlace = Task.make(
@@ -219,7 +296,7 @@ export const sameFileUsersKeepExportsInPlace = Task.make(
         deadUsed("src/internal/schema.ts:1", "Shape", "src/server/server.ts"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const everyKindOfImportCountsAsUse = Task.make(
@@ -245,7 +322,7 @@ export const everyKindOfImportCountsAsUse = Task.make(
         "src/internal/worker.ts": "export const WORKER = 1;\n",
       }),
     ).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aQualifiedImportTypeUsesOnlyTheExportItNames = Task.make(
@@ -270,7 +347,7 @@ export const aQualifiedImportTypeUsesOnlyTheExportItNames = Task.make(
         unused("src/internal/nested.ts:4", "Outer"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aNewUrlUsesEveryExportAndAWorkerNone = Task.make(
@@ -287,7 +364,7 @@ export const aNewUrlUsesEveryExportAndAWorkerNone = Task.make(
         "src/internal/thread.ts": "export const THREAD_EXPORT = 1;\n",
       }),
     ).toEqual([unused("src/internal/thread.ts:1", "THREAD_EXPORT")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyRecognizedLoadsAreReached = Task.make(
@@ -336,7 +413,7 @@ export const onlyRecognizedLoadsAreReached = Task.make(
         unused("src/preload/test-setup.ts:1", "TEST_SETUP"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const shadowedNamesAreNotSameFileUses = Task.make(
@@ -366,7 +443,7 @@ export const shadowedNamesAreNotSameFileUses = Task.make(
         unused("src/internal/tools.ts:6", "Shape"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const jsxElementsAreSameFileUses = Task.make(
@@ -397,7 +474,7 @@ export const jsxElementsAreSameFileUses = Task.make(
       },
     );
     yield* findExportPlacementViolations(tsconfigFile, openTypeScriptProjects(tsconfigFile));
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyInternalSharedDirectoriesFold = Task.make(
@@ -414,24 +491,25 @@ export const onlyInternalSharedDirectoriesFold = Task.make(
           'import { UTIL } from "../util.ts";\nexport const FEATURE = UTIL;\n',
       }),
     ).toEqual([sharedByOne("src/shared/util.ts", "src")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
-export const packageEntriesMapThroughTheBuildConfig = Task.make(
-  "package.json entries that point at built output map back to source through a tsconfig's outDir and rootDir and are pinned, and an entry that maps to no source is PackageEntryWithoutSource",
+export const packageEntriesNameCompiledSourceFiles = Task.make(
+  "package.json entries that name TypeScript source files are pinned, a types entry counts as one, and an entry naming no compiled file, even beside a tsconfig whose outDir and rootDir would map it, is PackageEntryWithoutSource",
   Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
-          '{ "name": "placement", "type": "module", "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }, "./gone": "./dist/gone.js" } }\n',
+          '{ "name": "placement", "type": "module", "types": "./src/lib/types/index.ts", "exports": { ".": "./src/index.ts", "./gone": "./src/lib/gone/index.ts", "./built": "./dist/index.js" } }\n',
         "tsconfig.build.json":
           '{ "extends": "./tsconfig.json", "compilerOptions": { "rootDir": "src", "outDir": "dist" } }\n',
         "src/index.ts": "export const MAIN = 1;\n",
+        "src/lib/types/index.ts": "export const TYPES = 1;\n",
       }),
     ).toEqual([
-      "package.json: error PackageEntryWithoutSource: lists the entry ./dist/gone.js, which maps to no source file through any tsconfig outDir and rootDir",
+      "package.json: error PackageEntryWithoutSource: lists the entry ./src/lib/gone/index.ts, which names no file the TypeScript project compiles",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const resolverFailuresAreLeftToTheImportBoundaryCheck = Task.make(
@@ -442,17 +520,19 @@ export const resolverFailuresAreLeftToTheImportBoundaryCheck = Task.make(
         "src/index.ts": 'export const LOAD = () => import("");\n',
       }),
     ).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const unparsableFilesAreReported = Task.make(
-  "a source file that does not parse is SourceFileUnparsable instead of being skipped",
+  "a source file that does not parse is SourceFileUnparsable at the line of its first parse error instead of being skipped",
   Effect.gen(function* () {
     const failure = yield* placementViolationsIn({
-      "src/index.ts": "export const MAIN = ;\n",
+      "src/index.ts": 'export const GREETING = "hello";\n\nexport const FAREWELL = ;\n',
     }).pipe(failureAsValue);
-    expect(failure._tag).toBe("SourceFileUnparsable");
-  }).pipe(Effect.scoped),
+    expect(taggedViolations([failure])).toEqual([
+      "src/index.ts:3: error SourceFileUnparsable: does not parse: Unexpected token",
+    ]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const OUTSIDE_IMPORT_MAP =
@@ -494,7 +574,7 @@ export const unresolvableImportsLeaveNoUnusedExport = Task.make(
         'export const MAIN = new URL("#a", import.meta.url);\n',
       ),
     ).toEqual({ placement: "ModuleRequestUnresolvable", boundary: "no failure" });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesOutsideTheProgramAreChecked = Task.make(
@@ -527,7 +607,7 @@ export const filesOutsideTheProgramAreChecked = Task.make(
         unused("tools/generate.ts:2", "GENERATED"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const looseFilesUsedOnlyUnderASubmoduleAreOutsideTheLayout = Task.make(
@@ -559,7 +639,7 @@ export const looseFilesUsedOnlyUnderASubmoduleAreOutsideTheLayout = Task.make(
       outsideModuleLayout("src/helper.ts", "src"),
       outsideModuleLayout("src/step.ts", "src"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aSharedFileUsedOnlyByAWorkerFileInASubmoduleHasOneUser = Task.make(
@@ -582,7 +662,7 @@ export const aSharedFileUsedOnlyByAWorkerFileInASubmoduleHasOneUser = Task.make(
         sharedByOne("src/shared/helper.ts", "src", "src/routes"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyReachableUsersCount = Task.make(
@@ -608,7 +688,7 @@ export const onlyReachableUsersCount = Task.make(
         deadUsed("src/lazy/two.ts:1", "TWO", "src/lazy/one.ts"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const bunBuildEntrypointsUseTheirFiles = Task.make(
@@ -629,7 +709,7 @@ export const bunBuildEntrypointsUseTheirFiles = Task.make(
         "apps/edge/unbuilt.ts": "export const UNBUILT = 1;\n",
       }),
     ).toEqual([unused("apps/edge/unbuilt.ts:1", "UNBUILT")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const ownFileProductionUseIsProductionUse = Task.make(
@@ -649,7 +729,7 @@ export const ownFileProductionUseIsProductionUse = Task.make(
           'import { permits, tested } from "../src/internal/service.ts";\nexport const CHECKED = [permits, tested];\n',
       }),
     ).toEqual([testOnly("src/internal/service.ts:3", "tested")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const urlBuildEntriesAndConfigFilesAreExact = Task.make(
@@ -676,7 +756,7 @@ export const urlBuildEntriesAndConfigFilesAreExact = Task.make(
         unused("src/internal/run.ts:1", "RUN"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const shorthandAndRenamedBindingsResolveToTheirValues = Task.make(
@@ -704,7 +784,7 @@ export const shorthandAndRenamedBindingsResolveToTheirValues = Task.make(
         ].join("\n"),
       }),
     ).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const exportMapKeysMatchLikeNode = Task.make(
@@ -719,7 +799,7 @@ export const exportMapKeysMatchLikeNode = Task.make(
         "src/public/secret.ts": "export const SECRET = 1;\n",
       }),
     ).toEqual([unused("src/public/secret.ts:1", "SECRET")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const exportsKeysFollowNodeRules = Task.make(
@@ -739,7 +819,7 @@ export const exportsKeysFollowNodeRules = Task.make(
       "src/index.ts": "export const MAIN = 1;\n",
     }).pipe(failureAsValue);
     expect(failure._tag).toBe("PackageExportsMixKeys");
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesInImportCyclesArePlacedLikeAnyOther = Task.make(
@@ -759,7 +839,7 @@ export const filesInImportCyclesArePlacedLikeAnyOther = Task.make(
         "src/delta/index.ts": 'import { D } from "../gamma/index.ts";\nexport const E = () => D;\n',
       }),
     ).toEqual([outsideModuleLayout("src/a.ts", "src")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const workerPreloadsAreReached = Task.make(
@@ -789,7 +869,7 @@ export const workerPreloadsAreReached = Task.make(
         "src/internal/help.ts": "export const NAMED_HELP = 1;\nexport const SPREAD_HELP = 2;\n",
       }),
     ).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const looseFilesInAModuleAreOutsideTheLayout = Task.make(
@@ -850,7 +930,7 @@ export const looseFilesInAModuleAreOutsideTheLayout = Task.make(
         outsideModuleLayout("src/split/both.ts", "src/split"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const looseFilesWithoutUsedExportsAreStillOutsideTheLayout = Task.make(
@@ -882,7 +962,7 @@ export const looseFilesWithoutUsedExportsAreStillOutsideTheLayout = Task.make(
         unused("src/area/unused.ts:1", "UNUSED"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const sharedFilesNeedTwoUsers = Task.make(
@@ -952,7 +1032,7 @@ export const sharedFilesNeedTwoUsers = Task.make(
         testOnly("src/shared/tested.ts:1", "TESTED"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const DECLARES_A_TEST = "export const PASSES = 1;\n";
@@ -993,7 +1073,7 @@ export const everyTestIsImportedByAScript = Task.make(
           `tests/${name}.ts: error TestNotRun: is a test that no file directly in scripts/ reaches through its imports`,
       ),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const looseFilesUsedThroughSharedCountItsUsers = Task.make(
@@ -1023,7 +1103,7 @@ export const looseFilesUsedThroughSharedCountItsUsers = Task.make(
         sharedByOne("src/shared/alone.ts", "src"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const eachCauseIsReportedOnce = Task.make(
@@ -1036,7 +1116,7 @@ export const eachCauseIsReportedOnce = Task.make(
         "src/orphan.ts": "export const ORPHAN = 1;\n",
       }),
     ).toEqual([unused("src/orphan.ts:1", "ORPHAN")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const sharedFilesNameTheOnePartThatUsesThem = Task.make(
@@ -1069,7 +1149,7 @@ export const sharedFilesNameTheOnePartThatUsesThem = Task.make(
           'import { HANDLED } from "../shared/handle.ts";\nexport const ONCE = HANDLED;\n',
       }),
     ).toEqual([sharedByOne("src/main/shared/state.ts", "src/main", "src/main/workers")]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const directoriesWithoutIndexOutsideModulesKeepTheirLayout = Task.make(
@@ -1094,7 +1174,7 @@ export const directoriesWithoutIndexOutsideModulesKeepTheirLayout = Task.make(
         outsideModuleLayout("src/cli/plain/a.ts", "src/cli"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make(
@@ -1124,7 +1204,7 @@ export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make(
     ).toEqual(
       [besideSubdirectories("tools/help.ts"), besideSubdirectories("tools/run.ts")].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const TOOLS_SOURCES = {
@@ -1155,7 +1235,7 @@ export const aNestedPackageJsonIsPlacedByItsName = Task.make(
       Effect.map((error) => error._tag),
     );
     expect(failure).toBe("PackageManifestUnreadable");
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const subdivisionDependsOnSubdirectoriesAlone = Task.make(
@@ -1188,7 +1268,7 @@ export const anIndexInSharedDoesNotMakeAModule = Task.make(
           'import { SPREAD } from "../shared/spread.ts";\nexport const PART = SPREAD;\n',
       }),
     ).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
@@ -1216,7 +1296,7 @@ export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
         "src/a/internal/x/shared/y/index.ts": "export const DEEP = 1;\n",
       }),
     ).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const hiddenSourceDirectoriesSubdivideTheirParents = Task.make(
@@ -1234,7 +1314,7 @@ export const hiddenSourceDirectoriesSubdivideTheirParents = Task.make(
       besideSubdirectories("tools/run.ts"),
     ]);
     expect(isSubdividedAmong(["tools/.child/index.ts"])("tools")).toBe(true);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const testNamedDirectoriesAreNeverSubdivided = Task.make(
@@ -1254,7 +1334,7 @@ export const testNamedDirectoriesAreNeverSubdivided = Task.make(
         true,
       );
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const modulesInLibraryDirectoriesArePlacedLikeAnyModule = Task.make(
@@ -1292,5 +1372,5 @@ export const modulesInLibraryDirectoriesArePlacedLikeAnyModule = Task.make(
         sharedByOne("src/lib/tasks/shared/one.ts", "src/lib/tasks", "src/lib/tasks/lib/layout"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
