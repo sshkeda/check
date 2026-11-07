@@ -25,6 +25,10 @@ const CHECKS_OVER_ONE_PROJECT = new URL(
   "../../src/lib/tasks/internal/run-checks-over-one-typescript-project.ts",
   import.meta.url,
 ).href;
+const PROJECT_QUERY_CACHES = new URL(
+  "../../src/lib/tasks/shared/provide-project-query-caches.ts",
+  import.meta.url,
+).href;
 const TWICE = 2;
 
 const STRICT_INDEX_TSCONFIG = {
@@ -183,7 +187,7 @@ export const program = Effect.gen(function* () {
       );
       yield* fileSystem.writeFileString(
         path.join(directory, "run.ts"),
-        `import { Task } from "@sshkeda/task";\nimport { runChecksOverOneTypeScriptProject } from ${yield* encodeJson(CHECKS_OVER_ONE_PROJECT)};\nimport { findRepeatedServiceYields } from ${yield* encodeJson(SERVICE_YIELDS_CHECK)};\nconst checkerQueries = Task.make("checker-queries", runChecksOverOneTypeScriptProject("tsconfig.json", { "service-yields": findRepeatedServiceYields }));\nif (import.meta.main) {\n  Task.main(checkerQueries);\n}\n`,
+        `import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\nimport { runChecksOverOneTypeScriptProject } from ${yield* encodeJson(CHECKS_OVER_ONE_PROJECT)};\nimport { ProjectQueryCachesLive } from ${yield* encodeJson(PROJECT_QUERY_CACHES)};\nimport { findRepeatedServiceYields } from ${yield* encodeJson(SERVICE_YIELDS_CHECK)};\nconst checkerQueries = Task.make("checker-queries", runChecksOverOneTypeScriptProject("tsconfig.json", { "service-yields": findRepeatedServiceYields }).pipe(Effect.provide(ProjectQueryCachesLive)));\nif (import.meta.main) {\n  Task.main(checkerQueries);\n}\n`,
       );
       yield* Task.exec("git", ["init", "--quiet"], options);
       const printed = yield* runTaskFile("bun run.ts", { ...options, taskStateDirectory }).pipe(
@@ -407,6 +411,7 @@ export const everyCheckNamesAnUnreadablePackageJson = Task.make(
       expect(printed.toSorted()).toEqual(
         [
           "bun-fmt",
+          "duplicate-functions",
           "file-types",
           "formatter-files",
           "layout",

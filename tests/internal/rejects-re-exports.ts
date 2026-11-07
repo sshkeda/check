@@ -9,6 +9,7 @@ import {
 } from "../../src/lib/tasks/lib/judge-index-re-exports/internal/find-index-re-export-violations.ts";
 import { moduleResolverFor } from "../../src/lib/tasks/shared/create-the-module-resolver.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import {
   makeProject,
   NO_PERMISSIONS,
@@ -72,7 +73,7 @@ const initializedToMember = (exported: string, member: string, binding: string, 
   `export ${exported} is initialized to ${member}, a member of ${binding} imported from ${source}`;
 
 export const exportsAreDefinedWhereTheyAreWritten = Task.make(
-  "no-re-exports rejects export from outside an index, export *, export { } or export default naming an imported binding, export default of a direct member of an imported binding by a static or computed key, export import x = require() and export =, and an exported variable declaration initialized to such a binding or member, while exports a file declares itself stay allowed",
+  "no-re-exports rejects export from outside an index, export * in any file, export * as outside an index, export { } or export default naming an imported binding, export default of a direct member of an imported binding by a static or computed key, export import x = require() and export =, and an exported variable declaration initialized to such a binding or member, while exports a file declares itself stay allowed",
   ruleTest("no-re-exports", {
     valid: [
       "export const VALUE = 1;",
@@ -118,7 +119,7 @@ export const exportsAreDefinedWhereTheyAreWritten = Task.make(
       {
         code: 'export * as task from "./internal/task.ts";',
         filename: "src/task.ts",
-        errors: [{ message: "export * from ./internal/task.ts re-exports another module" }],
+        errors: [{ message: "export * as task from ./internal/task.ts re-exports another module" }],
       },
       {
         code: 'export import task = require("./internal/task.ts");',
@@ -152,7 +153,7 @@ export const exportsAreDefinedWhereTheyAreWritten = Task.make(
       },
       {
         code: 'export * as values from "./values.ts";',
-        errors: [{ message: "export * from ./values.ts re-exports another module" }],
+        errors: [{ message: "export * as values from ./values.ts re-exports another module" }],
       },
       {
         code: 'import { VALUE } from "./values.ts"; export { VALUE };',
@@ -196,13 +197,10 @@ export const exportsAreDefinedWhereTheyAreWritten = Task.make(
   }),
 );
 
-export const onlyADirectMemberOfAnImportIsReExported = Task.make(
-  "no-re-exports reports export default of a direct static member of an imported binding, whether a namespace, named or default import, naming the export and the binding, while a member of a member, destructuring and import x = require() bindings are not followed",
+export const aStaticMemberOfAnImportIsReExported = Task.make(
+  "no-re-exports reports export default of a static member of an imported binding, a member of a member included, whether a namespace, named or default import, naming the export and the binding, while import x = require() bindings are not followed",
   ruleTest("no-re-exports", {
     valid: [
-      'import { data } from "./data.ts"; export default data.items.length;',
-      'import * as values from "./values.ts"; export default values.group.VALUE;',
-      'import * as ns from "./ns.ts"; export const { run } = ns;',
       'import tools = require("./tools.ts"); export { tools };',
       'import { make } from "./make.ts"; export const run = (make: () => number) => make;',
     ],
@@ -222,6 +220,16 @@ export const onlyADirectMemberOfAnImportIsReExported = Task.make(
       {
         code: 'import tools from "./tools.ts"; export default tools["run"];',
         errors: [{ message: reExportMember("default", 'tools["run"]', "tools", "./tools.ts") }],
+      },
+      {
+        code: 'import { data } from "./data.ts"; export default data.items.length;',
+        errors: [{ message: reExportMember("default", "data.items.length", "data", "./data.ts") }],
+      },
+      {
+        code: 'import * as values from "./values.ts"; export default values.group.VALUE;',
+        errors: [
+          { message: reExportMember("default", "values.group.VALUE", "values", "./values.ts") },
+        ],
       },
     ],
   }),
@@ -403,7 +411,7 @@ export const anIndexReExportIsJudgedByTheFileItResolvesTo = Task.make(
         },
       ],
     });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aDirectoryNamedPackageJsonMakesNoPackage = Task.make(
@@ -444,7 +452,7 @@ export const aDirectoryNamedPackageJsonMakesNoPackage = Task.make(
         errors: [{ message: `export from ./a.ts re-exports ${OUTSIDE_LAYOUT}` }],
       })),
     });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const RUN = "export const run = 1;\n";
@@ -493,7 +501,7 @@ export const aBadPackageJsonIsReported = Task.make(
       ],
     });
     yield* fileSystem.chmod(unreadable, OWNER_WRITES_EVERYONE_READS);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
@@ -517,9 +525,14 @@ export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
       filename: path.join(project, "src/m/index.ts"),
     });
     const resolverFailure = (project: string, source: string) =>
-      Effect.tryPromise(() =>
-        moduleResolverFor([]).resolveFileAsync(path.join(project, "src/m/index.ts"), source),
-      ).pipe(Effect.map((resolved) => resolved.error ?? "no error"));
+      moduleResolverFor([]).pipe(
+        Effect.flatMap((resolver) =>
+          Effect.promise(() =>
+            resolver.resolveFileAsync(path.join(project, "src/m/index.ts"), source),
+          ),
+        ),
+        Effect.map((resolved) => resolved.error ?? "no error"),
+      );
     const invalid = yield* Effect.forEach(projects, (project) =>
       Effect.gen(function* () {
         const unexplained = yield* Effect.forEach(["", "broken"], (source) =>
@@ -552,7 +565,7 @@ export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
       }),
     );
     yield* reExportsCheckTest({ valid: [], invalid: invalid.flat() });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
@@ -584,7 +597,7 @@ export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
         },
       ],
     });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const theWorkingDirectoryNeverChangesAReport = Task.make(
@@ -616,7 +629,7 @@ export const theWorkingDirectoryNeverChangesAReport = Task.make(
         errors: [{ message: `export from ../m/internal/a.ts re-exports ${OUTSIDE_LAYOUT}` }],
       })),
     });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anUnnamedPackageJsonNeverEndsTheSearch = Task.make(
@@ -652,14 +665,15 @@ export const anUnnamedPackageJsonNeverEndsTheSearch = Task.make(
         })),
       ),
     });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anExportInitializedToAnImportIsReported = Task.make(
-  "no-re-exports reports an exported variable declaration, such as export const or export let, when the initializer is an imported binding or a direct static member of one, naming the export and the binding, while a member of a member and export import x = ns.sub are not followed, and export import x = require() re-exports another module",
+  "no-re-exports reports an exported variable declaration, such as export const or export let, when the initializer is an imported binding or a static member of one, or the declaration destructures one, naming the export and the binding, while export import x = ns.sub is not followed, and export import x = require() re-exports another module",
   ruleTest("no-re-exports", {
     valid: [
-      'import * as ns from "./ns.ts"; export const started = ns.group.run;',
+      'import * as ns from "./ns.ts"; export const { run = fallback } = ns;',
+      'import * as ns from "./ns.ts"; export const { [key]: run, ...rest } = ns;',
       'import { Schema } from "effect"; export const Id = Schema.String.pipe(Schema.brand("Id"));',
       'import * as ns from "./ns.ts"; export import sub = ns.sub;',
     ],
@@ -718,6 +732,31 @@ export const anExportInitializedToAnImportIsReported = Task.make(
         errors: [{ message: initializedTo("GET", "handler", "./handler.ts") }],
       },
       {
+        code: 'import * as ns from "./ns.ts"; export const started = ns.group.run;',
+        errors: [{ message: initializedToMember("started", "ns.group.run", "ns", "./ns.ts") }],
+      },
+      {
+        code: 'import * as ns from "./ns.ts"; export const { run, stop: halt } = ns;',
+        errors: [
+          { message: initializedToMember("run", "ns.run", "ns", "./ns.ts") },
+          { message: initializedToMember("halt", "ns.stop", "ns", "./ns.ts") },
+        ],
+      },
+      {
+        code: 'import { TOOLS } from "./tools.ts"; export const { loud: { shout } } = TOOLS.groups;',
+        errors: [
+          {
+            message: initializedToMember("shout", "TOOLS.groups.loud.shout", "TOOLS", "./tools.ts"),
+          },
+        ],
+      },
+      {
+        code: 'import { config } from "./config.ts"; export const { "a-b": VALUE } = config;',
+        errors: [
+          { message: initializedToMember("VALUE", 'config["a-b"]', "config", "./config.ts") },
+        ],
+      },
+      {
         code: 'export import values = require("./values.ts");',
         errors: [{ message: "export import values re-exports another module" }],
       },
@@ -726,12 +765,11 @@ export const anExportInitializedToAnImportIsReported = Task.make(
 );
 
 export const aMemberIsNamedByItsKeyAsWritten = Task.make(
-  "no-re-exports follows an identifier, a string key or a template literal key without substitutions, and names a non-identifier export name as the source writes it and the member as the source writes it, with each line break printed as a backslash and n, while a numeric or bigint key, a template literal key with substitutions and destructuring stay unfollowed",
+  "no-re-exports follows an identifier, a string key or a template literal key without substitutions, and names a non-identifier export name as the source writes it and the member as the source writes it, with each line break printed as a backslash and n, while a numeric or bigint key, a template literal key with substitutions and array destructuring stay unfollowed",
   ruleTest("no-re-exports", {
     valid: [
       'import { LIST } from "./list.ts"; const index = 0; export const FIRST = LIST[index];',
       `import * as ns from "./ns.ts"; const key = "run"; export default ns[\`\${key}\`];`,
-      'import * as ns from "./ns.ts"; export const { run } = ns;',
       'import { LIST } from "./list.ts"; export const [FIRST] = LIST;',
       ...[
         "ns[+1n]",
@@ -845,8 +883,10 @@ export const theFormatConfigFileMayExportTheImportedFormatConfig = Task.make(
   }),
 );
 
+const namespaceOf = (source: string) => `export * as Task from ${source} re-exports another module`;
+
 export const anIndexMayExportAChildModuleNamespace = Task.make(
-  "an index may namespace the index of a module in its own lib/ exposing only its own unrenamed internal exports, while a sibling index or a module nested deeper may not",
+  "no-re-exports leaves export * as in an index to the re-exports check and rejects it in any other file, and the re-exports check lets any index namespace the index.ts or index.tsx of a module in its own lib/ exposing only its own unrenamed exports of files that resolve into its own internal/, while it refuses a namespace of a sibling index, a module nested deeper, an index that renames, uses export * or declares logic, or one whose internal/ path resolves into its shared/, by .. or by a symlink",
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -865,10 +905,31 @@ export const anIndexMayExportAChildModuleNamespace = Task.make(
       "src/sibling/internal/task.ts": "export const make = () => 1;",
       "src/lib/task/lib/deeper/index.ts": 'export { make } from "./internal/task.ts";',
       "src/lib/task/lib/deeper/internal/task.ts": "export const make = () => 1;",
+      "src/lib/view/index.tsx": 'export { make } from "./internal/view.ts";',
+      "src/lib/view/internal/view.ts": "export const make = () => 1;",
+      "src/lib/climbs/index.ts": 'export { make } from "./internal/../shared/task.ts";',
+      "src/lib/climbs/internal/a.ts": "export const run = () => 1;",
+      "src/lib/climbs/shared/task.ts": "export const make = () => 1;",
+      "src/lib/linked/index.ts": 'export { make } from "./internal/task.ts";',
+      "src/lib/linked/internal/a.ts": "export const run = () => 1;",
+      "src/lib/linked/shared/task.ts": "export const make = () => 1;",
     });
+    yield* fileSystem.symlink(
+      "../shared/task.ts",
+      path.join(directory, "src/lib/linked/internal/task.ts"),
+    );
     const filename = path.join(directory, "src/index.ts");
+    const childIndex = "./lib/task/index.ts";
     yield* reExportsCheckTest({
-      valid: [{ filename, code: 'export * as Task from "./lib/task/index.ts";' }],
+      valid: [
+        { filename, code: `export * as Task from "${childIndex}";` },
+        { filename, code: `export * from "${childIndex}";` },
+        { filename, code: 'export * as View from "./lib/view/index.tsx";' },
+        {
+          filename: path.join(directory, "src/index.tsx"),
+          code: 'export * as View from "./lib/view/index.tsx";',
+        },
+      ],
       invalid: [
         "./lib/task/internal/task.ts",
         "./lib/renamed/index.ts",
@@ -876,23 +937,79 @@ export const anIndexMayExportAChildModuleNamespace = Task.make(
         "./lib/logic/index.ts",
         "./sibling/index.ts",
         "./lib/task/lib/deeper/index.ts",
+        "./lib/climbs/index.ts",
+        "./lib/linked/index.ts",
       ].map((source) => ({
         filename,
         code: `export * as Task from "${source}";`,
-        errors: [{ message: `export * from ${source} re-exports another module` }],
+        errors: [{ message: namespaceOf(source) }],
       })),
     });
     yield* ruleTest("no-re-exports", {
-      valid: [],
+      valid: [
+        { filename, code: `export * as Task from "${childIndex}";` },
+        {
+          filename: path.join(directory, "src/lib/jobs/index.ts"),
+          code: `export * as Task from "${childIndex}";`,
+        },
+        {
+          filename: path.join(directory, "src/lib/jobs/index.tsx"),
+          code: 'export * as View from "./lib/view/index.tsx";',
+        },
+      ],
       invalid: [
         {
           filename,
-          code: 'export * from "./lib/task/index.ts";',
-          errors: [{ message: "export * from ./lib/task/index.ts re-exports another module" }],
+          code: `export * from "${childIndex}";`,
+          errors: [{ message: `export * from ${childIndex} re-exports another module` }],
+        },
+        {
+          filename: path.join(directory, "src/task.ts"),
+          code: `export * as Task from "${childIndex}";`,
+          errors: [{ message: namespaceOf(childIndex) }],
         },
       ],
     });
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+const NAMESPACED_CHILD_MODULE = {
+  "src/lib/task/index.ts": 'export { run } from "./internal/task.ts";\n',
+  "src/lib/task/internal/task.ts": RUN,
+  "src/lib/jobs/index.ts": 'export * as Task from "./lib/task/index.ts";\n',
+  "src/lib/jobs/lib/task/index.ts": 'export { run } from "./internal/task.ts";\n',
+  "src/lib/jobs/lib/task/internal/task.ts": RUN,
+  "src/index.ts": 'export * as Task from "./lib/task/index.ts";\n',
+};
+
+const refusedReExportsIn = (manifest: string) =>
+  Effect.gen(function* () {
+    const { tsconfigFile } = yield* makeProject(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, {
+      ...NAMESPACED_CHILD_MODULE,
+      "package.json": manifest,
+    });
+    return yield* findIndexReExportViolations(tsconfigFile).pipe(
+      Effect.as(new Array<string>()),
+      Effect.catchTag("IndexReExportsRefused", ({ violations }) =>
+        Effect.succeed(violations.map(({ location, judgment }) => `${location} ${judgment}`)),
+      ),
+    );
+  });
+
+export const theReExportsCheckAllowsChildNamespacesInEveryIndex = Task.make(
+  "the re-exports check allows a child module namespace in every index, with an exports field, with a main field or with no package entry field",
+  Effect.gen(function* () {
+    const byExports = yield* refusedReExportsIn(
+      '{ "name": "checked", "type": "module", "exports": { ".": "./src/index.ts" } }\n',
+    );
+    const byMain = yield* refusedReExportsIn(
+      '{ "name": "checked", "type": "module", "main": "./src/index.ts" }\n',
+    );
+    const withoutEntries = yield* refusedReExportsIn('{ "name": "checked", "type": "module" }\n');
+    expect(byExports).toEqual([]);
+    expect(byMain).toEqual([]);
+    expect(withoutEntries).toEqual([]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const theReExportsCheckJudgesEveryIndexOfTheProject = Task.make(
@@ -917,9 +1034,9 @@ export const theReExportsCheckJudgesEveryIndexOfTheProject = Task.make(
     expect(refused).toEqual([
       `src/m/index.ts:2 export from ./a.ts re-exports ${OUTSIDE_LAYOUT}`,
       "src/n/index.ts:1 export from ./internal/a.ts renames run to start",
-      "src/n/index.ts:2 export * from ../m/index.ts re-exports another module",
+      "src/n/index.ts:2 export * as M from ../m/index.ts re-exports another module",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const theReExportsCheckSkipsGeneratedIndexes = Task.make(
@@ -933,7 +1050,7 @@ export const theReExportsCheckSkipsGeneratedIndexes = Task.make(
         "src/m/index.ts": 'export { run } from "./a.ts";\n',
         "src/m/a.ts": RUN,
       },
-      'lintConfig({ "src/index.ts": { allow: [{ isGeneratedByATool: "generated entry" }] } })',
+      'lintConfig({ "src/index.ts": { allow: ["isGeneratedByATool"] } })',
     );
     const refused = yield* findIndexReExportViolations(tsconfigFile).pipe(
       Effect.as(new Array<string>()),
@@ -942,5 +1059,5 @@ export const theReExportsCheckSkipsGeneratedIndexes = Task.make(
       ),
     );
     expect(refused).toEqual([`src/m/index.ts:1 export from ./a.ts re-exports ${OUTSIDE_LAYOUT}`]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

@@ -10,6 +10,7 @@ import {
   IMPORT_META,
   moduleSpecifiersOfGlobalObject,
   PERMISSION_BANS,
+  UNUSED_GRANT_REPORTED,
 } from "../shared/bans-each-permission-lifts.ts";
 import type { importsBan } from "../shared/bans-each-permission-lifts.ts";
 import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
@@ -26,6 +27,7 @@ import {
   importedExpression,
   importsOnlyTypes,
   isGlobalReference,
+  isImportMeta,
   isMemberExpressionObject,
   isReferencePosition,
   isValueOperandOfTypeScriptOrExport,
@@ -71,9 +73,6 @@ const isWholeModuleImportOf = (
     (definition.type === "ImportSpecifier" && specifierImportedName(definition) === DEFAULT_EXPORT);
   return importsWholeModule && moduleSpecifiers.includes(definition.parent.source.value);
 };
-
-const isImportMeta = (node: ESTree.Node) =>
-  node.type === "MetaProperty" && node.meta.name === "import" && node.property.name === "meta";
 
 const constantInitializer = (node: ESTree.Node, sourceCode: SourceCode) => {
   const definitions = resolvedVariable(node, sourceCode)?.defs ?? [];
@@ -186,6 +185,12 @@ const outermostTypeScriptWrapper = (node: ESTree.Node): ESTree.Node => {
   return isWrapped ? outermostTypeScriptWrapper(parent) : node;
 };
 
+const isInATypeQuery = (node: ESTree.Node): boolean => {
+  const { parent } = node;
+  const isLeftOfAQualifiedName = parent?.type === "TSQualifiedName" && parent.left === node;
+  return parent?.type === "TSTypeQuery" || (isLeftOfAQualifiedName && isInATypeQuery(parent));
+};
+
 const createdRequireVisitors = (
   context: Context,
   createdRequires: readonly {
@@ -239,6 +244,7 @@ const createdRequireVisitors = (
     const declared = sourceCode.getDeclaredVariables(declarator)[0];
     return (declared?.references ?? [])
       .filter((reference) => reference.identifier !== declarator.id)
+      .filter((reference) => !isInATypeQuery(reference.identifier))
       .every((reference) => isExceptedMemberOf(reference.identifier, ban));
   };
   const checkReference = (node: ESTree.Node) => {
@@ -333,12 +339,8 @@ const banVisitors = (
     isBannedEffectUsage,
     createdRequires,
   }: ReturnType<typeof compiledBans>,
-  messageId: "banned" | "bannedEvenWhenGranted",
+  report: (node: ESTree.Node, usage: string) => void,
 ): Visitor => {
-  const report = (node: ESTree.Node, usage: string) => {
-    context.report({ node, messageId, data: { usage } });
-  };
-
   const reportImport = (node: ESTree.Node, specifier: string, name: string) => {
     const ban = bannedImport(specifier, name);
     if (ban === undefined) {
@@ -473,11 +475,12 @@ const banVisitors = (
 
 const BAN_OPTIONS = Schema.Struct({
   bans: Schema.optionalKey(Schema.Literals(["all", BANS_NO_GRANT_LIFTS])),
+  unusedGrant: Schema.optionalKey(Schema.Literal(UNUSED_GRANT_REPORTED)),
 });
 
 export const permissionBanRule = (permission: keyof typeof PERMISSION_BANS) => {
   const entry = PERMISSION_BANS[permission];
-  const { description, message } = entry;
+  const { message } = entry;
   const liftedByAGrant = compiledBans(entry.bans);
   const liftedByNoGrant = compiledBans(bansNoGrantLifts(permission));
   const liftedByNoGrantBeyondTheGrantableImports = compiledBans(
@@ -489,23 +492,43 @@ export const permissionBanRule = (permission: keyof typeof PERMISSION_BANS) => {
   return defineRule({
     meta: {
       type: "problem",
-      docs: { description },
       messages: {
         banned: message,
         bannedEvenWhenGranted: messageEvenWhenGranted,
+        unusedGrant: `this file is granted ${permission}, but uses nothing ${permission} allows`,
       },
       schema: ruleOptionsJsonSchema(BAN_OPTIONS),
     },
     create(context) {
-      const isGranted =
-        decodeRuleOptions(BAN_OPTIONS, context.options)?.bans === BANS_NO_GRANT_LIFTS;
+      const options = decodeRuleOptions(BAN_OPTIONS, context.options);
+      const isGranted = options?.bans === BANS_NO_GRANT_LIFTS;
+      const reporterOf =
+        (messageId: "banned" | "bannedEvenWhenGranted") => (node: ESTree.Node, usage: string) => {
+          context.report({ node, messageId, data: { usage } });
+        };
+      const grantedUsages = new Set<ESTree.Node>();
+      const isUnusedGrantReported = isGranted && options.unusedGrant === UNUSED_GRANT_REPORTED;
       return mergedVisitors([
-        ...(isGranted ? [] : [banVisitors(context, liftedByAGrant, "banned")]),
+        ...(isGranted ? [] : [banVisitors(context, liftedByAGrant, reporterOf("banned"))]),
         banVisitors(
           context,
           isGranted ? liftedByNoGrant : liftedByNoGrantBeyondTheGrantableImports,
-          "bannedEvenWhenGranted",
+          reporterOf("bannedEvenWhenGranted"),
         ),
+        ...(isUnusedGrantReported
+          ? [
+              banVisitors(context, liftedByAGrant, (node) => {
+                grantedUsages.add(node);
+              }),
+              {
+                "Program:exit"(node) {
+                  if (grantedUsages.size === 0) {
+                    context.report({ node, messageId: "unusedGrant" });
+                  }
+                },
+              } satisfies Visitor,
+            ]
+          : []),
       ]);
     },
   });

@@ -39,12 +39,17 @@ const RUNNER_MODULE_FROM_BUN_TEST = runnerFromBunTest("a test runner");
 
 const PREFER_NODE_PROTOCOL = "unicorn(prefer-node-protocol)";
 
-const withoutNodeProtocolHints = (
+const UNUSED_GRANT = /: this file is granted \w+, but uses nothing \w+ allows$/u;
+
+const isAnotherReport = (error: string) =>
+  error.startsWith(PREFER_NODE_PROTOCOL) || UNUSED_GRANT.test(error);
+
+const withoutNodeProtocolHintsOrUnusedGrants = (
   linted: readonly { readonly code: string; readonly errors: readonly string[] }[],
 ) =>
   linted.map(({ code, errors }) => ({
     code,
-    errors: errors.filter((error) => !error.startsWith(PREFER_NODE_PROTOCOL)),
+    errors: errors.filter((error) => !isAnotherReport(error)),
   }));
 
 const reported = (cases: readonly (readonly [string, readonly string[]])[]) =>
@@ -57,7 +62,7 @@ const expectEachCaseReports = (
 ) =>
   Effect.gen(function* () {
     expect(
-      withoutNodeProtocolHints(
+      withoutNodeProtocolHintsOrUnusedGrants(
         yield* lintErrorsOfEachCase(
           oxlintReport,
           REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
@@ -216,6 +221,7 @@ const UNBOUND_METHOD = "typescript(unbound-method)";
 
 const rulesOf = (errors: readonly string[]) =>
   errors
+    .filter((error) => !UNUSED_GRANT.test(error))
     .map((error) => error.slice(0, error.indexOf(": ")))
     .filter((rule) => rule !== PREFER_NODE_PROTOCOL && rule !== UNBOUND_METHOD);
 
@@ -319,7 +325,7 @@ export const importsOfEveryRestrictedMember = Task.make(
 const reExportCases = [
   ['export * from "node:path";', "export * from node:path"],
   ['export type * from "bun:test";', "export * from bun:test"],
-  ['export * as namespace from "effect/testing";', "export * from effect/testing"],
+  ['export * as namespace from "effect/testing";', "export * as namespace from effect/testing"],
   ['export { spawn } from "node:child_process";', "export from node:child_process"],
   ['export type { expect } from "bun:test";', "export from bun:test"],
   ['export { mock } from "effect/Layer";', "export from effect/Layer"],

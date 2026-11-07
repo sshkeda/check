@@ -5,6 +5,7 @@ import { Effect, Array as Arrays, flow } from "effect";
 
 import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-import-boundaries/internal/find-import-boundary-violations.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -84,5 +85,5 @@ export const moduleUrlsAreWrittenInline = Task.make(
         .toSorted(),
     );
     expect(yield* violationsIn({ "src/inline.ts": INLINE_USES })).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

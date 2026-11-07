@@ -117,6 +117,22 @@ export const refusesGlobalErrorInFailureTypes = Task.make(
         code: withEffect("type Failing = Effect.Effect<void, Error>;"),
         errors: [plainError("Failing")],
       },
+      {
+        code: withEffect(
+          'export const readLine = Effect.fn("readLine")(function* (line: string): Effect.fn.Return<string, Error> { return line; });',
+        ),
+        errors: [plainError("readLine")],
+      },
+      {
+        code: withEffect(
+          "export const read = Effect.gen(function* (): Effect.gen.Return<string, Error> { return ''; });",
+        ),
+        errors: [plainError("read")],
+      },
+      {
+        code: 'import { Exit } from "effect"; export const read: Exit.Exit<string, Error> = Exit.succeed("");',
+        errors: [plainError("read")],
+      },
     ],
   }),
 );

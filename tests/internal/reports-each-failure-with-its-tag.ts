@@ -134,6 +134,25 @@ export const upstreamHelpIsNeverPrinted = Task.make(
   }),
 );
 
+const UNORDERED_REPORT = `{ "diagnostics": [{"message": "comment in code","code": "sshkeda(no-comments)","severity": "error","filename": "src/b.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 1,"column": 1}}]},
+{"message": "Unexpected console statement.","code": "eslint(no-console)","severity": "error","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 10,"column": 1}}]},
+{"message": "Unexpected any. Specify a different type.","code": "typescript(no-explicit-any)","severity": "error","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 2,"column": 9}}]},
+{"message": "comment in code","code": "sshkeda(no-comments)","severity": "error","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 2,"column": 3}}]}] }`;
+
+export const lintViolationsPrintInFileAndLineOrder = Task.make(
+  "oxlint lints files on many threads, so its violations print sorted by file, line and column, the same on every run",
+  Effect.gen(function* () {
+    expect(
+      (yield* oxlintReport("oxlint", UNORDERED_REPORT)).violations.map(formattedError),
+    ).toEqual([
+      "src/a.ts:2:3: error sshkeda(no-comments): comment in code",
+      "src/a.ts:2:9: error typescript(no-explicit-any): Unexpected any. Specify a different type.",
+      "src/a.ts:10:1: error eslint(no-console): Unexpected console statement.",
+      "src/b.ts:1:1: error sshkeda(no-comments): comment in code",
+    ]);
+  }),
+);
+
 export const violationsPrintOnlyTheirMessage = Task.make(
   "a lint rule or a check violation becomes a printable error with its tag, location and message, and prints one message line",
   Effect.gen(function* () {
@@ -219,12 +238,12 @@ export const oxlintReportsMapFieldByField = Task.make(
   Effect.gen(function* () {
     expect(yield* oxlintReport("oxlint", OXLINT_SYNTAX_ERROR_REPORT)).toEqual({
       violations: [
-        { tag: "oxlint", location: "bad.ts:1:18", message: "Unexpected token" },
         {
           tag: "typescript(no-unsafe-assignment)",
           location: "bad.ts:1:14",
           message: "Unsafe assignment of an error typed value.",
         },
+        { tag: "oxlint", location: "bad.ts:1:18", message: "Unexpected token" },
       ],
       notes: ["oxlint also reported 1 warning, which this printer cannot show as warnings"],
     });

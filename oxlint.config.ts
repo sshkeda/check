@@ -6,24 +6,17 @@ export default lintConfig({
     allow: ["spawnsCommands"],
   },
   "src/lib/tasks/internal/run-checks-over-one-typescript-project.ts": {
-    allow: [
-      {
-        handlesEveryFailure:
-          "runs every check over one project and reports each check's failures and crashes together, so one check failing or crashing can't hide the others",
-      },
-    ],
+    allow: ["handlesEveryFailure"],
   },
   "src/lib/tasks/shared/run-tools-and-decode-their-reports.ts": {
     allow: ["spawnsCommands", "readsConfig", "locksFiles"],
   },
-  "tests/shared/failure-as-value.ts": {
-    allow: [
-      {
-        handlesEveryFailure:
-          "tests read the failure or the outcome of the effect under test as a value to assert on it",
-      },
-    ],
+  "src/lib/tasks/shared/create-the-module-resolver.ts": { services: ["ModuleResolvers"] },
+  "src/lib/tasks/shared/query-the-typescript-project.ts": {
+    services: ["TypeScriptProjectListings"],
   },
+  "src/lib/tasks/shared/resolve-module-requests.ts": { services: ["ModuleResolutions"] },
+  "tests/shared/failure-as-value.ts": { allow: ["handlesEveryFailure"] },
   "tests/shared/run-task-files.ts": { allow: ["usesAbbreviations"] },
   ".github": { allow: ["isAnUnlistedDirectory"] },
   ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] },

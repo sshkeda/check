@@ -3,10 +3,6 @@ import { defineRule } from "@oxlint/plugins";
 export const noWhile = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Write loops as for...of over a known sequence, so no loop runs on a condition or counter that outside state must change.",
-    },
     messages: {
       conditionLoop: "{{loop}} loops on a condition or counter that outside state must change",
     },

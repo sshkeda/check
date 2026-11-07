@@ -5,6 +5,7 @@ import { Effect, FileSystem, Path, Array as Arrays, flow } from "effect";
 
 import { findRepeatedServiceYields } from "../../src/lib/tasks/lib/detect-repeated-service-yields/internal/find-repeated-service-yields.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 
@@ -73,7 +74,7 @@ export const program = Effect.gen(function* () {
     ).toEqual([
       "imported.ts:7:18: error RepeatedServiceYield: service WorkerPool was already yielded at 5:17",
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const builtInServices = Task.make(
@@ -94,7 +95,7 @@ export const program = Effect.gen(function* () {
     ).toEqual([
       "built-in.ts:6:17: error RepeatedServiceYield: service FileSystem was already yielded at 4:22",
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const separateScopes = Task.make(
@@ -117,7 +118,7 @@ export const program = Effect.gen(function* () {
 `,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const cleanProject = Task.make(
@@ -135,5 +136,5 @@ export const program = Effect.gen(function* () {
 `,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

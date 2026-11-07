@@ -16,7 +16,7 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
 const IMPORT_CONTEXT = 'import { Context } from "effect"; ';
 
 export const serviceKeyNames = Task.make(
-  "Effect service keys end in the named class including template literals, and an unnamed class is left to no-service-declarations",
+  "Effect service keys end in the named class including template literals and constants that hold them, and an unnamed class is left to no-service-declarations",
   ruleTest("no-mismatched-service-keys", {
     valid: [
       ...[
@@ -27,6 +27,7 @@ export const serviceKeyNames = Task.make(
         'const service = class Store extends Context.Service<Store>()("Store") {};',
         'class Store extends Other.Service<Store>()("Unrelated") {}',
         'const service = class extends Context.Service()("Store") {};',
+        'const KEY = "@example/Store"; class Store extends Context.Service<Store>()(KEY) {}',
       ].map((code) => `${IMPORT_CONTEXT}${code}`),
       'const Context = { Service: () => () => class {} }; class Store extends Context.Service<Store>()("Other") {}',
     ],
@@ -46,6 +47,10 @@ export const serviceKeyNames = Task.make(
       {
         code: `${IMPORT_CONTEXT}class Store extends Context.Service<Store>()(\`\${prefix}/\${dynamic}\`) {}`,
         errors: [{ message: "the service key of Store has no static last segment" }],
+      },
+      {
+        code: `${IMPORT_CONTEXT}const KEY = "@example/Other"; class Store extends Context.Service<Store>()(KEY) {}`,
+        errors: [{ message: "the service key ends with Other, not Store" }],
       },
       {
         code: `${IMPORT_CONTEXT}class Store extends Context.Service<Store>()(key) {}`,

@@ -6,6 +6,7 @@ import { Effect, Array as Arrays, flow } from "effect";
 import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-import-boundaries/internal/find-import-boundary-violations.ts";
 import { findFileLayoutViolations } from "../../src/lib/tasks/lib/enforce-file-layout/internal/find-file-layout-violations.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 import { oxlintBinary } from "../shared/oxlint-binary.ts";
@@ -82,7 +83,7 @@ export const forStatementStartingWithLetIsNoWhileAlone = Task.make(
     expect(reportsAtLine(reports, "main.ts", FOR_STATEMENT_LINE)).toEqual([
       "main.ts:2:3: for loops on a condition or counter that outside state must change [Error/sshkeda(no-while)]",
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const MISSING_FILE_IMPORT =
@@ -134,7 +135,7 @@ export const requireOfAMissingFileIsReportedOnce = Task.make(
         missingFileImport("src/created-as-require.ts", REQUIRE_NAMED_CALL_LINE),
       ].toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const TEST_IMPORT_TAGS = ["CannotImportCrossed", "TestImported"] as const;
@@ -161,7 +162,7 @@ export const sourceImportingATestIsReportedOnce = Task.make(
         )
         .toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const testImportCrossingAUserBanIsAlsoTestImported = Task.make(
@@ -181,7 +182,7 @@ export const testImportCrossingAUserBanIsAlsoTestImported = Task.make(
         "lib2/user-ban.ts:1: error TestImported: imports tests/sample.ts, but only scripts/ and tests/ may import tests/",
       ].toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const NAME_TAGS = [
@@ -213,7 +214,7 @@ export const nonScriptPlacementIsReportedOnce = Task.make(
         "scripts/notes.txt: error TopLevelNonScript: sits directly in scripts/ and is not a TypeScript or JavaScript file",
       ].toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const foreignSourceNamingIsCheckedIndependently = Task.make(
@@ -234,7 +235,7 @@ export const foreignSourceNamingIsCheckedIndependently = Task.make(
         "src/Tools/inner.BASH: error NotKebabCase: Tools is not kebab-case",
       ].toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const nonMarkdownPlacementInDocsIsReportedOnce = Task.make(
@@ -253,7 +254,7 @@ export const nonMarkdownPlacementInDocsIsReportedOnce = Task.make(
         "docs/notes.txt: error MisplacedAtPackageRoot: is not markdown but sits in docs/",
       ].toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const bunTestFileNameIsOnlyAFileBunRunsAsATest = Task.make(
@@ -286,7 +287,7 @@ export const bunTestFileNameIsOnlyAFileBunRunsAsATest = Task.make(
         "src/under_spec.js: error NotKebabCase: under_spec.js is not kebab-case",
       ].toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const notKebabCaseReportsOf = (reports: readonly string[]) =>
@@ -318,7 +319,7 @@ export const notKebabCaseReportsEveryMisnamedScriptFile = Task.make(
     expect(notKebabCaseReportsOf(reports)).toEqual(
       MISNAMED_SCRIPT_FILE_NAMES.map((fileName) => notKebabCase("src", fileName)).toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const notKebabCaseReportsEveryMisnamedPartAtOnce = Task.make(
@@ -326,7 +327,7 @@ export const notKebabCaseReportsEveryMisnamedPartAtOnce = Task.make(
   Effect.gen(function* () {
     const reports = yield* reportsOf({ "src/Foo.Bar.ts": "export const NAME = 1;\n" });
     expect(notKebabCaseReportsOf(reports)).toEqual([notKebabCase("src", "Foo.Bar.ts")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const notKebabCaseReportsAFileOxlintCannotParse = Task.make(
@@ -334,5 +335,5 @@ export const notKebabCaseReportsAFileOxlintCannotParse = Task.make(
   Effect.gen(function* () {
     const reports = yield* reportsOf({ "src/HomePage.ts": "export const = ;\n" });
     expect(notKebabCaseReportsOf(reports)).toEqual([notKebabCase("src", "HomePage.ts")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

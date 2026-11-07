@@ -7,6 +7,7 @@ import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-impo
 import { packageRootViolations } from "../../src/lib/tasks/lib/enforce-file-layout/internal/find-file-layout-violations.ts";
 import { isTestEntryFile } from "../../src/lib/tasks/shared/classify-files-by-role.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
@@ -72,5 +73,5 @@ export const importsTestsOnlyFromScripts = Task.make(
       "src/worker.ts:1: tests/case.ts",
       "tools/dynamic.ts:1: tests/case.ts",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

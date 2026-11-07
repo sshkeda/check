@@ -75,9 +75,6 @@ const partsOf = (node: ESTree.Node) => {
 export const noIndexLogic = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description: "Keep index.ts and index.tsx to wiring.",
-    },
     messages: {
       holds: "index file holds {{kind}}",
       outsideAnExport: "index file holds {{kind}} outside an export statement",

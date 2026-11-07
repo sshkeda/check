@@ -37,6 +37,11 @@ const DECLARATION_FILE = /\.d\.[cm]?ts$/u;
 
 export const isDeclarationFile = (path: string) => DECLARATION_FILE.test(path);
 
+const TYPESCRIPT_SOURCE_FILE = /\.tsx?$/u;
+
+export const isTypeScriptSourceFile = (path: string) =>
+  TYPESCRIPT_SOURCE_FILE.test(path) && !isDeclarationFile(path);
+
 export const isPackageManifest = (path: string) => fileNameOf(path) === PACKAGE_MANIFEST_FILE;
 
 export const directoryOf = (path: string) => path.split("/").slice(0, -1).join("/");

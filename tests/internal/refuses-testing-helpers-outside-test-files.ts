@@ -6,6 +6,7 @@ import { parseSync } from "oxc-parser";
 
 import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-import-boundaries/internal/find-import-boundary-violations.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 import { oxlintBinary } from "../shared/oxlint-binary.ts";
@@ -230,13 +231,20 @@ export const refusesTestingHelpers = Task.make(
 );
 
 export const testHomeIsExemptFromTestCodeRules = Task.make(
-  "oxlint refuses testing helpers and assertions in a source file and allows them in tests/",
+  "oxlint refuses testing helpers, assertions and shared holders in a source file and allows them in tests/",
   Effect.gen(function* () {
     const testCode = [
       'import { expect } from "bun:test";',
       'import { TestConsole } from "effect/testing";',
+      'import { Effect } from "effect";',
       "",
       "export const CHECKED = [expect, TestConsole.layer];",
+      "export const SPY = Effect.suspend(() => {",
+      "  const calls = { count: 0 };",
+      "  return Effect.sync(() => {",
+      "    calls.count += 1;",
+      "  });",
+      "});",
       "",
     ].join("\n");
     const { directory } = yield* makeProject({ [SOURCE_FILE]: testCode, [TEST_FILE]: testCode });
@@ -263,6 +271,9 @@ export const testHomeIsExemptFromTestCodeRules = Task.make(
     );
     expect(output).toContain(
       `${SOURCE_FILE}:2:29: error sshkeda(no-testing-helpers): uses Effect's testing helper effect/testing outside a test file`,
+    );
+    expect(output).toContain(
+      `${SOURCE_FILE}:7:9: error sshkeda(no-shared-holders): calls is written inside a function passed to Effect.sync, which can run it concurrently or later; hold that state in a Ref`,
     );
     expect(output).not.toContain(TEST_FILE);
   }).pipe(Effect.scoped),
@@ -293,5 +304,5 @@ export const onlyScriptsImportTestHome = Task.make(
         `${SOURCE_FILE}:1: error TestImported: imports tests/console.ts, but only scripts/ and tests/ may import tests/`,
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

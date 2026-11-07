@@ -260,5 +260,18 @@ export const declaredNameListeners = (
         check(node.local);
       }
     },
+    ExportSpecifier(node) {
+      const exportsUnderADifferentName =
+        node.exported.type === "Identifier" &&
+        (node.local.type !== "Identifier" || node.local.name !== node.exported.name);
+      if (exportsUnderADifferentName) {
+        check(node.exported);
+      }
+    },
+    ExportAllDeclaration(node) {
+      if (node.exported?.type === "Identifier") {
+        check(node.exported);
+      }
+    },
   } satisfies Visitor;
 };

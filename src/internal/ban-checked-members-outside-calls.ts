@@ -18,6 +18,7 @@ import {
   isImportBinding,
   isValueOperandOfTypeScriptOrExport,
   memberName,
+  rootOf,
 } from "./resolve-what-an-expression-imports.ts";
 
 const RECOVERY_PREFIX = "catch";
@@ -37,6 +38,8 @@ const isRecoveryCheckedAtItsCall = (
   (operation.startsWith(RECOVERY_PREFIX) || operation === ERROR_MAPPING) &&
   !isBannedRecovery(moduleName, operation);
 
+const STREAM_RETRY = "retry";
+
 const EFFECT_MEMBERS_CHECKED_AT_THEIR_CALLS: ReadonlyMap<string, (operation: string) => boolean> =
   new Map([
     [
@@ -47,7 +50,11 @@ const EFFECT_MEMBERS_CHECKED_AT_THEIR_CALLS: ReadonlyMap<string, (operation: str
         POLLING_OPERATIONS.has(operation) ||
         DEADLINE_OPERATIONS.has(operation),
     ],
-    ["Stream", (operation: string) => isRecoveryCheckedAtItsCall("Stream", operation)],
+    [
+      "Stream",
+      (operation: string) =>
+        isRecoveryCheckedAtItsCall("Stream", operation) || operation === STREAM_RETRY,
+    ],
     ["Channel", (operation: string) => isRecoveryCheckedAtItsCall("Channel", operation)],
     ["Context", (operation: string) => SERVICE_FACTORIES.has(operation)],
     ["PlatformError", (operation: string) => operation === "systemError"],
@@ -58,9 +65,6 @@ const GLOBAL_MEMBERS_CHECKED_AT_THEIR_CALLS: ReadonlyMap<string, ReadonlySet<str
   ["Intl", new Set([DATE_TIME_FORMAT])],
   ["Number", NUMBER_PARSERS],
 ]);
-
-const rootOf = (node: ESTree.Node): ESTree.Node =>
-  node.type === "MemberExpression" ? rootOf(node.object) : node;
 
 const effectMemberNamed = (node: ESTree.Node, sourceCode: SourceCode) => {
   if (!isImportBinding(rootOf(node), sourceCode)) {
@@ -121,10 +125,6 @@ const isValueReference = (node: ESTree.Node) => {
 export const noUncalledMembers = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Call a member whose ban is checked at its call, such as Stream.catchTag or Effect.retry, where it is named, so no value carries it past the check.",
-    },
     messages: {
       uncalled: "{{member}} is used as a value instead of being called where it is named",
     },

@@ -3,10 +3,6 @@ import { defineRule } from "@oxlint/plugins";
 export const noTypeDeclarations = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Derive types inline from the Schema or function that produces them instead of declaring type aliases, interfaces, enums, namespaces or ambient modules.",
-    },
     messages: {
       typeAlias: "type {{name}} is declared",
       interface: "interface {{name}} is declared",

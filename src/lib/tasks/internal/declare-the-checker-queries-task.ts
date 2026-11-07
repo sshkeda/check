@@ -14,6 +14,7 @@ import { findServiceLayerViolations } from "../lib/require-separate-service-laye
 import { inEachPackage } from "../shared/check-each-nested-package.ts";
 import { lintConfigFile } from "../shared/declare-lint-config-task.ts";
 import { typeScriptConfig } from "../shared/declare-typescript-config-task.ts";
+import { ProjectQueryCachesLive } from "../shared/provide-project-query-caches.ts";
 import { TYPESCRIPT_PROJECT_FILE } from "../shared/query-the-typescript-project.ts";
 import { runChecksOverOneTypeScriptProject } from "./run-checks-over-one-typescript-project.ts";
 
@@ -37,5 +38,5 @@ export const checkerQueries = Task.make(
         }),
       ),
     ),
-  ),
+  ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

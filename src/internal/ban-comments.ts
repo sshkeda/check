@@ -5,7 +5,6 @@ import { isDirective } from "../shared/lint-rule-messages-and-patterns.ts";
 export const noComments = defineRule({
   meta: {
     type: "suggestion",
-    docs: { description: "Disallow comments in code." },
     messages: { comment: "comment in code" },
   },
   create(context) {

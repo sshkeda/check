@@ -5,6 +5,7 @@ import { inEachPackage, packageDirectoriesIn } from "../../../shared/check-each-
 import { ownedFilesAmong } from "../../../shared/list-owned-files.ts";
 import { listedPackageFiles } from "../../../shared/list-package-files.ts";
 import { quietViolations } from "../../../shared/print-failures-and-keep-detail-in-the-trace.ts";
+import { ProjectQueryCachesLive } from "../../../shared/provide-project-query-caches.ts";
 import {
   FORMATTED_PACKAGE_DIRECTORY,
   unformattedFilesAmong,
@@ -35,7 +36,7 @@ const formatterFiles = Task.make(
         .flatMap(({ directory, files }) => files.map((file) => path.join(directory, file)))
         .toSorted(),
     };
-  }).pipe(quietViolations("formatter-files")),
+  }).pipe(quietViolations("formatter-files"), Effect.provide(ProjectQueryCachesLive)),
 );
 
 const formatInputs = Task.make(
@@ -57,7 +58,7 @@ const unformattedFiles = Task.make(
       checkedFormatConfigIn(packageDirectory).pipe(quietViolations("bun-fmt")),
     ),
     Effect.flatMap(formatterFiles, ({ packageFiles }) => unformattedFilesAmong(packageFiles)),
-  ),
+  ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const formatting = Task.make(

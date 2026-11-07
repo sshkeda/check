@@ -12,6 +12,7 @@ import {
   TASK_NAMESPACE_EXPORT,
   TASK_PACKAGE,
   TASK_MAIN_MEMBER,
+  TASK_MAKE_MEMBER,
 } from "../../../../../shared/bans-each-permission-lifts.ts";
 import {
   CONCURRENT_TYPESCRIPT_REQUESTS,
@@ -29,6 +30,7 @@ const NO_MEMBERS = [] as const;
 const PACKAGE_ROOT = "";
 export const EFFECT_MODULE = "Effect";
 export const LAYER_MODULE = "Layer";
+export const STREAM_MODULE = "Stream";
 const MANAGED_RUNTIME = "ManagedRuntime";
 const RUNTIME_MODULE = "Runtime";
 const MAKE_RUN_MAIN = "makeRunMain";
@@ -92,7 +94,7 @@ const PROGRAM_STARTS = [
     isPackage: isTaskPackage,
     module: PACKAGE_ROOT,
     exports: [TASK_NAMESPACE_EXPORT],
-    members: [TASK_MAIN_MEMBER],
+    members: [TASK_MAIN_MEMBER, TASK_MAKE_MEMBER],
     returnedBySignature: DIRECT_CALLS,
   },
 ] as const;

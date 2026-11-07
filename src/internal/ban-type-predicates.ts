@@ -50,10 +50,6 @@ const isSchemaDeclarationCallback = (predicate: ESTree.TSTypePredicate, sourceCo
 export const noTypePredicates = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Let TypeScript narrow on checks it can see; a hand-written type predicate is a promise the compiler never checks, like a type assertion.",
-    },
     messages: {
       typePredicate: "`{{predicate}}` is an unchecked type predicate",
     },

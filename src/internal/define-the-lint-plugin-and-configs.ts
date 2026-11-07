@@ -43,7 +43,9 @@ import {
   CLOCK_PROPERTIES,
   noClockReadsAndSleeps,
 } from "./ban-reading-the-clock-and-sleeping-outside-effect.ts";
+import { noExistsRecovery } from "./ban-recovering-file-system-exists.ts";
 import { noRetiredWords } from "./ban-retired-words-in-names.ts";
+import { noInstantRetries } from "./ban-retries-without-a-wait.ts";
 import { noGlobScan } from "./ban-scanning-directories-with-bun-glob.ts";
 import { noShebang } from "./ban-shebang-lines.ts";
 import { globalRule } from "./ban-timer-globals-and-the-global-object.ts";
@@ -55,6 +57,7 @@ import { noVagueErrorNames } from "./ban-vague-error-class-names.ts";
 import { noVagueFileNames } from "./ban-vague-file-names.ts";
 import { permissionBanRule } from "./ban-what-a-file-is-not-granted.ts";
 import { noWhile } from "./ban-while-do-while-and-for-loops.ts";
+import { noSharedHolders } from "./ban-writing-captured-objects-inside-effect-callbacks.ts";
 import {
   noServiceDeclarations,
   noUnusedServiceGrants,
@@ -130,6 +133,7 @@ const NAMED_RULES = {
   "no-clock-reads-and-sleeps": noClockReadsAndSleeps,
   "no-unchecked-parsing": noUncheckedParsing,
   "no-schedules": noSchedules,
+  "no-instant-retries": noInstantRetries,
   "no-service-declarations": noServiceDeclarations,
   "no-unused-service-grants": noUnusedServiceGrants,
   "no-glob-scan": noGlobScan,
@@ -150,8 +154,10 @@ const NAMED_RULES = {
   "no-mutable-ref": noMutableRef,
   "no-while": noWhile,
   "no-shebang": noShebang,
+  "no-shared-holders": noSharedHolders,
   "no-uncalled-members": noUncalledMembers,
   "no-unnamed-fallbacks": noUnnamedFallbacks,
+  "no-exists-recovery": noExistsRecovery,
   "no-namespace-aliases": noNamespaceAliases(
     new Set([
       ...RESTRICTED_PROPERTIES.map(({ object }) => object),

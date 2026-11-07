@@ -6,10 +6,6 @@ const VAGUE_ERROR_NAME = /^(?:Failure|Error|Invalid|Unknown|Refused)+$/u;
 export const noVagueErrorNames = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Name a class that extends another after what went wrong, not only Failure, Error, Invalid, Unknown or Refused.",
-    },
     messages: {
       vague: "error class {{name}} has a vague name",
     },

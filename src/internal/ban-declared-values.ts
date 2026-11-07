@@ -29,10 +29,6 @@ const bindingNames = (declaration: ESTree.VariableDeclaration) =>
 export const noDeclaredValues = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Give every value and class field an implementation; anything declared with declare has a type nothing checks.",
-    },
     messages: {
       declaredValue: "{{name}} is declared without an implementation",
     },
@@ -56,7 +52,8 @@ export const noDeclaredValues = defineRule({
         }
       },
       PropertyDefinition(node) {
-        if (node.declare === true) {
+        const hasNoImplementation = node.declare === true || node.definite === true;
+        if (hasNoImplementation) {
           report(node, propertyName(node.key) ?? "a computed class field");
         }
       },

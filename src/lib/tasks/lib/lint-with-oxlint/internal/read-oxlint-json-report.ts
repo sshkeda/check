@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Order, Schema } from "effect";
 
 import { encodeJson } from "../../../shared/encode-compact-json.ts";
 import { decodedReport } from "../../../shared/run-tools-and-decode-their-reports.ts";
@@ -27,8 +27,23 @@ const OXLINT_REPORT = Schema.fromJsonString(
   }),
 );
 
+const labelOf = (reported: (typeof OXLINT_REPORT.Type)["diagnostics"][number]) =>
+  reported.labels.find(({ span }) => span.line !== null)?.span;
+
+const DIAGNOSTIC_ORDER = Order.mapInput(
+  Order.Tuple([Order.String, Order.Number, Order.Number, Order.String, Order.String]),
+  (reported: (typeof OXLINT_REPORT.Type)["diagnostics"][number]) =>
+    [
+      reported.filename,
+      labelOf(reported)?.line ?? 0,
+      labelOf(reported)?.column ?? 0,
+      reported.code ?? "",
+      reported.message,
+    ] as const,
+);
+
 const oxlintError = (reported: (typeof OXLINT_REPORT.Type)["diagnostics"][number]) => {
-  const label = reported.labels.find(({ span }) => span.line !== null)?.span;
+  const label = labelOf(reported);
   const location =
     label === undefined
       ? reported.filename
@@ -47,6 +62,7 @@ export const oxlintReport = (program: string, ...standardOutputs: readonly strin
       return {
         violations: diagnostics
           .filter((reported) => reported.severity !== OXLINT_WARNING)
+          .toSorted(DIAGNOSTIC_ORDER)
           .map((reported) => oxlintError(reported)),
         notes:
           warnings.length === 0

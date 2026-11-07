@@ -119,9 +119,6 @@ export const noNamespaceAliases = (globalObjects: ReadonlySet<string>) => {
   return defineRule({
     meta: {
       type: "problem",
-      docs: {
-        description: `Use an Effect module, a module or namespace a permission ban names members of, or one of the globals ${[...globalObjects].join(", ")}, only through a named member, so no alias, destructuring or spread hides a banned member from the rules that ban it.`,
-      },
       messages: {
         wholeNamespace:
           "{{name}} is used without naming a member, so the bans on its members can't see which one runs",

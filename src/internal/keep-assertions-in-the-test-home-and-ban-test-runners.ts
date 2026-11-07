@@ -50,9 +50,6 @@ const visitValueImports = (
 export const noAssertions = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description: `Keep assertions in ${TEST_HOME}; source code fails with named errors.`,
-    },
     messages: {
       assertion: `asserts with {{assertion}} outside ${TEST_HOME}`,
     },
@@ -80,9 +77,6 @@ export const noAssertions = defineRule({
 export const noTestRunners = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description: `Write tests as tasks in ${TEST_HOME} instead of with a test runner; only the assertions of ${BUN_TEST} may be imported, and a side-effect import of a test runner module is refused too.`,
-    },
     messages: {
       testRunner: "imports {{imported}} from {{source}}",
     },

@@ -7,6 +7,7 @@ import type { Schema } from "effect";
 import { findDeclaredUseViolations } from "../../src/lib/tasks/lib/check-uses-by-their-declarations/internal/find-declared-use-violations.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -74,7 +75,7 @@ export const keep = (whole: typeof WHOLE, entry: typeof ENTRY.Type) => [whole, e
       typeOnly("src/imported.ts:3", "IMPORTED"),
       typeOnly("src/whole.ts:4", "WHOLE"),
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const runtimeUsePasses = Task.make(
@@ -94,7 +95,7 @@ export const SCHEMAS = { TAG };
 export const show = (tag: typeof TAG.Type) => tag;`,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const effectApisThatTakeTheSchemaPass = Task.make(
@@ -143,7 +144,7 @@ export const port = Config.schema(PORT, "PORT");
 export const listen = (value: typeof PORT.Type) => value;`,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const compositionFollowsTheOuterSchema = Task.make(
@@ -174,7 +175,7 @@ export const show = (tree: typeof TREE.Type) => tree.forest;`,
       typeOnly("src/typed.ts:3", "ENTRY"),
       typeOnly("src/typed.ts:4", "LOGGED_ENTRY"),
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const schemaClassesFollowTheSameRule = Task.make(
@@ -207,7 +208,7 @@ export const show = (base: Base) => base.id;`,
       typeOnly("src/tagged.ts:3", "Tagged"),
       typeOnly("src/typed-error.ts:3", "TypedError"),
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyTypeReadSchemasAreCandidates = Task.make(
@@ -224,7 +225,7 @@ const BRANDED = BASE.pipe(Schema.brand("Branded"));
 export const keep = (branded: typeof BRANDED.Type) => branded;`,
       }),
     ).toEqual([typeOnly("src/based.ts:4", "BRANDED")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const renamedReferencesResolveToTheirSchema = Task.make(
@@ -260,7 +261,7 @@ export const decodeEquals = Schema.decodeUnknownSync(Equals);`,
 export const showTyped = (value: typeof Typed.Type) => value.log;`,
       }),
     ).toEqual([typeOnly("src/typed.ts:3", "TYPED")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const defaultExportsCountAsUses = Task.make(
@@ -282,7 +283,7 @@ export const side = (left: typeof LEFT.Type, right: typeof RIGHT.Type) => [left,
 export default Schema.Union([LEFT, RIGHT]);`,
       }),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const namespaceMemberReadsAreFollowed = Task.make(
@@ -301,7 +302,7 @@ export const decodeBarrel = Schema.decodeUnknownSync(barrel.RENAMED);`,
 export const show = (value: typeof typed.TYPED.Type) => value.id;`,
       }),
     ).toEqual([typeOnly("src/typed.ts:3", "TYPED")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 const WHOLE_MODULE_READS = [
@@ -345,7 +346,7 @@ export const modulesReadWholeKeepEveryExport = Task.make(
         typeOnly(`src/${file}.ts:5`, `HIDDEN_${name}`),
       ).toSorted(),
     );
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anImportOfATemplatePathWithoutExpressionsIsNamed = Task.make(
@@ -358,7 +359,7 @@ export const anImportOfATemplatePathWithoutExpressionsIsNamed = Task.make(
         "src/load.ts": "export const load = () => import(`./loaded.ts`);",
       }),
     ).toEqual([typeOnly("src/other.ts:3", "OTHER")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const exportedSchemasAreReportedWhateverLoadsThePackage = Task.make(
@@ -392,7 +393,7 @@ export const local = () => {
       typeOnly("src/index.ts:5", "LISTED"),
       typeOnly("src/index.ts:8", "PRIVATE"),
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesOutsideTheProjectDoNotKeepExports = Task.make(
@@ -410,5 +411,5 @@ export const decodeEntry = Schema.decodeUnknownSync(ENTRY);`,
         { include: ["src/**/*.ts"] },
       ),
     ).toEqual([typeOnly("src/entry.ts:3", "ENTRY"), typeOnly("src/typed.ts:3", "TYPED")]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

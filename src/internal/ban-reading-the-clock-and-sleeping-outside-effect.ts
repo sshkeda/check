@@ -1,7 +1,9 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree, SourceCode } from "@oxlint/plugins";
+import { Schema } from "effect";
 
 import { moduleSpecifiersOfGlobalObject } from "../shared/bans-each-permission-lifts.ts";
+import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
 import {
   effectModuleReference,
   effectOperation,
@@ -18,6 +20,7 @@ export const CLOCK_PROPERTIES = [
   { object: "Bun", property: "nanoseconds" },
   { object: "AbortSignal", property: "timeout" },
   { object: "Bun", property: "sleepSync" },
+  { object: "Temporal", property: "Now" },
 ] as const;
 
 const CLOCK_READS = new Set([
@@ -25,6 +28,8 @@ const CLOCK_READS = new Set([
   "DateTime.isFutureUnsafe",
   "DateTime.isPastUnsafe",
 ]);
+const CRON_STEPS = new Set(["Cron.next", "Cron.prev", "Cron.sequence"]);
+const ARGUMENTS_OF_A_CRON_STEP_FROM_A_TIME = 2;
 const DATE_FORMATS = new Set(["format", "formatToParts"]);
 export const DATE_TIME_FORMAT = "DateTimeFormat";
 export const TIMED_WAITS = new Set(["wait", "waitAsync"]);
@@ -55,6 +60,60 @@ const isDateTimeFormatter = (node: ESTree.Node, sourceCode: SourceCode) => {
   return isDateTimeFormatConstruction(initializer ?? node, sourceCode);
 };
 
+const CLOCK_SERVICE = "Clock.Clock";
+const CLOCK_CALLBACK_OPERATIONS = new Set(["Effect.clockWith", "Clock.clockWith"]);
+const CLOCK_SLEEP = "sleep";
+const CLOCK_SERVICE_SLEEPS = ["banned", "allowed"] as const;
+
+const CLOCK_OPTIONS = Schema.Struct({
+  clockServiceSleeps: Schema.optionalKey(Schema.Literals(CLOCK_SERVICE_SLEEPS)),
+});
+
+const isYieldedClockService = (node: ESTree.Node | null | undefined, sourceCode: SourceCode) =>
+  node?.type === "YieldExpression" &&
+  node.delegate &&
+  node.argument !== null &&
+  effectModuleReference(node.argument, sourceCode, "Clock") === CLOCK_SERVICE;
+
+const isClockCallbackParameter = (parameter: ESTree.Node, sourceCode: SourceCode) => {
+  const callback = parameter.parent;
+  const call = callback?.parent;
+  const isFirstParameterOfACallback =
+    (callback?.type === "ArrowFunctionExpression" || callback?.type === "FunctionExpression") &&
+    callback.params[0] === parameter &&
+    call?.type === "CallExpression" &&
+    call.arguments[0] === callback;
+  if (!isFirstParameterOfACallback) {
+    return false;
+  }
+  const operation =
+    effectModuleReference(call.callee, sourceCode, "Effect") ??
+    effectModuleReference(call.callee, sourceCode, "Clock");
+  return operation !== undefined && CLOCK_CALLBACK_OPERATIONS.has(operation);
+};
+
+const isClockService = (node: ESTree.Node, sourceCode: SourceCode) => {
+  const isTheClockService =
+    isYieldedClockService(node, sourceCode) || isClockCallbackParameter(node, sourceCode);
+  if (isTheClockService) {
+    return true;
+  }
+  const variable = resolvedVariable(node, sourceCode);
+  if (variable?.references.some((reference) => reference.isWrite() && !reference.init) === true) {
+    return false;
+  }
+  const definition = variable?.defs[0];
+  if (definition?.type === "Parameter") {
+    return isClockCallbackParameter(definition.name, sourceCode);
+  }
+  const declarator = definition?.node;
+  return (
+    declarator?.type === "VariableDeclarator" &&
+    declarator.id === definition?.name &&
+    isYieldedClockService(declarator.init, sourceCode)
+  );
+};
+
 const isPipeFunction = (node: ESTree.Node, sourceCode: SourceCode) => {
   const imported = importedExpression(node, sourceCode);
   return imported?.module.startsWith("effect") === true && imported.members.at(-1) === PIPE;
@@ -63,10 +122,6 @@ const isPipeFunction = (node: ESTree.Node, sourceCode: SourceCode) => {
 export const noClockReadsAndSleeps = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Read the current time through Effect Clock or DateTime, and wait on signals instead of sleeping.",
-    },
     messages: {
       dateCall: "calling the Date constructor is banned",
       currentDate: "new Date() reads the current time",
@@ -76,9 +131,12 @@ export const noClockReadsAndSleeps = defineRule({
       timedWait: "Atomics.{{method}} with a timeout sleeps",
       neverTimeout: "{{usage}} on Effect.never sleeps",
     },
+    schema: ruleOptionsJsonSchema(CLOCK_OPTIONS),
   },
   create(context) {
     const { sourceCode } = context;
+    const clockServiceSleeps =
+      decodeRuleOptions(CLOCK_OPTIONS, context.options)?.clockServiceSleeps ?? "banned";
     const isGlobalDate = (callee: ESTree.Node) => isGlobalReference(callee, sourceCode, "Date");
     const keepsWaiting = (operation: ESTree.Node) => {
       const operationName = effectOperation(
@@ -153,6 +211,14 @@ export const noClockReadsAndSleeps = defineRule({
           messageId: "restrictedProperty",
           data: { usage: `${restricted.object}.${restricted.property}` },
         });
+        return;
+      }
+      const sleepsThroughTheClockService =
+        clockServiceSleeps === "banned" &&
+        name === CLOCK_SLEEP &&
+        isClockService(receiver, sourceCode);
+      if (sleepsThroughTheClockService) {
+        context.report({ node, messageId: "restrictedProperty", data: { usage: "Clock.sleep" } });
       }
     };
 
@@ -190,6 +256,19 @@ export const noClockReadsAndSleeps = defineRule({
           timeout !== undefined && EFFECT_TIMEOUTS.has(timeout) && isTimeoutOnNever(node);
         if (isEffectTimeoutOnNever) {
           context.report({ node, messageId: "neverTimeout", data: { usage: `Effect.${timeout}` } });
+          return;
+        }
+        const cronStep = effectModuleReference(node.callee, sourceCode, "Cron");
+        const startTime = node.arguments[ARGUMENTS_OF_A_CRON_STEP_FROM_A_TIME - 1];
+        const hasNoStartTime =
+          startTime === undefined || isGlobalReference(startTime, sourceCode, "undefined");
+        const stepsFromTheCurrentTime =
+          cronStep !== undefined &&
+          CRON_STEPS.has(cronStep) &&
+          hasNoStartTime &&
+          node.arguments.every((argument) => argument.type !== "SpreadElement");
+        if (stepsFromTheCurrentTime) {
+          context.report({ node, messageId: "clockRead", data: { usage: cronStep } });
           return;
         }
         if (node.callee.type !== "MemberExpression") {
@@ -233,6 +312,11 @@ export const noClockReadsAndSleeps = defineRule({
       },
       AssignmentExpression(node) {
         reportDestructuredProperties(node.left, node.right);
+      },
+      ObjectPattern(node) {
+        if (isClockCallbackParameter(node, sourceCode)) {
+          reportDestructuredProperties(node, node);
+        }
       },
     };
   },

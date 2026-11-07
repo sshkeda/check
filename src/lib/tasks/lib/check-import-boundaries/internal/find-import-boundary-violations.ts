@@ -1,12 +1,8 @@
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import { parseSync } from "oxc-parser";
 
 import { fileNameOf, isWithin } from "../../../../../shared/match-file-names-and-path-prefixes.ts";
-import {
-  SCRIPTS_DIRECTORY,
-  SOURCE_DIRECTORY,
-  TEST_DIRECTORY,
-} from "../../../../../shared/test-home-directories.ts";
+import { TEST_DIRECTORY } from "../../../../../shared/test-home-directories.ts";
 import {
   isFileSpecifier,
   isScript,
@@ -16,7 +12,7 @@ import {
   repeatsSourceNeverImportsScripts,
   SOURCE_NEVER_IMPORTS_SCRIPTS,
 } from "../../../shared/classify-files-by-role.ts";
-import { lineNumberAt } from "../../../shared/count-the-line-of-an-offset.ts";
+import { lineNumbersIn } from "../../../shared/count-the-line-of-an-offset.ts";
 import {
   moduleRequestsIn,
   moduleUrlMisusesIn,
@@ -36,6 +32,7 @@ import {
 } from "../../../shared/query-the-typescript-project.ts";
 import { packageManifestObject } from "../../../shared/read-package-manifest-object.ts";
 import { resolveModuleRequest } from "../../../shared/resolve-module-requests.ts";
+import { importPolicyOf } from "./decide-what-each-home-may-import.ts";
 import { packageRequestBehindSubpathImport } from "./find-subpath-import-targets.ts";
 import { whatHidesTheImport } from "./find-what-hides-an-import.ts";
 import type { IMPORT_BOUNDARY_VIOLATION } from "./import-boundary-errors.ts";
@@ -201,192 +198,223 @@ export const findImportBoundaryViolations = (projectFile: string) =>
       isTypeChecked: boolean;
       isReportedByNoRequireImports: boolean;
     }[] = [];
-    const add = (found: typeof IMPORT_BOUNDARY_VIOLATION.Type) =>
+    const addViolation = (found: typeof IMPORT_BOUNDARY_VIOLATION.Type) =>
       violations.set(`${found.location} ${found.message}`, found);
-    for (const displayName of checkedFiles) {
-      const text = yield* fileSystem.readFileString(path.join(packageDirectory, displayName));
-      const parsed = parseSync(displayName, text);
-      const bans = boundaries.flatMap((boundary) =>
-        isWithin(displayName, boundary.path)
-          ? boundary.cannotImport
-              .filter((target) => !isWithin(displayName, target))
-              .map((target) => ({
-                target,
-                grantPath: boundary.path,
-                isBuiltIn: boundary === SOURCE_NEVER_IMPORTS_SCRIPTS,
-              }))
-          : [],
-      );
-      if (!isWithin(displayName, TEST_DIRECTORY)) {
-        const { misuses, directoryPaths } = moduleUrlMisusesIn(parsed);
-        for (const { start, ...misuse } of misuses) {
-          const location = `${displayName}:${lineNumberAt(text, start)}`;
-          add(
-            "callee" in misuse
-              ? new ModuleUrlPassedToFunction({ location, callee: misuse.callee })
-              : new ModuleUrlNotInline({ location, usage: misuse.usage }),
-          );
-        }
-        for (const { start, property } of directoryPaths) {
-          add(
-            new ModulePathFromDirectory({
-              location: `${displayName}:${lineNumberAt(text, start)}`,
-              property,
-            }),
-          );
-        }
-      }
-      const importingFile = path.join(packageDirectory, displayName);
-      const { requests, reportedByNoRequireImports } = moduleRequestsIn(parsed);
-      for (const request of requests) {
-        if (request.kind === "build") {
-          continue;
-        }
-        const resolvesAPackage = request.kind === "resolve" && !isFileSpecifier(request.specifier);
-        const isUrlToNonScript =
-          URL_REQUESTS.has(request.kind) && !isScript(request.specifier) && !resolvesAPackage;
-        if (isUrlToNonScript) {
-          continue;
-        }
-        const location = `${displayName}:${lineNumberAt(text, request.start)}`;
-        const isTypeChecked =
-          REQUESTS_BUN_CHECK_RESOLVES.has(request.kind) && typeCheckedFiles.has(displayName);
-        const specifierText = request.specifier;
-        const resolved = yield* resolveModuleRequest({
-          request: specifierText,
-          importingFile,
-          customConditions,
-          projectDirectory: packageDirectory,
-        });
-        if (resolved === undefined) {
-          if (isFileSpecifier(specifierText)) {
-            unresolved.push({
-              location,
-              specifier: specifierText,
-              missingPath: packagePathOf(
-                path,
-                packageDirectory,
-                path.resolve(path.dirname(importingFile), specifierText),
-              ),
-              isTypeChecked,
-              isReportedByNoRequireImports: reportedByNoRequireImports.has(request.start),
-            });
-          }
-          continue;
-        }
-        const written = withoutScriptExtension(
-          path.resolve(path.dirname(importingFile), specifierText),
+    const violationsIn = (displayName: string) =>
+      Effect.gen(function* () {
+        const found: (typeof IMPORT_BOUNDARY_VIOLATION.Type)[] = [];
+        const add = (violation: typeof IMPORT_BOUNDARY_VIOLATION.Type) => {
+          found.push(violation);
+        };
+        const unresolvedInFile = new Array<(typeof unresolved)[number]>();
+        const text = yield* fileSystem.readFileString(path.join(packageDirectory, displayName));
+        const parsed = parseSync(displayName, text);
+        const lineAt = lineNumbersIn(text);
+        const policy = importPolicyOf(displayName);
+        const bans = boundaries.flatMap((boundary) =>
+          isWithin(displayName, boundary.path)
+            ? boundary.cannotImport
+                .filter((target) => !isWithin(displayName, target))
+                .map((target) => ({
+                  target,
+                  grantPath: boundary.path,
+                  isBuiltIn: boundary === SOURCE_NEVER_IMPORTS_SCRIPTS,
+                }))
+            : [],
         );
-        const actual = withoutScriptExtension(resolved.file);
-        const importedFile = path.relative(packageDirectory, resolved.file);
-        const differsFromWrittenPathOnlyInCase =
-          !(isTypeChecked && includedByTheProject.has(importedFile)) &&
-          isFileSpecifier(specifierText) &&
-          !actual.startsWith(written) &&
-          actual.toLowerCase().startsWith(written.toLowerCase());
-        if (differsFromWrittenPathOnlyInCase) {
-          add(
-            new ImportCaseMismatch({
-              location,
-              specifier: specifierText,
-              importedFile,
-            }),
-          );
-        }
-        const isUrlLoad = request.kind === "url" || request.kind === "launch";
-        const { packageName, packageRoot } = resolved;
-        const requestedPackage = BARE_PACKAGE_NAME.exec(specifierText)?.[0];
-        const isDeclaredDependency =
-          requestedPackage !== undefined && dependencies.declared.has(requestedPackage);
-        const dependencyName = isDeclaredDependency ? requestedPackage : packageName;
-        const isDevOnlyPackageImportedBySource =
-          !isUrlLoad &&
-          isWithin(displayName, SOURCE_DIRECTORY) &&
-          dependencyName !== null &&
-          packageRoot !== packageDirectory &&
-          dependencies.devOnly.has(dependencyName);
-        if (isDevOnlyPackageImportedBySource) {
-          add(
-            new DevDependencyImported({
-              location,
-              specifier: specifierText,
-              packageName: dependencyName,
-            }),
-          );
-        }
-        const place = placeOf(resolved.file);
-        const packageRequest = yield* packageRequestBehindSubpathImport({
-          request: specifierText,
-          importingFile,
-          customConditions,
-          projectDirectory: packageDirectory,
-        });
-        const importedThroughPackage = importsPackageEntry(
-          packageRequest ?? specifierText,
-          resolved,
-        );
-        const importsFileOutsidePackage = "outside" in place && !importedThroughPackage;
-        if (importsFileOutsidePackage) {
-          add(
-            new ImportOutsidePackage({
-              location,
-              specifier: specifierText,
-              importedFile: resolved.file,
-            }),
-          );
-        }
-        if (!("packagePath" in place)) {
-          continue;
-        }
-        const importedPath = place.packagePath;
-        const isTestImport = isWithin(importedPath, TEST_DIRECTORY);
-        const isTestImportedOutsideScriptsAndTests =
-          isTestImport &&
-          !isWithin(displayName, SCRIPTS_DIRECTORY) &&
-          !isWithin(displayName, TEST_DIRECTORY);
-        if (isTestImportedOutsideScriptsAndTests) {
-          add(new TestImported({ location, importedPath }));
-        }
-        if (isUrlLoad) {
-          continue;
-        }
-        const crossedBans = bans.filter((candidate) => isWithin(importedPath, candidate.target));
-        for (const ban of crossedBans) {
-          add(
-            new CannotImportCrossed({
-              location,
-              importedPath,
-              grantPath: ban.grantPath,
-              target: ban.target,
-            }),
-          );
-        }
-        if (isTestImportedOutsideScriptsAndTests) {
-          continue;
-        }
-        const isTestImportingOutsideTests = isWithin(displayName, TEST_DIRECTORY) && !isTestImport;
-        const isExemptFromVisibilityCheck =
-          crossedBans.some((ban) => ban.isBuiltIn) ||
-          (importedThroughPackage && packageRoot !== packageDirectory) ||
-          fileNameOf(importedPath) === PACKAGE_MANIFEST_FILE ||
-          isTestImportingOutsideTests;
-        const isResolvedIntoAnotherPackage =
-          packageRoot !== null && packageRoot !== packageDirectory;
-        const hidden = isExemptFromVisibilityCheck
-          ? undefined
-          : visibilityViolationOf(
-              displayName,
-              importedPath,
-              moduleDirectories,
-              location,
-              isResolvedIntoAnotherPackage
-                ? packagePathOf(path, packageDirectory, packageRoot)
-                : undefined,
+        if (policy.checksModuleUrls) {
+          const { misuses, directoryPaths } = moduleUrlMisusesIn(parsed);
+          for (const { start, ...misuse } of misuses) {
+            const location = `${displayName}:${lineAt(start)}`;
+            add(
+              "callee" in misuse
+                ? new ModuleUrlPassedToFunction({ location, callee: misuse.callee })
+                : new ModuleUrlNotInline({ location, usage: misuse.usage }),
             );
-        if (hidden !== undefined) {
-          add(hidden);
+          }
+          for (const { start, property } of directoryPaths) {
+            add(
+              new ModulePathFromDirectory({
+                location: `${displayName}:${lineAt(start)}`,
+                property,
+              }),
+            );
+          }
         }
+        const importingFile = path.join(packageDirectory, displayName);
+        const { requests, reportedByNoRequireImports } = moduleRequestsIn(parsed);
+        for (const request of requests) {
+          if (request.kind === "build") {
+            continue;
+          }
+          const resolvesAPackage =
+            request.kind === "resolve" && !isFileSpecifier(request.specifier);
+          const isUrlToNonScript =
+            URL_REQUESTS.has(request.kind) && !isScript(request.specifier) && !resolvesAPackage;
+          if (isUrlToNonScript) {
+            continue;
+          }
+          const location = `${displayName}:${lineAt(request.start)}`;
+          const isTypeChecked =
+            REQUESTS_BUN_CHECK_RESOLVES.has(request.kind) && typeCheckedFiles.has(displayName);
+          const specifierText = request.specifier;
+          const resolved = yield* resolveModuleRequest({
+            request: specifierText,
+            importingFile,
+            customConditions,
+            projectDirectory: packageDirectory,
+          });
+          if (resolved === undefined) {
+            if (isFileSpecifier(specifierText)) {
+              unresolvedInFile.push({
+                location,
+                specifier: specifierText,
+                missingPath: packagePathOf(
+                  path,
+                  packageDirectory,
+                  path.resolve(path.dirname(importingFile), specifierText),
+                ),
+                isTypeChecked,
+                isReportedByNoRequireImports: reportedByNoRequireImports.has(request.start),
+              });
+            }
+            continue;
+          }
+          const written = withoutScriptExtension(
+            path.resolve(path.dirname(importingFile), specifierText),
+          );
+          const actual = withoutScriptExtension(resolved.file);
+          const importedFile = path.relative(packageDirectory, resolved.file);
+          const differsFromWrittenPathOnlyInCase =
+            !(isTypeChecked && includedByTheProject.has(importedFile)) &&
+            isFileSpecifier(specifierText) &&
+            !actual.startsWith(written) &&
+            actual.toLowerCase().startsWith(written.toLowerCase());
+          if (differsFromWrittenPathOnlyInCase) {
+            add(
+              new ImportCaseMismatch({
+                location,
+                specifier: specifierText,
+                importedFile,
+              }),
+            );
+          }
+          const isUrlLoad = request.kind === "url" || request.kind === "launch";
+          const { packageName, packageRoot } = resolved;
+          const requestedPackage = BARE_PACKAGE_NAME.exec(specifierText)?.[0];
+          const isDeclaredDependency =
+            requestedPackage !== undefined && dependencies.declared.has(requestedPackage);
+          const dependencyName = isDeclaredDependency ? requestedPackage : packageName;
+          const isDevOnlyPackageImportedBySource =
+            !isUrlLoad &&
+            !policy.mayImportDevDependencies &&
+            dependencyName !== null &&
+            packageRoot !== packageDirectory &&
+            dependencies.devOnly.has(dependencyName);
+          if (isDevOnlyPackageImportedBySource) {
+            add(
+              new DevDependencyImported({
+                location,
+                specifier: specifierText,
+                packageName: dependencyName,
+              }),
+            );
+          }
+          const place = placeOf(resolved.file);
+          const packageRequest = yield* packageRequestBehindSubpathImport({
+            request: specifierText,
+            importingFile,
+            customConditions,
+            projectDirectory: packageDirectory,
+          });
+          const importedThroughPackage = importsPackageEntry(
+            packageRequest ?? specifierText,
+            resolved,
+          );
+          const importsFileOutsidePackage = "outside" in place && !importedThroughPackage;
+          if (importsFileOutsidePackage) {
+            add(
+              new ImportOutsidePackage({
+                location,
+                specifier: specifierText,
+                importedFile: resolved.file,
+              }),
+            );
+          }
+          if (!("packagePath" in place)) {
+            continue;
+          }
+          const importedPath = place.packagePath;
+          const isRefusedTestImport =
+            isWithin(importedPath, TEST_DIRECTORY) && !policy.mayImportTests;
+          if (isRefusedTestImport) {
+            add(new TestImported({ location, importedPath }));
+          }
+          if (isUrlLoad) {
+            continue;
+          }
+          const crossedBans = bans.filter((candidate) => isWithin(importedPath, candidate.target));
+          for (const ban of crossedBans) {
+            add(
+              new CannotImportCrossed({
+                location,
+                importedPath,
+                grantPath: ban.grantPath,
+                target: ban.target,
+              }),
+            );
+          }
+          if (isRefusedTestImport) {
+            continue;
+          }
+          const isResolvedIntoAnotherPackage =
+            packageRoot !== null && packageRoot !== packageDirectory;
+          const isExemptFromVisibilityCheck =
+            crossedBans.some((ban) => ban.isBuiltIn) ||
+            (importedThroughPackage && packageRoot !== packageDirectory) ||
+            fileNameOf(importedPath) === PACKAGE_MANIFEST_FILE ||
+            policy.seesPastModuleBoundaries({
+              path: importedPath,
+              isInAnotherPackage: isResolvedIntoAnotherPackage,
+              moduleDirectories,
+            });
+          const hidden = isExemptFromVisibilityCheck
+            ? undefined
+            : visibilityViolationOf(
+                displayName,
+                importedPath,
+                moduleDirectories,
+                location,
+                isResolvedIntoAnotherPackage
+                  ? packagePathOf(path, packageDirectory, packageRoot)
+                  : undefined,
+              );
+          if (hidden !== undefined) {
+            add(hidden);
+          }
+        }
+        return { found, unresolvedInFile };
+      });
+    const scannedFiles = yield* Effect.forEach(
+      checkedFiles,
+      (displayName) =>
+        violationsIn(displayName).pipe(
+          Effect.map(Result.succeed),
+          Effect.catchTag("ModuleRequestUnresolvable", (unresolvable) =>
+            Effect.succeed(Result.fail(unresolvable)),
+          ),
+        ),
+      { concurrency: "unbounded" },
+    );
+    for (const scanned of scannedFiles) {
+      if (Result.isFailure(scanned)) {
+        return yield* scanned.failure;
       }
+      const { found, unresolvedInFile } = scanned.success;
+      for (const violation of found) {
+        addViolation(violation);
+      }
+      unresolved.push(...unresolvedInFile);
     }
     const ignored = new Set(
       yield* ignoredPackagePathsAmong(
@@ -404,9 +432,9 @@ export const findImportBoundaryViolations = (projectFile: string) =>
       const isReportedByTheTypeCheckOrNoRequireImports =
         isTypeChecked || isReportedByNoRequireImports;
       if (ignored.has(missingPath)) {
-        add(new ImportOfMissingIgnoredFile({ location, specifier, missingPath }));
+        addViolation(new ImportOfMissingIgnoredFile({ location, specifier, missingPath }));
       } else if (!isReportedByTheTypeCheckOrNoRequireImports) {
-        add(new ImportResolvesToNoFile({ location, specifier }));
+        addViolation(new ImportResolvesToNoFile({ location, specifier }));
       }
     }
     if (violations.size > 0) {

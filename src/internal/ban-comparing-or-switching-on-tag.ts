@@ -1,9 +1,16 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
-import { importedExpression } from "./resolve-what-an-expression-imports.ts";
+import {
+  importedExpression,
+  isGlobalReference,
+  memberName,
+  resolvedVariable,
+} from "./resolve-what-an-expression-imports.ts";
 
 const COMPARISONS: ReadonlySet<string> = new Set(["===", "!==", "==", "!="]);
+const SAME_VALUE = "is";
+const MEMBERSHIP = "includes";
 
 const isTagKey = (key: ESTree.Node, computed: boolean) =>
   computed
@@ -11,8 +18,10 @@ const isTagKey = (key: ESTree.Node, computed: boolean) =>
     : (key.type === "Identifier" && key.name === "_tag") ||
       (key.type === "Literal" && key.value === "_tag");
 
-const isTagRead = (node: ESTree.Node) =>
-  node.type === "MemberExpression" && isTagKey(node.property, node.computed);
+const isTagRead = (node: ESTree.Node): boolean =>
+  node.type === "ChainExpression"
+    ? isTagRead(node.expression)
+    : node.type === "MemberExpression" && isTagKey(node.property, node.computed);
 
 const memberOf = (node: ESTree.Node, owner: string) => {
   const isNamedMemberOfOwner =
@@ -52,10 +61,6 @@ const isPlatformSystemErrorOptions = (node: ESTree.Node, sourceCode: SourceCode)
 export const noManualTag = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Disallow hand-written `_tag` values, except the reason tag Effect's PlatformError.systemError takes.",
-    },
     messages: {
       construction: "`_tag` is written by hand",
     },
@@ -81,10 +86,25 @@ export const noManualTag = defineRule({
   },
 });
 
+const isDestructuredTag = (node: ESTree.Node, sourceCode: SourceCode) => {
+  const variable = resolvedVariable(node, sourceCode);
+  if (variable?.references.some((reference) => reference.isWrite() && !reference.init) === true) {
+    return false;
+  }
+  const binding = variable?.defs[0]?.name;
+  const value = binding?.parent.type === "AssignmentPattern" ? binding.parent : binding;
+  const property = value?.parent;
+  return (
+    property?.type === "Property" &&
+    property.value === value &&
+    property.parent.type === "ObjectPattern" &&
+    isTagKey(property.key, property.computed)
+  );
+};
+
 export const noTagBranching = defineRule({
   meta: {
     type: "problem",
-    docs: { description: "Disallow comparing or switching on `_tag`." },
     messages: {
       comparison: "`_tag` is compared",
       switch: "`_tag` is switched on",
@@ -95,18 +115,38 @@ export const noTagBranching = defineRule({
     const branch = (node: ESTree.Node, messageId: "comparison" | "switch") => {
       context.report({ node, messageId: insideEffectCatch(node) ? "catchTag" : messageId });
     };
+    const readsTag = (node: ESTree.Node) =>
+      isTagRead(node) || isDestructuredTag(node, context.sourceCode);
 
     return {
       BinaryExpression(node) {
         const comparesTag =
-          COMPARISONS.has(node.operator) && (isTagRead(node.left) || isTagRead(node.right));
+          COMPARISONS.has(node.operator) && (readsTag(node.left) || readsTag(node.right));
         if (comparesTag) {
           branch(node, "comparison");
         }
       },
       SwitchStatement(node) {
-        if (isTagRead(node.discriminant)) {
+        if (readsTag(node.discriminant)) {
           branch(node.discriminant, "switch");
+        }
+      },
+      CallExpression(node) {
+        const { callee } = node;
+        if (callee.type !== "MemberExpression") {
+          return;
+        }
+        const method = memberName(callee);
+        const [first, second] = node.arguments;
+        const isSameValueCheckOnTag =
+          method === SAME_VALUE &&
+          isGlobalReference(callee.object, context.sourceCode, "Object") &&
+          [first, second].some((argument) => argument !== undefined && readsTag(argument));
+        const isMembershipCheckOfTag =
+          method === MEMBERSHIP && first !== undefined && readsTag(first);
+        const comparesTag = isSameValueCheckOnTag || isMembershipCheckOfTag;
+        if (comparesTag) {
+          branch(node, "comparison");
         }
       },
     };

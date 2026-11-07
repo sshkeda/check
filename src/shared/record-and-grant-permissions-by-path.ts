@@ -6,10 +6,12 @@ import {
   GRANTABLE_BAN_NAMES,
   HANDLES_EVERY_FAILURE,
   PERMISSION_BANS,
+  READS_CONFIG,
   RULES_EACH_PERMISSION_LIFTS,
   SCRIPT,
   SHORT_NAMES,
   TRUSTS_UNVERIFIED_TYPES,
+  UNUSED_GRANT_REPORTED,
   WRITES_TO_THE_TERMINAL,
 } from "./bans-each-permission-lifts.ts";
 import { isWithin } from "./match-file-names-and-path-prefixes.ts";
@@ -26,6 +28,9 @@ export const STDIO_SERVICE_RULE = "no-stdio-service";
 export const FAILURES_AS_RESULTS_RULE = "no-failures-as-results";
 const UNNAMED_FALLBACKS_RULE = "no-unnamed-fallbacks";
 const SCHEDULES = "pollsWithADeadline";
+const TIMERS = "waitsOnTimers";
+const SLEEP_RULE = "no-sleep";
+const CLOCK_RULE = "no-clock-reads-and-sleeps";
 const GLOB_CHARACTERS = /[*?[\]{}]/u;
 const ROUTE_PARAMETER_SEGMENT = /^\[\[?(?:\.\.\.)?[A-Za-z0-9_-]+\]\]?$/u;
 
@@ -35,30 +40,14 @@ const isGlobPath = (path: string) =>
     .some((segment) => !ROUTE_PARAMETER_SEGMENT.test(segment) && GLOB_CHARACTERS.test(segment));
 const MARKDOWN_EXTENSIONS = [".md", ".markdown"] as const;
 
-const UNREASONED_PERMISSION_NAMES = [
+export const PERMISSION_NAMES = [
   ...GRANTABLE_BAN_NAMES,
   SHORT_NAMES,
   SCHEDULES,
+  TIMERS,
   DIRECTORY,
   PATCH,
   FILE_TYPE,
-] satisfies readonly (
-  | (typeof GRANTABLE_BAN_NAMES)[number]
-  | typeof DIRECTORY
-  | typeof FILE_TYPE
-  | typeof PATCH
-  | typeof SCHEDULES
-  | typeof SHORT_NAMES
-)[];
-
-const REASONED_PERMISSION_NAMES: ReadonlySet<string> = new Set([
-  TRUSTS_UNVERIFIED_TYPES,
-  HANDLES_EVERY_FAILURE,
-  GENERATED,
-]);
-
-export const PERMISSION_NAMES = [
-  ...UNREASONED_PERMISSION_NAMES,
   TRUSTS_UNVERIFIED_TYPES,
   HANDLES_EVERY_FAILURE,
   GENERATED,
@@ -77,8 +66,18 @@ export const permissionBanRuleId = (permission: keyof typeof PERMISSION_BANS) =>
 
 const GRANTED = ["error", { bans: BANS_NO_GRANT_LIFTS }] as const;
 
+const GRANTED_UNLESS_UNUSED = [
+  "error",
+  { bans: BANS_NO_GRANT_LIFTS, unusedGrant: UNUSED_GRANT_REPORTED },
+] as const;
+
 const permissionBanSeverityOnceGranted = (permission: keyof typeof PERMISSION_BANS) =>
   bansNoGrantLifts(permission).length > 0 ? GRANTED : "off";
+
+const severityOnceGranted = (permission: keyof typeof PERMISSION_BANS) =>
+  permission === READS_CONFIG
+    ? permissionBanSeverityOnceGranted(permission)
+    : GRANTED_UNLESS_UNUSED;
 
 const ruleSeverities = (
   severities: Readonly<
@@ -96,6 +95,12 @@ const rulesGrantedBy = (permission: (typeof PERMISSION_NAMES)[number]) => {
     return ruleSeverities({
       "sshkeda/no-schedules": ["error", { timedSchedules: "allowedWithDeadline" }],
       [`sshkeda/${TEST_TIMEOUTS_RULE}`]: "off",
+    } as const);
+  }
+  if (permission === TIMERS) {
+    return ruleSeverities({
+      [`sshkeda/${SLEEP_RULE}`]: "off",
+      [`sshkeda/${CLOCK_RULE}`]: ["error", { clockServiceSleeps: "allowed" }],
     } as const);
   }
   if (permission === WRITES_TO_THE_TERMINAL) {
@@ -126,7 +131,7 @@ const rulesGrantedBy = (permission: (typeof PERMISSION_NAMES)[number]) => {
     return ruleSeverities({});
   }
   return ruleSeverities({
-    [permissionBanRuleId(permission)]: permissionBanSeverityOnceGranted(permission),
+    [permissionBanRuleId(permission)]: severityOnceGranted(permission),
   } as const);
 };
 
@@ -176,45 +181,19 @@ const GRANT_PATH = Schema.String.check(
   ),
 );
 
-const PERMISSION = Schema.String.check(
-  Schema.makeFilter((name: string) => {
-    const retirement = RETIRED_PERMISSIONS.get(name);
-    return retirement === undefined || `${name} is retired: ${retirement}`;
-  }),
-  Schema.makeFilter(
-    (name: string) => !REASONED_PERMISSION_NAMES.has(name) || `grants ${name} without a reason`,
-  ),
-).pipe(Schema.decodeTo(Schema.Literals(UNREASONED_PERMISSION_NAMES)));
-
-const REASON = Schema.String.check(
-  Schema.makeFilter((reason: string) => reason.trim() !== "" || "is blank"),
-);
-
-const REASONED_PERMISSIONS = Schema.Struct({
-  [TRUSTS_UNVERIFIED_TYPES]: Schema.optionalKey(REASON),
-  [HANDLES_EVERY_FAILURE]: Schema.optionalKey(REASON),
-  [GENERATED]: Schema.optionalKey(REASON),
-})
-  .annotate({ messageUnexpectedKey: "is not a permission that takes a reason" })
-  .check(Schema.makeFilter((reasons) => Object.keys(reasons).length > 0 || "grants nothing"));
-
-const permissionNamesOf = (allow: readonly (typeof ALLOWED.Type)[number][]) =>
-  allow.flatMap((entry) =>
-    typeof entry === "string"
-      ? [entry]
-      : [
-          ...(entry.trustsUnverifiedTypes === undefined
-            ? []
-            : ([TRUSTS_UNVERIFIED_TYPES] as const)),
-          ...(entry.handlesEveryFailure === undefined ? [] : ([HANDLES_EVERY_FAILURE] as const)),
-          ...(entry.isGeneratedByATool === undefined ? [] : ([GENERATED] as const)),
-        ],
-  );
+const PERMISSION = Schema.String.annotate({ message: "is not a permission name" })
+  .check(
+    Schema.makeFilter((name: string) => {
+      const retirement = RETIRED_PERMISSIONS.get(name);
+      return retirement === undefined || `${name} is retired: ${retirement}`;
+    }),
+  )
+  .pipe(Schema.decodeTo(Schema.Literals(PERMISSION_NAMES)));
 
 const nonEmptyList = <Entry extends Schema.Top>(entry: Entry) =>
   Schema.Array(entry).check(Schema.isNonEmpty({ message: "is empty" }));
 
-const ALLOWED = nonEmptyList(Schema.Union([PERMISSION, REASONED_PERMISSIONS]));
+const ALLOWED = nonEmptyList(PERMISSION);
 
 const GRANT_FIELDS = {
   allow: Schema.optionalKey(ALLOWED),
@@ -237,14 +216,7 @@ const isString = Schema.is(Schema.String);
 const repeatedItems = (path: string, grant: typeof UNDECODED_GRANT.Type) =>
   Object.keys(GRANT_FIELDS).flatMap((key) => {
     const list = grant[key];
-    const names = isList(list)
-      ? list.flatMap((item) => {
-          if (isString(item)) {
-            return [item];
-          }
-          return isUndecodedGrant(item) ? Object.keys(item) : [];
-        })
-      : [];
+    const names = isList(list) ? list.filter((item) => isString(item)) : [];
     const repeated = names.filter((name, index) => names.indexOf(name) !== index);
     return Arrays.dedupe(repeated).map((name) => ({
       path: [path, key],
@@ -253,9 +225,11 @@ const repeatedItems = (path: string, grant: typeof UNDECODED_GRANT.Type) =>
   });
 
 const grantMismatches = (path: string, grant: typeof GRANT.Type): readonly Schema.FilterIssue[] => {
-  const allowed = permissionNamesOf(grant.allow ?? []);
+  const allowed = grant.allow ?? [];
   const grantsOnlyFileType =
-    allowed.every((permission) => permission === FILE_TYPE) && Object.keys(grant).length === 1;
+    allowed.length > 0 &&
+    allowed.every((permission) => permission === FILE_TYPE) &&
+    Object.keys(grant).length === 1;
   const grantsGenerated = allowed.includes(GENERATED);
   const grantsGeneratedWithOtherPermissions =
     grantsGenerated && (allowed.length !== 1 || Object.keys(grant).length !== 1);
@@ -327,6 +301,8 @@ const TEST_HOME_OVERRIDE = {
     "sshkeda/no-testing-helpers": "off",
     "sshkeda/no-assertions": "off",
     "sshkeda/no-schedules": "off",
+    "sshkeda/no-instant-retries": "off",
+    "sshkeda/no-shared-holders": "off",
     [`sshkeda/${TEST_TIMEOUTS_RULE}`]: "error",
   },
 } as const;
@@ -379,7 +355,7 @@ export const recordedGrantsOf = (permissionsByPath: unknown) => {
   }
   const grants = Object.entries(decoded.success).map(([path, grant]) => ({
     path,
-    allow: permissionNamesOf(grant.allow ?? []),
+    allow: grant.allow ?? [],
     services: grant.services ?? [],
     cannotImport: grant.cannotImport ?? [],
   }));

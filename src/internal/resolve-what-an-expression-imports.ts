@@ -16,20 +16,6 @@ const variableVisibleFrom = (scope: Scope, name: string): Variable | undefined =
 export const moduleExportName = (name: ESTree.ModuleExportName) =>
   name.type === "Identifier" ? name.name : name.value;
 
-export const enclosingFunction = (
-  node: ESTree.Node,
-): ESTree.ArrowFunctionExpression | ESTree.Function | undefined => {
-  const parent = node.parent;
-  if (!parent) {
-    return undefined;
-  }
-  const isFunction =
-    parent.type === "ArrowFunctionExpression" ||
-    parent.type === "FunctionExpression" ||
-    parent.type === "FunctionDeclaration";
-  return isFunction ? parent : enclosingFunction(parent);
-};
-
 export const resolvedVariable = (
   node: ESTree.Node,
   sourceCode: SourceCode,
@@ -56,6 +42,19 @@ export const memberName = (node: ESTree.MemberExpression) => {
   return isUncomputedIdentifierProperty ? node.property.name : staticKeyName(node.property);
 };
 
+export const rootOf = (node: ESTree.Node): ESTree.Node =>
+  node.type === "MemberExpression" ? rootOf(node.object) : node;
+
+export const typeNameParts = (name: ESTree.Node): readonly string[] => {
+  if (name.type === "TSQualifiedName") {
+    return [...typeNameParts(name.left), name.right.name];
+  }
+  return name.type === "Identifier" ? [name.name] : [];
+};
+
+export const typeNameRoot = (name: ESTree.Node): ESTree.Node =>
+  name.type === "TSQualifiedName" ? typeNameRoot(name.left) : name;
+
 const withMember = (
   imported: ReturnType<typeof importedExpression>,
   member: string | undefined,
@@ -73,6 +72,78 @@ export const unwrappedExpression = (node: ESTree.Node): ESTree.Node => {
     node.type === "TSTypeAssertion" ||
     node.type === "TSNonNullExpression";
   return isTypeScriptWrapper ? unwrappedExpression(node.expression) : node;
+};
+
+export const constantValue = (
+  node: ESTree.Node,
+  sourceCode: SourceCode,
+  seen: ReadonlySet<ESTree.Node> = new Set(),
+): ESTree.Node => {
+  const expression = unwrappedExpression(node);
+  const variable = resolvedVariable(expression, sourceCode);
+  const definitions = variable?.defs ?? [];
+  const declarator = definitions.length === 1 ? definitions[0]?.node : undefined;
+  const isUnchangedFunctionDeclaration =
+    declarator?.type === "FunctionDeclaration" &&
+    variable?.references.some((reference) => reference.isWrite() && !reference.init) === false;
+  if (isUnchangedFunctionDeclaration) {
+    return declarator;
+  }
+  const isConstantDeclarator =
+    declarator?.type === "VariableDeclarator" &&
+    declarator.id.type === "Identifier" &&
+    declarator.parent.type === "VariableDeclaration" &&
+    declarator.parent.kind === "const" &&
+    !seen.has(expression);
+  const value = isConstantDeclarator ? declarator.init : null;
+  return value === null
+    ? expression
+    : constantValue(value, sourceCode, new Set([...seen, expression]));
+};
+
+export const returnedExpression = (handler: ESTree.Node | undefined): ESTree.Node | undefined => {
+  const isFunction =
+    handler?.type === "ArrowFunctionExpression" ||
+    handler?.type === "FunctionExpression" ||
+    handler?.type === "FunctionDeclaration";
+  const body = isFunction ? handler.body : null;
+  if (body === null) {
+    return;
+  }
+  if (body.type !== "BlockStatement") {
+    return body;
+  }
+  const [statement] = body.body;
+  const isSoleReturn = body.body.length === 1 && statement?.type === "ReturnStatement";
+  const argument = isSoleReturn ? statement.argument : null;
+  return argument ?? undefined;
+};
+
+const PATTERN_TYPES: ReadonlySet<string> = new Set([
+  "ArrayPattern",
+  "AssignmentPattern",
+  "ObjectPattern",
+  "Property",
+  "RestElement",
+]);
+
+export const isAssignmentTarget = (node: ESTree.Node): boolean => {
+  const { parent } = node;
+  if (parent === null) {
+    return false;
+  }
+  const isLeftOfAnAssignmentOrLoop =
+    (parent.type === "AssignmentExpression" ||
+      parent.type === "ForOfStatement" ||
+      parent.type === "ForInStatement") &&
+    parent.left === node;
+  if (isLeftOfAnAssignmentOrLoop) {
+    return true;
+  }
+  const isDefaultValue = parent.type === "AssignmentPattern" && parent.right === node;
+  const isComputedKey = parent.type === "Property" && parent.value !== node;
+  const isInsideAPattern = PATTERN_TYPES.has(parent.type) && !isDefaultValue && !isComputedKey;
+  return isInsideAPattern && isAssignmentTarget(parent);
 };
 
 export const importedExpression = (
@@ -266,30 +337,46 @@ const LINE_BREAKS = /\r\n|[\n\r]/gu;
 
 const LINE_BREAK = String.raw`\n`;
 
-const onOneLine = (text: string) => text.replace(LINE_BREAKS, LINE_BREAK);
+export const textOnOneLine = (node: ESTree.Node, sourceCode: SourceCode) =>
+  sourceCode.getText(node).replace(LINE_BREAKS, LINE_BREAK);
+
+const rootOfStaticMembers = (node: ESTree.Node): ESTree.Node | undefined => {
+  if (node.type !== "MemberExpression") {
+    return node;
+  }
+  return memberName(node) === undefined ? undefined : rootOfStaticMembers(node.object);
+};
 
 export const importedBindingOf = (expression: ESTree.Node, sourceCode: SourceCode) => {
   const value = unwrappedExpression(expression);
-  const isMember = value.type === "MemberExpression";
-  const binding = isMember ? value.object : value;
-  if (binding.type !== "Identifier") {
+  const binding = rootOfStaticMembers(value);
+  if (binding?.type !== "Identifier") {
     return;
   }
   const imported = importedExpression(binding, sourceCode);
   if (imported === undefined) {
     return;
   }
-  if (!isMember) {
-    return { name: binding.name, member: undefined, module: imported.module };
-  }
-  return memberName(value) === undefined
-    ? undefined
-    : {
-        name: binding.name,
-        member: onOneLine(sourceCode.getText(value)),
-        module: imported.module,
-      };
+  return {
+    name: binding.name,
+    member: value === binding ? undefined : textOnOneLine(value, sourceCode),
+    module: imported.module,
+  };
 };
 
 export const isImportBinding = (node: ESTree.Node, sourceCode: SourceCode) =>
   resolvedVariable(node, sourceCode)?.defs[0]?.node.parent?.type === "ImportDeclaration";
+
+const PIPE = "pipe";
+
+export const isPipeFunction = (callee: ESTree.Node, sourceCode: SourceCode) => {
+  const imported = importedExpression(callee, sourceCode);
+  const path = imported?.members.join(".");
+  const isFromEffect =
+    imported?.module === "effect" && (path === PIPE || path === `Function.${PIPE}`);
+  const isFromFunction = imported?.module === "effect/Function" && path === PIPE;
+  return isFromEffect || isFromFunction;
+};
+
+export const isImportMeta = (node: ESTree.Node) =>
+  node.type === "MetaProperty" && node.meta.name === "import" && node.property.name === "meta";

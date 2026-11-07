@@ -1,6 +1,7 @@
 import { Task } from "@sshkeda/task";
 import { Effect, Path } from "effect";
 
+import { duplicateFunctions } from "../lib/detect-duplicate-functions/index.ts";
 import { layout } from "../lib/enforce-file-layout/index.ts";
 import { fileTypes } from "../lib/enforce-file-types/index.ts";
 import { formatting } from "../lib/format-with-bun-fmt/index.ts";
@@ -25,5 +26,6 @@ export const check: Task.Task<void> = Task.make(
     formatting,
     layout,
     fileTypes,
+    duplicateFunctions,
   ]).pipe(Effect.tapError(() => pointAtTheGuide)),
 );

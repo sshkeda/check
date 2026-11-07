@@ -9,6 +9,7 @@ import {
   ignoredPackagePathsAmong,
 } from "../../src/lib/tasks/shared/list-ignored-files-imported-by-source.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
@@ -158,7 +159,7 @@ export const importsRespectModulesAndInternalDirectories = Task.make(
         moduleInternals("apps/web/index.ts:4", "apps/api/server.ts", "apps/api"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const cannotImportAddsLimitsOnTopOfVisibility = Task.make(
@@ -180,7 +181,7 @@ export const cannotImportAddsLimitsOnTopOfVisibility = Task.make(
     expect(violations).toEqual([
       "src/index.ts:1: error CannotImportCrossed: imports src/store/store.ts, and src/index.ts cannot import src/store/store.ts",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const violationsOf = (tsconfigFile: string) =>
@@ -217,7 +218,7 @@ export const symlinkedCheckoutsKeepTheirBoundaries = Task.make(
     expect((yield* violationsOf(path.join(linked, "tsconfig.json"))).toSorted()).toEqual(
       REACH_VIOLATIONS,
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const relativeImportsLeavingThePackageAreRefused = Task.make(
@@ -257,7 +258,7 @@ export const relativeImportsLeavingThePackageAreRefused = Task.make(
     expect(yield* violationsOf(aliased.tsconfigFile)).toEqual([
       outside("src/index.ts:1", "@outside/outside.ts"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const packageImportsResolveThroughConditions = Task.make(
@@ -292,7 +293,7 @@ export const packageImportsResolveThroughConditions = Task.make(
       crossed(1, "packages/conditional/src/bun.ts"),
       crossed(IMPORTS_THROUGH_THE_DEVELOPMENT_CONDITION, "packages/conditional/src/development.ts"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const packageNamesReachOnlyPublicEntries = Task.make(
@@ -337,7 +338,7 @@ export const packageNamesReachOnlyPublicEntries = Task.make(
         moduleInternals("apps/web/index.ts:4", "apps/api/server.ts", "apps/api"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const subpathImportsReachPackagesThroughTheirTargets = Task.make(
@@ -372,7 +373,7 @@ export const subpathImportsReachPackagesThroughTheirTargets = Task.make(
     expect((yield* violationsOf(tsconfigFile)).toSorted()).toEqual([
       packageInternals("apps/web/index.ts:2", "packages/loose/src/deep.ts", "packages/loose"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesOutsideTheProgramRespectBoundaries = Task.make(
@@ -403,7 +404,7 @@ export const filesOutsideTheProgramRespectBoundaries = Task.make(
         moduleInternals("tools/generate.ts:1", "src/tasks/runner.ts", "src/tasks"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const selfReferencesAreInternalImports = Task.make(
@@ -430,7 +431,7 @@ export const selfReferencesAreInternalImports = Task.make(
     expect(violations).toEqual([
       moduleInternals("src/reader.ts:1", "src/feature/hidden.ts", "src/feature"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const everyLoaderRespectsBoundaries = Task.make(
@@ -470,7 +471,7 @@ export const everyLoaderRespectsBoundaries = Task.make(
         ),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const symlinkedDirectoriesAreCheckedOnce = Task.make(
@@ -500,7 +501,7 @@ export const symlinkedDirectoriesAreCheckedOnce = Task.make(
     expect(violations).toEqual([
       moduleInternals("src/reader.ts:1", "src/worker/hidden.ts", "src/worker"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const caseOnlyMismatchesAreNamed = Task.make(
@@ -535,7 +536,7 @@ export const caseOnlyMismatchesAreNamed = Task.make(
         ? "src/reader.ts:4: error ImportCaseMismatch: imports ./Feature/index.ts, which differs only in letter case from src/feature/index.ts"
         : "src/reader.ts:4: error ImportResolvesToNoFile: imports ./Feature/index.ts, which resolves to no file",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const missingIgnoredFilesAreNamed = Task.make(
@@ -560,7 +561,7 @@ export const missingIgnoredFilesAreNamed = Task.make(
       "src/other.ts:3: error ImportResolvesToNoFile: imports ./missing.ts, which resolves to no file",
       "src/page.ts:1: error ImportOfMissingIgnoredFile: imports ../.generated/page.txt, but .generated/page.txt does not exist and is gitignored",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesOutsideTheProjectStillReportBrokenImports = Task.make(
@@ -623,7 +624,7 @@ export const filesOutsideTheProjectStillReportBrokenImports = Task.make(
       "tools/orphan.ts:2: error ImportResolvesToNoFile: imports ./absent.ts, which resolves to no file",
       "tools/orphan.ts:3: error ImportResolvesToNoFile: imports ./missing.ts, which resolves to no file",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const programFilesImportingExcludedFilesInTheWrongCaseAreReported = Task.make(
@@ -658,7 +659,7 @@ export const programFilesImportingExcludedFilesInTheWrongCaseAreReported = Task.
           ]
         : [],
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const ignoredPathsAreListedVerbatim = Task.make(
@@ -702,7 +703,7 @@ export const ignoredDirectoriesNamedByUrlAreSkipped = Task.make(
         'import built from "../built.txt";\nexport const DIRECTORY = new URL("../generated", import.meta.url);\nexport const BUILT = built;\n',
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt"]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const theNewUrlOfThePackageRootDoesNotBreakListing = Task.make(
@@ -716,7 +717,7 @@ export const theNewUrlOfThePackageRootDoesNotBreakListing = Task.make(
         'import built from "../built.txt";\nexport const ROOT = new URL("../", import.meta.url);\nexport const BUILT = built;\n',
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt"]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const noIgnoredImportedPathListsNothing = Task.make(
@@ -729,7 +730,40 @@ export const noIgnoredImportedPathListsNothing = Task.make(
       "src/page.ts": 'import { KEPT } from "../kept.ts";\nexport const VALUE = KEPT;\n',
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const sourceFilesAreScannedForIgnoredImportsTogether = Task.make(
+  "listing the ignored files a package imports reads its source files at the same time instead of one after another",
+  Effect.gen(function* () {
+    const { tsconfigFile } = yield* makeProject({
+      "package.json": '{ "name": "visibility", "type": "module" }\n',
+      ".gitignore": "node_modules\nbuilt.txt\n",
+      "built.txt": "built\n",
+      "src/first.ts": importing("../built.txt"),
+      "src/second.ts": importing("../built.txt"),
+    });
+    const fileSystem = yield* FileSystem.FileSystem;
+    const sourceReads = { reading: 0, mostReadingAtOnce: 0 };
+    const readFileString: typeof fileSystem.readFileString = (file, encoding) =>
+      file.endsWith(".ts")
+        ? Effect.gen(function* () {
+            sourceReads.reading += 1;
+            sourceReads.mostReadingAtOnce = Math.max(
+              sourceReads.mostReadingAtOnce,
+              sourceReads.reading,
+            );
+            yield* Effect.yieldNow;
+            return yield* fileSystem.readFileString(file, encoding);
+          }).pipe(Effect.ensuring(Effect.sync(() => (sourceReads.reading -= 1))))
+        : fileSystem.readFileString(file, encoding);
+    expect(
+      yield* ignoredFilesImportedIn(tsconfigFile).pipe(
+        Effect.provideService(FileSystem.FileSystem, { ...fileSystem, readFileString }),
+      ),
+    ).toEqual(["built.txt"]);
+    expect(sourceReads.mostReadingAtOnce).toBeGreaterThan(1);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const queriesAndFragmentsNameNoPartOfTheFile = Task.make(
@@ -752,7 +786,7 @@ export const queriesAndFragmentsNameNoPartOfTheFile = Task.make(
       ].join("\n"),
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt", "generated.txt"]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const importsReadAQueryButNoFragment = Task.make(
@@ -773,7 +807,7 @@ export const importsReadAQueryButNoFragment = Task.make(
       "src/reader.ts:1: error ModuleInternalsImported: imports src/ui/notes.txt, inside module src/ui/, from outside it",
       "src/sharp-reader.ts:1: error ModuleInternalsImported: imports src/ui/c#.ts, inside module src/ui/, from outside it",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const queriedImportsAreCheckedAsTheirFiles = Task.make(
@@ -830,7 +864,7 @@ export const queriedImportsAreCheckedAsTheirFiles = Task.make(
       ].toSorted(),
     );
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt"]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const resolvedSpecifiersFollowTheRealFiles = Task.make(
@@ -865,7 +899,7 @@ export const resolvedSpecifiersFollowTheRealFiles = Task.make(
         "src/reader.ts:1: error ModuleInternalsImported: imports src/ui/hidden.ts, inside module src/ui/, from outside it",
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const internalDirectoryImportsNameTheOutermostHiddenDirectory = Task.make(
@@ -898,7 +932,7 @@ export const internalDirectoryImportsNameTheOutermostHiddenDirectory = Task.make
     expect(violations).toContain(
       internalDirectory("src/reader.ts:1", "parts/gamma/deep/three.ts", "parts/gamma"),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const privateCode = (location: string, importedPath: string, module: string) =>
@@ -938,11 +972,11 @@ export const internalDirectoriesArePrivateToTheirModule = Task.make(
         ),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const hiddenImportsStateOnlyWhatHidesThem = Task.make(
-  "a hidden import states only the import and the module or internal/ that hides it, never where a file belongs: a script importing an index or a file deep in a source module, and a Worker started loose in a module or a loose file importing that module's internal/",
+  "a hidden import states only the import and the module or internal/ that hides it, never where a file belongs: a script importing a file deep in a source module, and a Worker started loose in a module or a loose file importing that module's internal/",
   Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
@@ -977,15 +1011,56 @@ export const hiddenImportsStateOnlyWhatHidesThem = Task.make(
     );
     expect((yield* violationsOf(tsconfigFile)).toSorted()).toEqual(
       [
-        moduleInternals("scripts/ci.ts:2", "src/a/index.ts", "src"),
-        moduleInternals("scripts/ci.ts:3", "src/b/c/index.ts", "src"),
         moduleInternals("scripts/shared/tool.ts:1", "src/a/x.ts", "src"),
         moduleInternals("scripts/shared/tool.ts:2", "src/b/only.ts", "src"),
         privateCode("src/a/work.ts:1", "src/a/internal/helper.ts", "src/a"),
         privateCode("src/a/loose.ts:1", "src/a/internal/kept.ts", "src/a"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const scriptsImportEverySourceModuleIndex = Task.make(
+  "a file in scripts/, at any depth, imports the index.ts or index.tsx of any module in src/, child modules in lib/ included, while a loose or internal/ file of a module and an index in a shared/ stay hidden from it, and a file outside scripts/ and tests/ still imports only src/index.ts",
+  Effect.gen(function* () {
+    const { tsconfigFile } = yield* makeProject(
+      {
+        "package.json": '{ "name": "scripted", "type": "module", "main": "./src/index.ts" }\n',
+        "src/index.ts": imports(["./lib/api/index.ts", "./lib/thread/index.tsx"]),
+        "src/lib/api/index.ts": imports(["./internal/tier.ts", "./lib/deep/index.ts"]),
+        "src/lib/api/internal/tier.ts": VALUE,
+        "src/lib/api/loose.ts": VALUE,
+        "src/lib/api/lib/deep/index.ts": VALUE,
+        "src/lib/thread/index.tsx": VALUE,
+        "src/shared/index.ts": VALUE,
+        "scripts/run.ts": imports([
+          "../src/index.ts",
+          "../src/lib/api/index.ts",
+          "../src/lib/thread/index.tsx",
+          "../src/lib/api/lib/deep/index.ts",
+          "../src/lib/api/loose.ts",
+          "../src/lib/api/internal/tier.ts",
+          "../src/shared/index.ts",
+        ]),
+        "scripts/internal/list-users.ts": imports([
+          "../../src/lib/api/index.ts",
+          "../../src/lib/api/loose.ts",
+        ]),
+        "examples/demo.ts": imports(["../src/index.ts", "../src/lib/api/index.ts"]),
+      },
+      "lintConfig({})",
+      PROJECT_FIELDS,
+    );
+    expect((yield* violationsOf(tsconfigFile)).toSorted()).toEqual(
+      [
+        moduleInternals("scripts/run.ts:5", "src/lib/api/loose.ts", "src"),
+        moduleInternals("scripts/run.ts:6", "src/lib/api/internal/tier.ts", "src"),
+        moduleInternals("scripts/run.ts:7", "src/shared/index.ts", "src"),
+        moduleInternals("scripts/internal/list-users.ts:2", "src/lib/api/loose.ts", "src"),
+        moduleInternals("examples/demo.ts:2", "src/lib/api/index.ts", "src"),
+      ].toSorted(),
+    );
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const directoriesTheLayoutCheckReportsAddNoImportErrors = Task.make(
@@ -1011,7 +1086,7 @@ export const directoriesTheLayoutCheckReportsAddNoImportErrors = Task.make(
     expect((yield* violationsOf(tsconfigFile)).toSorted()).toEqual([
       moduleInternals("src/b/index.ts:2", "src/a/internal/sub/deep.ts", "src/a"),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anInternalOfNoModuleIsPrivateToNothing = Task.make(
@@ -1027,7 +1102,7 @@ export const anInternalOfNoModuleIsPrivateToNothing = Task.make(
       PROJECT_FIELDS,
     );
     expect(yield* violationsOf(tsconfigFile)).toEqual([]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
@@ -1058,7 +1133,7 @@ export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
         privateCode("src/a/part/index.ts:1", "src/a/internal/sub/index.ts", "src/a"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyANamedPackageJsonMakesAPackage = Task.make(
@@ -1095,7 +1170,7 @@ export const onlyANamedPackageJsonMakesAPackage = Task.make(
         packageInternals("src/p/index.ts:1", "src/p/internal/x.ts", "src/p/internal"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aMalformedPackageJsonFailsTheCheck = Task.make(
@@ -1123,7 +1198,7 @@ export const aMalformedPackageJsonFailsTheCheck = Task.make(
         path.join(directory, "src/n/shared/package.json"),
       ]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const modulesInLibraryDirectoriesKeepTheirBoundaries = Task.make(
@@ -1170,7 +1245,7 @@ export const modulesInLibraryDirectoriesKeepTheirBoundaries = Task.make(
         ),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const testsAreAModuleLikeSource = Task.make(
@@ -1208,5 +1283,5 @@ export const testsAreAModuleLikeSource = Task.make(
         privateCode("tests/lib/unit/internal/unit.ts:2", "tests/internal/passes.ts", "tests"),
       ].toSorted(),
     );
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

@@ -5,6 +5,7 @@ import { Effect } from "effect";
 
 import { findErrorMappingsToDone } from "../../src/lib/tasks/lib/refuse-error-mappings-that-end-streams/internal/find-error-mappings-to-done.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
@@ -47,5 +48,29 @@ export const errorMappingsToDoneAreRefused = Task.make(
       { location: "d.ts:2", operation: "Stream.mapError" },
       { location: "e.ts:2", operation: "Effect.mapBoth" },
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
+);
+
+const TAGGED_FAILURE = `import { Schema } from "effect";\nclass LineUnreadable extends Schema.TaggedError<LineUnreadable>()("LineUnreadable", {}) {}\nconst failing = Stream.fail(new LineUnreadable());\n`;
+
+export const recoveriesThatFailWithDoneAreRefused = Task.make(
+  "an Effect or Stream recovery whose handler can fail with Cause.Done is refused like an error mapping to it, a catchTags handler or a data-first call included, and recoveries to ordinary failures or values pass",
+  Effect.gen(function* () {
+    expect(
+      yield* violationsOf({
+        "a.ts": `${IMPORTS}${TAGGED_FAILURE}export const ended = failing.pipe(Stream.catchTag("LineUnreadable", () => Stream.fail(Cause.Done())));\n`,
+        "b.ts": `${IMPORTS}${TAGGED_FAILURE}export const ended = Stream.catchTag(failing, "LineUnreadable", () => Stream.fail(Cause.Done()));\n`,
+        "c.ts": `${IMPORTS}${TAGGED_FAILURE}export const ended = Stream.fromEffectRepeat(Effect.fail(new LineUnreadable()).pipe(Effect.catchTag("LineUnreadable", () => Effect.fail(Cause.Done()))));\n`,
+        "d.ts": `${IMPORTS}${TAGGED_FAILURE}export const ended = Stream.fromEffectRepeat(Effect.fail(new LineUnreadable()).pipe(Effect.catchTags({ LineUnreadable: () => Effect.fail(Cause.Done()) })));\n`,
+        "e.ts": `${IMPORTS}${TAGGED_FAILURE}export const ended = failing.pipe(Stream.catch(() => Stream.fail(Cause.Done())));\n`,
+        "f.ts": `${IMPORTS}${TAGGED_FAILURE}export const recovered = failing.pipe(Stream.catchTag("LineUnreadable", () => Stream.empty));\nexport const failed = Effect.fail(new LineUnreadable()).pipe(Effect.catch(() => Effect.fail("failure")));\n`,
+      }),
+    ).toEqual([
+      { location: "a.ts:5", operation: "Stream.catchTag" },
+      { location: "b.ts:5", operation: "Stream.catchTag" },
+      { location: "c.ts:5", operation: "Effect.catchTag" },
+      { location: "d.ts:5", operation: "Effect.catchTags" },
+      { location: "e.ts:5", operation: "Stream.catch" },
+    ]);
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

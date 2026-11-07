@@ -5,6 +5,7 @@ import { Effect, FileSystem, Path } from "effect";
 
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import {
   programFiles,
   openTypeScriptProjects,
@@ -15,6 +16,7 @@ import {
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
+import { oxlintBinary } from "../shared/oxlint-binary.ts";
 import { runTaskFile } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
@@ -100,7 +102,7 @@ export const programFilesFollowEveryImport = Task.make(
       "oxlint.config.ts",
       "referenced/referenced.ts",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const typedChecksReadReferencedProjectFiles = Task.make(
@@ -119,7 +121,7 @@ export const typedChecksReadReferencedProjectFiles = Task.make(
       "oxlint.config.ts",
       "referenced/referenced.ts",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const libraryFilesNeitherListedNorOutsideTheProject = Task.make(
@@ -134,7 +136,7 @@ export const libraryFilesNeitherListedNorOutsideTheProject = Task.make(
       },
     );
     expect(yield* programFiles(tsconfigFile)).toEqual(["main.ts"]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aProjectInsideANodeModulesDirectoryStillListsItsOwnFiles = Task.make(
@@ -160,7 +162,7 @@ export const aProjectInsideANodeModulesDirectoryStillListsItsOwnFiles = Task.mak
         .flatMap(({ sourceFiles }) => sourceFiles.map(({ displayName }) => displayName))
         .toSorted(),
     ).toEqual(["main.ts", "oxlint.config.ts"]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const projectCompilingOnlyOutsideItsDirectoryFailsLoudly = Task.make(
@@ -185,7 +187,7 @@ export const projectCompilingOnlyOutsideItsDirectoryFailsLoudly = Task.make(
     expect(failure._tag).toBe("ProgramFilesOutsideProject");
     expect(failure.message).toContain(path.join(directory, "main.ts"));
     expect(failure.message).not.toContain("node_modules");
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const referencedGitignoredFilesAreChecked = Task.make(
@@ -339,7 +341,7 @@ export const generatedSourceTheTypeCheckSkipsFails = Task.make(
   Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* projectCompilingSomeLintedFiles(
       { skipLibCheck: true },
-      'lintConfig({ "outside.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "script.js": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "globals.d.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] }, "styles.d.css.ts": { allow: [{ isGeneratedByATool: "written by a code generator" }] } })',
+      'lintConfig({ "outside.ts": { allow: ["isGeneratedByATool"] }, "script.js": { allow: ["isGeneratedByATool"] }, "globals.d.ts": { allow: ["isGeneratedByATool"] }, "styles.d.css.ts": { allow: ["isGeneratedByATool"] } })',
     );
     const printed = yield* failedTaskOutput(
       directory,
@@ -430,6 +432,7 @@ export const aDeclarationFileOneProjectChecksPasses = Task.make(
         "server/tsconfig.json": yield* encodeJson({
           compilerOptions: {
             composite: true,
+            emitDeclarationOnly: true,
             skipLibCheck: true,
             types: [],
             ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
@@ -440,6 +443,7 @@ export const aDeclarationFileOneProjectChecksPasses = Task.make(
         "web/tsconfig.json": yield* encodeJson({
           compilerOptions: {
             composite: true,
+            emitDeclarationOnly: true,
             types: [],
             ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           },
@@ -722,5 +726,43 @@ export const aFileListLongerThanOneCommandTakesIsLintedInRuns = Task.make(
     const linted = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
     expect(linted).toContain(`${files[0]}:1:30: error sshkeda(no-command-spawn)`);
     expect(linted).toContain(`${files.at(-1)}:1:30: error sshkeda(no-command-spawn)`);
+  }).pipe(Effect.scoped),
+);
+
+const TYPE_AWARE_ERROR_COUNT = 1000;
+const PADDING_BYTES_PER_ERROR = 1000;
+const MOST_BYTES_OXLINT_MAY_HOLD = 536_870_912;
+const PEAK_MEMORY_OF_OXLINT = `const run = Bun.spawnSync([process.execPath, ...process.argv.slice(1)], { stdout: "ignore", stderr: "ignore" });
+console.log(run.resourceUsage.maxRSS);`;
+
+export const aLargeFileWithManyTypeAwareErrorsLintsInBoundedMemory = Task.make(
+  "oxlint lints a 1 MB file with a thousand type-aware errors without holding a copy of the file for each error",
+  Effect.gen(function* () {
+    const padding = "x".repeat(PADDING_BYTES_PER_ERROR);
+    const { directory } = yield* makeProject({
+      "generated.ts": [
+        "declare const value: any;",
+        ...Array.from(
+          { length: TYPE_AWARE_ERROR_COUNT },
+          (_unused, index) => `export const item${index} = [value.item${index}, "${padding}"];`,
+        ),
+        "",
+      ].join("\n"),
+    });
+    const peakBytes = yield* Task.exec(
+      "bun",
+      [
+        "--eval",
+        PEAK_MEMORY_OF_OXLINT,
+        yield* oxlintBinary,
+        "--config",
+        "oxlint.config.ts",
+        "--format",
+        "json",
+        "generated.ts",
+      ],
+      { cwd: directory },
+    );
+    expect(Number(peakBytes)).toBeLessThan(MOST_BYTES_OXLINT_MAY_HOLD);
   }).pipe(Effect.scoped),
 );

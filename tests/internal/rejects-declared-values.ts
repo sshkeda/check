@@ -25,7 +25,7 @@ const DECLARED_VALUES = [
 ] as const;
 
 export const declaredValuesAreRefused = Task.make(
-  "no-declared-values refuses a const, let, var, function, class or class field declared with declare or inside a declare global, module or namespace block, and every value in a declaration file, while implemented values and fields, overload-free functions and type-only declarations are left alone",
+  "no-declared-values refuses a const, let, var, function, class or class field declared with declare, a class field asserted with !, or anything inside a declare global, module or namespace block, and every value in a declaration file, while implemented values and fields, overload-free functions and type-only declarations are left alone",
   ruleTest("no-declared-values", {
     valid: [
       "export const PORT = 80;",
@@ -46,6 +46,10 @@ export const declaredValuesAreRefused = Task.make(
       {
         code: "export class Served<Success> { declare private readonly servedValue: Success; }",
         errors: [{ message: "servedValue is declared without an implementation" }],
+      },
+      {
+        code: "export class Store { public readonly size!: number; }",
+        errors: [{ message: "size is declared without an implementation" }],
       },
       {
         code: "export const PORT: 80;",

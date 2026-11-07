@@ -4,7 +4,7 @@ Check sends your AI slop code back to the kitchen!
 
 Check holds your TypeScript code to a strict standard built around Effect and Bun, so the code stays type-safe, observable and predictable.
 
-It runs about 310 lint rules, 62 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
+It runs about 308 lint rules, 65 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
 
 No comment or setting turns a rule off everywhere. A small set of rules was picked to allow an override, and you grant each one to a single file in `oxlint.config.ts`. See [Grant a permission](docs/how-to-make-check-pass.md#grant-a-permission).
 
@@ -47,8 +47,8 @@ Here's what Check prints when it runs on that code:
 [oxlint] error ToolExited: oxlint exited with code 1
 [typed-checks] error SettledTasksFailed: 2 of 6 tasks failed: oxlint, effect-tsgo
 [check] read node_modules/@sshkeda/check/docs/how-to-make-check-pass.md before you change the code
-[check] error SettledTasksFailed: 1 of 6 tasks failed: typed-checks
-failed: effect-tsgo, oxlint (2 of 16 tasks), 1.0s
+[check] error SettledTasksFailed: 1 of 7 tasks failed: typed-checks
+failed: effect-tsgo, oxlint (2 of 17 tasks), 1.0s
 ```
 
 Here's what each error catches:
@@ -88,7 +88,7 @@ Check passes.
 - **Modules with `internal/`, `shared/` and `lib/`.** Each module exposes its public code in `index.ts`, keeps private code in `internal/`, which only that module may import, puts code its parts share in `shared/` and holds its child modules in `lib/`. Code stays easy to organize and hard to tangle.
 - **No abbreviations.** `imABigFanWhenVariablesAreLongBecauseThenItsEasierToUnderstandWhatTheCodeDoes`. Full words read the same to every person and every agent.
 - **No unchecked data.** JSON and other input pass through a Schema before the code trusts them, because a type assertion or a hand-written type guard proves nothing.
-- **No dead exports.** Check reports any export that nothing uses, or that only tests use, so unused code doesn't pile up.
+- **No dead exports.** Check reports any export that nothing uses, or that only tests use, so unused code doesn't pile up. It also reports an export in `src/` that only tests and scripts use, so code that tests or deploys your app lives in `tests/` or `scripts/`. A script still counts as a user of what `src/index.ts` exports, such as your app's entry point, and of a file it builds.
 - **Effect in place of Node's built-ins.** File, path and process work goes through Effect, so its errors stay typed.
 - **Tests are tasks.** Every test is a Task task in `tests/`, never a Vitest, Jest or `bun:test` suite. Tests run in parallel and clean up after themselves.
 - **Each service in its own layer.** Services are declared only in files you grant, which keeps their wiring in one place.
@@ -122,6 +122,7 @@ Check needs Bun 1.4.4 or newer and a Git repository.
    "allowUnreachableCode": false,
    "allowUnusedLabels": false,
    "allowImportingTsExtensions": true,
+   "noEmit": true,
    "types": ["bun"]
    ```
 

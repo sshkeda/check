@@ -195,6 +195,8 @@ export const createdRequiresOnlyResolve = Task.make(
     valid: [
       'import { createRequire } from "node:module"; createRequire(import.meta.url).resolve("effect");',
       'import { createRequire } from "node:module"; const load = createRequire(import.meta.url); load.resolve("effect"); load.resolve("oxlint");',
+      'import { createRequire } from "node:module"; const load = createRequire(import.meta.url); export const resolveSpecifier: typeof load.resolve = load.resolve;',
+      'import { createRequire } from "node:module"; const load = createRequire(import.meta.url); export const resolved: ReturnType<typeof load.resolve> = load.resolve("effect");',
       'import { Module } from "bun:module"; (Module.createRequire(import.meta.url) as NodeJS.Require).resolve("effect");',
       'import { createRequire } from "node:module"; type Loader = typeof createRequire;',
     ].map((code) => ({ code, options: GRANTED })),
@@ -204,6 +206,7 @@ export const createdRequiresOnlyResolve = Task.make(
         'import type * as ChildProcesses from "node:child_process"; import { createRequire } from "node:module"; const load: (id: string) => typeof ChildProcesses = createRequire(import.meta.url); load("node:child_process").exec("echo hi");',
         'import { createRequire } from "module"; const load = createRequire(import.meta.url); load.resolve("effect"); load("node:vm");',
         'import { createRequire } from "bun:module"; let load = createRequire(import.meta.url); load.resolve("effect");',
+        'import { createRequire } from "node:module"; const load = createRequire(import.meta.url); export const resolveSpecifier: typeof load.resolve = load.resolve; load("node:vm");',
         'import module from "node:module"; export const load = module.createRequire(import.meta.url);',
         'import { createRequire } from "node:module"; const { cache } = createRequire(import.meta.url);',
       ].map((code) => ({ code, options: GRANTED, errors: [{ message: CREATED_REQUIRE_LOADS }] })),

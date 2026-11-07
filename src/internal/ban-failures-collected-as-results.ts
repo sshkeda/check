@@ -31,10 +31,6 @@ const unsafeOptionsMessage = (options: ESTree.Node | undefined) => {
 export const noFailuresAsResults = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Let Effect.all fail on the first failure, and collect failures as results only in files allowed handlesEveryFailure.",
-    },
     messages: {
       results: "Effect.all turns each failure into a result",
       opaqueOptions: "Effect.all is given options that are not written inline",

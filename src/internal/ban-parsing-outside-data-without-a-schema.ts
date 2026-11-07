@@ -237,10 +237,6 @@ const isDecodedOrBoundAsUnknownRightAway = (
 export const noUncheckedParsing = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description:
-        "Parse outside data with a Schema instead of json(), decimal parseInt, parseFloat or Schema.Any, which hand back values nothing checked. A json() body that goes straight into a Schema decoder or an unknown binding, and a parseInt with a constant radix other than 10, which no Schema decodes, pass.",
-    },
     messages: {
       jsonBody: "json() parses JSON without a Schema",
       numberParse: "{{usage}} parses a number without a Schema",

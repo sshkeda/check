@@ -36,6 +36,16 @@ export class TestOnlyExport extends Schema.TaggedError<TestOnlyExport>()("TestOn
   }
 }
 
+export class ScriptOnlyExport extends Schema.TaggedError<ScriptOnlyExport>()("ScriptOnlyExport", {
+  location: Schema.String,
+  exportName: Schema.String,
+  isUsedByTests: Schema.Boolean,
+}) {
+  public override get message() {
+    return `export ${this.exportName} is used only by ${this.isUsedByTests ? "tests and scripts" : "scripts"}`;
+  }
+}
+
 const UNCOUNTED_USERS = "outside tests and unreached code";
 
 export class FileBesideSubdirectories extends Schema.TaggedError<FileBesideSubdirectories>()(
@@ -98,7 +108,7 @@ export class PackageEntryWithoutSource extends Schema.TaggedError<PackageEntryWi
   },
 ) {
   public override get message() {
-    return `lists the entry ${this.entry}, which maps to no source file through any tsconfig outDir and rootDir`;
+    return `lists the entry ${this.entry}, which names no file the TypeScript project compiles`;
   }
 }
 
@@ -118,6 +128,7 @@ export class ExportPlacementViolations extends Schema.TaggedError<ExportPlacemen
       Schema.Union([
         UnusedExport,
         TestOnlyExport,
+        ScriptOnlyExport,
         FileBesideSubdirectories,
         FileOutsideModuleLayout,
         SharedFileWithOneUser,

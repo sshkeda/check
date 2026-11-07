@@ -3,10 +3,6 @@ import { defineRule } from "@oxlint/plugins";
 export const noShebang = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Start source files with code instead of a shebang, so the runtime and its flags come from the caller or package.json.",
-    },
     messages: {
       shebang: "file starts with a shebang line",
     },

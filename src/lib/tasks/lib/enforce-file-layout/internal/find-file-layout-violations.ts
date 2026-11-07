@@ -47,7 +47,7 @@ import {
   directoryOf,
   directoriesNestedInLayoutDirectoriesOf,
 } from "../../../shared/classify-files-by-role.ts";
-import { lineNumberAt } from "../../../shared/count-the-line-of-an-offset.ts";
+import { lineNumbersIn } from "../../../shared/count-the-line-of-an-offset.ts";
 import { PACKAGE_MANIFEST_FILE } from "../../../shared/find-named-package-manifests.ts";
 import { isInsideAnyDirectory, listedPackageFiles } from "../../../shared/list-package-files.ts";
 import { loadedLintConfigIn } from "../../../shared/load-the-lint-config.ts";
@@ -96,7 +96,10 @@ import {
   UngrantedDirectory,
   UnlistedPatchGranted,
 } from "./file-layout-errors.ts";
-import { exportPathMismatches } from "./find-export-path-mismatches.ts";
+import {
+  exportPathMismatches,
+  packageEntriesNotTypeScript,
+} from "./find-export-path-mismatches.ts";
 import {
   directoriesOutsideModuleLayoutAmong,
   isLibraryDirectoryOfAModule,
@@ -326,11 +329,12 @@ export const sourceViolations = (
   }
   const isTopLevelScriptWithMain = isTopLevelScript(path) && !isTopLevelScriptWithoutMain;
   if (isTopLevelScriptWithMain) {
+    const lineAt = lineNumbersIn(text);
     violations.push(
       ...statementsOtherThanImportsAndMain(parsed, imports).map(
         (statement) =>
           new TopLevelScriptHoldsOtherStatement({
-            location: `${path}:${lineNumberAt(text, statement.start)}`,
+            location: `${path}:${lineAt(statement.start)}`,
           }),
       ),
     );
@@ -577,6 +581,7 @@ export const manifestViolations = (
     return [
       ...scriptsViolations,
       ...(yield* dependenciesOutsideRepository(path, manifest.success, repository)),
+      ...packageEntriesNotTypeScript(path, manifest.success),
       ...exportPathMismatches(path, manifest.success),
     ];
   });

@@ -55,9 +55,6 @@ const isGlobInstance = (
 export const noGlobScan = defineRule({
   meta: {
     type: "problem",
-    docs: {
-      description: "Allow Bun.Glob for matching strings but not for scanning directories.",
-    },
     messages: {
       scan: "Bun.Glob {{method}} scans directories",
     },

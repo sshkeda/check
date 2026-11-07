@@ -13,7 +13,6 @@ const operationsByModule = (operations: Readonly<Record<string, readonly string[
 
 export const effectOperationRule = (ruleName: keyof typeof EFFECT_OPERATION_RULES) => {
   const rule = EFFECT_OPERATION_RULES[ruleName];
-  const { description } = rule;
   const bannedOperations = [["operation", operationsByModule(rule.operations)]] as const;
   const bannedModules: ReadonlySet<string> = new Set(
     bannedOperations.flatMap(([, operations]) => [...operations.keys()]),
@@ -21,7 +20,6 @@ export const effectOperationRule = (ruleName: keyof typeof EFFECT_OPERATION_RULE
   return defineRule({
     meta: {
       type: "problem",
-      docs: { description },
       messages: {
         operation: "{{moduleName}}.{{operation}} is banned",
       },

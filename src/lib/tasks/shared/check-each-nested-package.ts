@@ -39,6 +39,18 @@ const locatedInPackage = (
         message: printable.message,
       };
 
+const distinctPrintedErrors = (printables: readonly PrintableError[]) => {
+  const printedByLocation = new Map<string | undefined, Set<string>>();
+  return printables.filter(({ tag, location, message }) => {
+    const printed = printedByLocation.get(location) ?? new Set<string>();
+    printedByLocation.set(location, printed);
+    const printedLine = `${tag}: ${message}`;
+    const isFirstPrinted = !printed.has(printedLine);
+    printed.add(printedLine);
+    return isFirstPrinted;
+  });
+};
+
 export const packageDirectoriesIn = (directory: string) =>
   listedPackageFiles(directory, []).pipe(
     Effect.map(({ nestedPackageDirectories }) => [
@@ -72,7 +84,7 @@ export const inEachPackage = <Requirements>(
         ),
       { concurrency: "unbounded" },
     );
-    const reportedErrors = reportedByPackage.flat();
+    const reportedErrors = distinctPrintedErrors(reportedByPackage.flat());
     if (Arrays.isArrayNonEmpty(reportedErrors)) {
       return yield* new ReportedErrors({ reportedErrors });
     }

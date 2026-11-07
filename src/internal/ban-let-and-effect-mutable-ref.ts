@@ -24,10 +24,6 @@ const bindingNamesOf = (pattern: ESTree.Node): readonly string[] => {
 export const noLet = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Declare every variable with const, including for...of and for...in loop variables, so no name is reassigned. A let that starts a for statement is left to no-while, which reports the whole loop.",
-    },
     messages: {
       reassignable: "let declares {{names}}, which can be reassigned",
     },
@@ -56,10 +52,6 @@ export const noLet = defineRule({
 export const noMutableRef = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description:
-        "Keep shared state in an Effect Ref instead of MutableRef, the synchronous box that would stand in for a banned let.",
-    },
     messages: {
       boxedVariable: "{{usage}} keeps a reassignable value in a synchronous box",
     },

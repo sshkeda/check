@@ -1,4 +1,4 @@
-export const RETIRED_WORDS: ReadonlySet<string> = new Set([
+const RETIRED_WORDS: ReadonlySet<string> = new Set([
   "fingerprint",
   "fingerprints",
   "folder",

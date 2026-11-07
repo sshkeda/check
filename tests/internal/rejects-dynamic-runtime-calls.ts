@@ -61,6 +61,7 @@ export const clockPropertiesRespectTheirBindings = Task.make(
       'import process from "other"; process.uptime();',
       'import Bun from "other"; Bun.nanoseconds();',
       "const process = { uptime: () => 1 }; const { uptime } = process; uptime();",
+      "function read(Temporal) { return Temporal.Now.instant(); }",
     ],
     invalid: [
       ["process.uptime();", "process.uptime"],
@@ -70,6 +71,8 @@ export const clockPropertiesRespectTheirBindings = Task.make(
       ['import * as runtime from "bun"; runtime.nanoseconds();', "Bun.nanoseconds"],
       ["const { uptime } = process; uptime();", "process.uptime"],
       ["let read; ({ nanoseconds: read } = Bun);", "Bun.nanoseconds"],
+      ["Temporal.Now.instant();", "Temporal.Now"],
+      ["const { Now } = Temporal; Now.plainDateISO();", "Temporal.Now"],
     ].map(([code = "", usage = ""]) => ({
       code,
       errors: [{ messageId: "restrictedProperty", data: { usage } }],
@@ -129,5 +132,54 @@ export const clockReadsAndSleeps = Task.make(
         'import { Effect } from "effect"; Effect.never.pipe(Effect.onInterrupt(cleanUp), Effect.timeout("1 second"));',
       ].map((code) => ({ code, errors: [{ messageId: "neverTimeout" }] })),
     ],
+  }),
+);
+
+export const cronStepsFromTheCurrentTime = Task.make(
+  "Cron.next, Cron.prev and Cron.sequence without a start time are rejected, while given start times, spread arguments and other modules pass",
+  ruleTest("no-clock-reads-and-sleeps", {
+    valid: [
+      'import { Cron } from "effect"; Cron.next(cron, start);',
+      'import { prev } from "effect/Cron"; prev(cron, start);',
+      'import { Cron } from "effect"; Cron.sequence(cron, start);',
+      'import { Cron } from "effect"; Cron.next(...steps);',
+      'import { Cron } from "other"; Cron.next(cron);',
+    ],
+    invalid: [
+      ['import { Cron } from "effect"; Cron.next(cron);', "Cron.next"],
+      ['import { prev } from "effect/Cron"; prev(cron);', "Cron.prev"],
+      ['import { Cron } from "effect"; Cron.next(cron, undefined);', "Cron.next"],
+      ['import * as Cron from "effect/Cron"; Cron.sequence(cron);', "Cron.sequence"],
+    ].map(([code = "", usage = ""]) => ({
+      code,
+      errors: [{ messageId: "clockRead", data: { usage } }],
+    })),
+  }),
+);
+
+export const clockServiceSleeps = Task.make(
+  "sleeping through the Clock service yielded from Clock.Clock or passed to clockWith is rejected, while its other members, other objects and reassigned bindings pass",
+  ruleTest("no-clock-reads-and-sleeps", {
+    valid: [
+      'import { Clock, Effect } from "effect"; Effect.gen(function* () { const clock = yield* Clock.Clock; return clock.currentTimeMillis; });',
+      'import { Effect } from "effect"; Effect.gen(function* () { const clock = yield* other; yield* clock.sleep("1 second"); });',
+      'import { Effect } from "effect"; Effect.map(other, (clock) => clock.sleep("1 second"));',
+      'import { Effect } from "effect"; Effect.map(other, ({ sleep }) => sleep("1 second"));',
+      'import { Effect } from "effect"; Effect.clockWith(({ currentTimeMillis }) => currentTimeMillis);',
+      'import { Clock, Effect } from "effect"; Effect.gen(function* () { let clock = yield* Clock.Clock; clock = other; yield* clock.sleep("1 second"); });',
+      'import { Clock } from "other"; function* run() { const clock = yield* Clock.Clock; yield* clock.sleep("1 second"); }',
+    ],
+    invalid: [
+      'import { Clock, Effect } from "effect"; Effect.gen(function* () { const clock = yield* Clock.Clock; yield* clock.sleep("1 second"); });',
+      'import { Clock, Effect } from "effect"; Effect.gen(function* () { const { sleep } = yield* Clock.Clock; yield* sleep("1 second"); });',
+      'import { Clock, Effect } from "effect"; Effect.gen(function* () { yield* (yield* Clock.Clock).sleep("1 second"); });',
+      'import { Effect } from "effect"; Effect.clockWith((clock) => clock.sleep("1 second"));',
+      'import * as Clock from "effect/Clock"; Clock.clockWith(function (clock) { return clock.sleep("1 second"); });',
+      'import { Effect } from "effect"; Effect.clockWith(({ sleep }) => sleep("1 second"));',
+      'import * as Clock from "effect/Clock"; Clock.clockWith(function ({ sleep: wait }) { return wait("1 second"); });',
+    ].map((code) => ({
+      code,
+      errors: [{ messageId: "restrictedProperty", data: { usage: "Clock.sleep" } }],
+    })),
   }),
 );

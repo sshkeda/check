@@ -4,14 +4,17 @@ import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Path, Ref, Result } from "effect";
 
 import { runChecksOverOneTypeScriptProject } from "../../src/lib/tasks/internal/run-checks-over-one-typescript-project.ts";
+import { findImportBoundaryViolations } from "../../src/lib/tasks/lib/check-import-boundaries/internal/find-import-boundary-violations.ts";
 import { findDeclaredUseViolations } from "../../src/lib/tasks/lib/check-uses-by-their-declarations/internal/find-declared-use-violations.ts";
 import { findUngrantedStdioUses } from "../../src/lib/tasks/lib/confine-stdio-to-granted-files/internal/find-ungranted-stdio-uses.ts";
 import { findInferrableAnnotations } from "../../src/lib/tasks/lib/detect-inferrable-annotations/internal/find-inferrable-annotations.ts";
 import { findRepeatedServiceYields } from "../../src/lib/tasks/lib/detect-repeated-service-yields/internal/find-repeated-service-yields.ts";
 import { findExportPlacementViolations } from "../../src/lib/tasks/lib/place-exports-in-the-narrowest-directory/internal/find-export-placement-violations.ts";
+import { findErrorMappingsToDone } from "../../src/lib/tasks/lib/refuse-error-mappings-that-end-streams/internal/find-error-mappings-to-done.ts";
 import { findServiceLayerViolations } from "../../src/lib/tasks/lib/require-separate-service-layers/internal/find-service-layer-violations.ts";
 import { moduleResolverFor } from "../../src/lib/tasks/shared/create-the-module-resolver.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { resolveModuleRequest } from "../../src/lib/tasks/shared/resolve-module-requests.ts";
 import {
@@ -42,7 +45,57 @@ export const checksQueryOneSharedProject = Task.make(
       outcomeOf(findInferrableAnnotations(tsconfigFile, openedProjects)),
     ]);
     expect(yield* Ref.get(reads)).toBe(results.length);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const checksShareEachCallsSignature = Task.make(
+  "the checks that read each call's declaration resolve every call's signature once between them",
+  Effect.gen(function* () {
+    const { tsconfigFile } = yield* makeProject({
+      "a.ts":
+        'import { Effect } from "effect";\nexport const RUN = Effect.void.pipe(Effect.as(1), Effect.map((value) => value + 1));\n',
+    });
+    const opened = yield* openTypeScriptProjects(tsconfigFile);
+    const resolvedCalls: unknown[] = [];
+    for (const { checker } of opened) {
+      const resolve = checker.getResolvedSignature.bind(checker);
+      checker.getResolvedSignature = (node) => {
+        resolvedCalls.push(node);
+        return resolve(node);
+      };
+    }
+    const openedProjects = Effect.succeed(opened);
+    yield* outcomeOf(findDeclaredUseViolations(tsconfigFile, openedProjects));
+    const resolvedByOneCheck = resolvedCalls.length;
+    yield* outcomeOf(findErrorMappingsToDone(tsconfigFile, openedProjects));
+    expect(resolvedByOneCheck).toBeGreaterThan(0);
+    expect(resolvedCalls.length).toBe(resolvedByOneCheck);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const checksShareEachModuleResolution = Task.make(
+  "the import-boundary and export-placement checks resolve each module request of a file once between them",
+  Effect.gen(function* () {
+    const { tsconfigFile } = yield* makeProject({
+      "a.ts": 'import { B } from "./b.ts";\nexport const A = B;\n',
+      "b.ts": "export const B = 1;\n",
+    });
+    const resolver = yield* moduleResolverFor([]);
+    const resolve = resolver.resolveFileAsync.bind(resolver);
+    const resolvedRequests: string[] = [];
+    resolver.resolveFileAsync = (importingFile, request) => {
+      resolvedRequests.push(request);
+      return resolve(importingFile, request);
+    };
+    yield* outcomeOf(findImportBoundaryViolations(tsconfigFile));
+    const resolvedByOneCheck = [...resolvedRequests];
+    yield* outcomeOf(
+      findExportPlacementViolations(tsconfigFile, openTypeScriptProjects(tsconfigFile)),
+    );
+    resolver.resolveFileAsync = resolve;
+    expect(resolvedByOneCheck).toContain("./b.ts");
+    expect(resolvedRequests).toEqual(resolvedByOneCheck);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 const UNREADABLE_MANIFEST = "cannot be read as a package.json whose name, if any, is a string";
@@ -118,7 +171,7 @@ export const unreadableManifestsFailResolution = Task.make(
         `could not resolve looped: node_modules/looped/inner/package.json ${UNREADABLE_MANIFEST}: reading it failed with ELOOP`,
       ],
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
@@ -138,7 +191,10 @@ export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
     });
     const importer = path.join(project, "src/m/index.ts");
     const resolverFailure = (request: string) =>
-      Effect.tryPromise(() => moduleResolverFor([]).resolveFileAsync(importer, request)).pipe(
+      moduleResolverFor([]).pipe(
+        Effect.flatMap((resolver) =>
+          Effect.promise(() => resolver.resolveFileAsync(importer, request)),
+        ),
         Effect.map((resolved) => resolved.error ?? "no error"),
       );
     const resolutions = yield* Effect.forEach(
@@ -157,7 +213,7 @@ export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
       ],
       ...Array.from({ length: 4 }, () => [undefined, undefined]),
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyANamedManifestMakesAPackage = Task.make(
@@ -197,7 +253,7 @@ export const onlyANamedManifestMakesAPackage = Task.make(
     for (const name of ["module", "side-effect-free", "marked-empty", "directory"]) {
       expect(yield* packageOf(name)).toEqual(["outer", directory]);
     }
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
@@ -217,7 +273,7 @@ export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
       null,
       null,
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const oneCrashingCheckLeavesTheOthersReporting = Task.make(
@@ -241,5 +297,5 @@ export const program = Effect.gen(function* () {
       "crashing CheckCrashed",
       "service-yields RepeatedServiceYield",
     ]);
-  }).pipe(Effect.scoped),
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

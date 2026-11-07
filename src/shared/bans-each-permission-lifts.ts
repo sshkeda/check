@@ -4,7 +4,6 @@ import {
   isNodeBuiltinThatBunAliases,
   nodeBuiltinNameOf,
 } from "./lint-rule-messages-and-patterns.ts";
-import { SCRIPTS_DIRECTORY } from "./test-home-directories.ts";
 
 export const SYNC_WRITES = [
   "appendFileSync",
@@ -112,6 +111,7 @@ export const CREATE_REQUIRE_VALUE_USAGE = "createRequire used other than by a ca
 export const SCRIPT = "script";
 export const TRUSTS_UNVERIFIED_TYPES = "trustsUnverifiedTypes";
 export const WRITES_TO_THE_TERMINAL = "writesToTheTerminal";
+export const READS_CONFIG = "readsConfig";
 const LOCKS_FILES = "locksFiles";
 export const HANDLES_EVERY_FAILURE = "handlesEveryFailure";
 
@@ -235,10 +235,8 @@ const OUTCOME_MEMBERS = [
 ] as const;
 
 const GRANTABLE_BANS = {
-  readsConfig: {
+  [READS_CONFIG]: {
     ruleName: "no-config-reads",
-    description:
-      "Read environment variables, raw command-line arguments and Effect Config only in files allowed readsConfig; no file reads process.argv0, Bun.env, Bun.argv, import.meta.env or parseArgs.",
     message: `{{usage}} reads configuration`,
     bans: [
       globalMembersBan("process", ["env", "argv"]),
@@ -263,8 +261,6 @@ const GRANTABLE_BANS = {
   },
   spawnsCommands: {
     ruleName: "no-command-spawn",
-    description:
-      "Start commands only in files allowed spawnsCommands, through Effect ChildProcess, Bun.spawn or spawn from node:child_process; no file uses Bun.spawnSync, Bun.$, the rest of node:child_process or a platform ChildProcessSpawner.",
     message: "{{usage}} starts a command directly",
     bans: [
       moduleBan(["effect/process/ChildProcess", "effect/process/ChildProcessSpawner"]),
@@ -285,8 +281,6 @@ const GRANTABLE_BANS = {
   },
   [LOCKS_FILES]: {
     ruleName: "no-node-file-system",
-    description:
-      "Take file locks with open from node:fs/promises and constants from node:fs only in files allowed locksFiles; no file uses the rest of node:fs or node:fs/promises, under any of their names.",
     message: "{{usage}} reaches the file system directly",
     bans: [importsBan("node:fs", ["constants"]), importsBan("node:fs/promises", ["open"])],
     bannedEvenWhenGranted: {
@@ -300,8 +294,6 @@ const GRANTABLE_BANS = {
   },
   importsDynamically: {
     ruleName: "no-dynamic-import",
-    description:
-      "Keep the module graph static so tools see every dependency; only files allowed importsDynamically use import() or createRequire, no file loads a module through the require createRequire returns, only resolves one, and no file uses import.meta.require or node:vm.",
     message: "{{usage}} is banned",
     bans: [DYNAMIC_IMPORT_BAN, importsBan("node:module", CREATE_REQUIRE_IMPORTS)],
     bannedEvenWhenGranted: {
@@ -316,14 +308,11 @@ const GRANTABLE_BANS = {
   },
   exitsTheProcess: {
     ruleName: "no-process-exit",
-    description: "Exit the process directly only in files allowed exitsTheProcess.",
     message: "{{usage}} exits the process directly",
     bans: [globalMembersBan("process", ["exit"])],
   },
   usesSqlDatabases: {
     ruleName: "no-sql-clients",
-    description:
-      "Talk to SQL databases through Effect SQL only in files allowed usesSqlDatabases; no file uses another SQL client.",
     message: "{{usage}} uses a SQL client outside a usesSqlDatabases file",
     bans: [
       moduleBan(["@effect/sql", "@effect/sql-*", "effect/sql", "effect/sql/*"]),
@@ -350,8 +339,6 @@ const GRANTABLE_BANS = {
   },
   [WRITES_TO_THE_TERMINAL]: {
     ruleName: "no-terminal-writes",
-    description:
-      "Write to the terminal through the Effect Stdio service, and use it for more than reading stdin, args or whether a stream is a terminal, only in files allowed writesToTheTerminal; no file uses Effect Console, node:console, process.stdout, process.stderr, Bun.stdout or Bun.stderr.",
     message: "{{usage}} writes to the terminal",
     bans: [],
     bannedEvenWhenGranted: {
@@ -371,8 +358,6 @@ export const PERMISSION_BANS = {
   ...GRANTABLE_BANS,
   [TRUSTS_UNVERIFIED_TYPES]: {
     ruleName: "no-unverified-types",
-    description:
-      "Declare a schema from a type guard with Schema.declare or Schema.declareConstructor only in files allowed trustsUnverifiedTypes, whose grant gives a reason.",
     message: `{{usage}} declares a type nothing verifies`,
     bans: [
       effectMembersBan([
@@ -383,8 +368,6 @@ export const PERMISSION_BANS = {
   },
   [HANDLES_EVERY_FAILURE]: {
     ruleName: "no-unnamed-recovery",
-    description:
-      "Handle failures by name with catchTag, catchTags or catchReason, and turn a failure you have not named into a success or a value only in files allowed handlesEveryFailure, whose grant gives a reason.",
     message: "{{usage}} handles failures it does not name",
     bans: [
       effectMembersBan(
@@ -399,7 +382,6 @@ export const PERMISSION_BANS = {
   },
   syncFileAccess: {
     ruleName: "no-sync-file-access",
-    description: "Read and write files without blocking; no file may read or write synchronously.",
     message: "{{usage}} reaches the file system synchronously",
     bans: [
       importsBan(MODULE_PATTERN_WILDCARD, [...SYNC_READS, ...SYNC_WRITES]),
@@ -408,7 +390,6 @@ export const PERMISSION_BANS = {
   },
   [SCRIPT]: {
     ruleName: "no-task-main",
-    description: `Run tasks with ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER} from ${TASK_PACKAGE} only in files directly in ${SCRIPTS_DIRECTORY}/.`,
     message: "{{usage}} runs tasks outside a script",
     bans: [importsBan(TASK_PACKAGE, [`${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER}`])],
   },
@@ -417,6 +398,8 @@ export const PERMISSION_BANS = {
 export const PERMISSION_BAN_NAMES = Record.keys(PERMISSION_BANS);
 
 export const BANS_NO_GRANT_LIFTS = "onlyThoseNoGrantLifts";
+
+export const UNUSED_GRANT_REPORTED = "reported";
 
 export const bansNoGrantLifts = (permission: keyof typeof PERMISSION_BANS) => {
   const entry = PERMISSION_BANS[permission];

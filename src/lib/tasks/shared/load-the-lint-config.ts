@@ -33,11 +33,11 @@ const literalKeysOf = (node: Expression) =>
           return [];
         }
         if (property.key.type === "Identifier") {
-          return [{ name: property.key.name, value: property.value }];
+          return [{ name: property.key.name, value: property.value, start: property.start }];
         }
         const literalKeyValue = property.key.type === "Literal" ? property.key.value : undefined;
         return typeof literalKeyValue === "string"
-          ? [{ name: literalKeyValue, value: property.value }]
+          ? [{ name: literalKeyValue, value: property.value, start: property.start }]
           : [];
       })
     : [];
@@ -47,14 +47,14 @@ const isLiteralObject = (node: Expression, isLiteralValue: (value: Expression) =
   literalKeysOf(node).length === node.properties.length &&
   literalKeysOf(node).every((key) => isLiteralValue(key.value));
 
-const isLiteralReasons = (node: Expression) =>
-  isLiteralObject(node, (reason) => literalStringOf(reason) !== undefined);
+const isLiteralStringObject = (node: Expression) =>
+  isLiteralObject(node, (value) => literalStringOf(value) !== undefined);
 
 const isLiteralGrantList = (node: Expression) =>
   node.type === "ArrayExpression" &&
   node.elements.every((element) => {
-    const isReasons = element?.type === "ObjectExpression" && isLiteralReasons(element);
-    return isReasons || literalStringOf(element) !== undefined;
+    const isStringObject = element?.type === "ObjectExpression" && isLiteralStringObject(element);
+    return isStringObject || literalStringOf(element) !== undefined;
   });
 
 const isLiteralLintConfigArgument = (node: Expression) =>
@@ -65,8 +65,8 @@ const literalGrantItemOf = (element: ArrayExpressionElement) => {
     return [
       Object.fromEntries(
         literalKeysOf(element).flatMap(({ name, value }) => {
-          const reason = literalStringOf(value);
-          return reason === undefined ? [] : [[name, reason]];
+          const literal = literalStringOf(value);
+          return literal === undefined ? [] : [[name, literal]];
         }),
       ),
     ];
@@ -102,9 +102,11 @@ const objectsIn = (node: ArrayExpressionElement): readonly Expression[] => {
 
 const repeatedKeysIn = (argument: Expression) =>
   objectsIn(argument).flatMap((object) => {
-    const names = literalKeysOf(object).map(({ name }) => name);
-    const repeated = names.filter((name, index) => names.indexOf(name) !== index);
-    return [...new Set(repeated)].map((key) => ({ object, key }));
+    const keys = literalKeysOf(object);
+    const names = keys.map(({ name }) => name);
+    return keys
+      .filter(({ name }, index) => names.indexOf(name, names.indexOf(name) + 1) === index)
+      .map(({ name, start }) => ({ key: name, start }));
   });
 
 export const lintConfigOf = (parsed: Effect.Success<ReturnType<typeof parsedConfigFileIn>>) => {
@@ -129,7 +131,7 @@ export const lintConfigOf = (parsed: Effect.Success<ReturnType<typeof parsedConf
     };
   }
   const repeatedKeys = repeatedKeysIn(argument).map(
-    ({ object, key }) => new LintConfigKeyRepeated({ location: lineOf(object.start), key }),
+    ({ key, start }) => new LintConfigKeyRepeated({ location: lineOf(start), key }),
   );
   if (violations.length + repeatedKeys.length > 0) {
     return { violations: [...violations, ...repeatedKeys] };

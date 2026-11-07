@@ -127,6 +127,34 @@ export const readsAnOxlintReportLargerThanAPipeBuffer = Task.make(
   ),
 );
 
+const spanTimesIn = (trace: string, name: string) => {
+  const times = new RegExp(
+    `"name":"${name}","kind":\\d+,"startTimeUnixNano":"(?<start>\\d+)","endTimeUnixNano":"(?<end>\\d+)"`,
+    "u",
+  ).exec(trace)?.groups;
+  return { start: BigInt(times?.["start"] ?? "0"), end: BigInt(times?.["end"] ?? "0") };
+};
+
+export const runsOxlintAndTheEnumCheckTogether = Task.make(
+  "oxlint and the unsafe enum assignment check run at the same time, so the enum check doesn't wait for oxlint",
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const output = yield* lintOutputOf({
+        "src/index.ts": "export const MODE = 0;\n",
+      });
+      const trace = yield* fileSystem.readFileString(
+        /wrote the trace to (?<file>\S+)/u.exec(output)?.groups?.["file"] ?? "",
+      );
+      const lintRules = spanTimesIn(trace, "lint-rules");
+      const enumCheck = spanTimesIn(trace, "unsafe-enum-assignments");
+      expect(lintRules.end).toBeGreaterThan(lintRules.start);
+      expect(enumCheck.start).toBeLessThan(lintRules.end);
+      expect(lintRules.start).toBeLessThan(enumCheck.end);
+    }),
+  ),
+);
+
 export const namesTsgolintWithTheViolationsItReports = Task.make(
   "unsafe enum assignments end with a line that names tsgolint and its real exit code, not an oxlint exit",
   Effect.scoped(

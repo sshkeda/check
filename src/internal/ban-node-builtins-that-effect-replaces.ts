@@ -12,9 +12,6 @@ export const nodeBuiltinRule = (ruleName: keyof typeof NODE_BUILTIN_RULES) => {
   return defineRule({
     meta: {
       type: "problem",
-      docs: {
-        description: `Import ${[...bannedModules].join(", ")} from Node only through its Effect replacement, a literal import() included; a re-export is left to no-re-exports and an import {} to typescript(no-import-type-side-effects).`,
-      },
       messages: { builtin: "importing {{source}} is banned" },
     },
     create(context) {

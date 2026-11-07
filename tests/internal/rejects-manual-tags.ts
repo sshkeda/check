@@ -57,7 +57,7 @@ export const rejectsHandwrittenTagObjects = Task.make(
 );
 
 export const rejectsTagComparisons = Task.make(
-  "no-tag-branching flags comparisons on _tag",
+  "no-tag-branching flags comparisons on _tag, read through optional chaining too",
   ruleTest("no-tag-branching", {
     valid: [
       "const ok = Exit.isSuccess(restored);",
@@ -68,17 +68,26 @@ export const rejectsTagComparisons = Task.make(
       { code: "const ok = restored._tag === 'Success';", errors: [{ messageId: "comparison" }] },
       { code: "const ok = 'Success' !== restored._tag;", errors: [{ messageId: "comparison" }] },
       { code: "const ok = restored['_tag'] == 'Success';", errors: [{ messageId: "comparison" }] },
+      { code: "const ok = restored?._tag === 'Success';", errors: [{ messageId: "comparison" }] },
+      {
+        code: "const ok = restored?.['_tag'] !== 'Success';",
+        errors: [{ messageId: "comparison" }],
+      },
     ],
   }),
 );
 
 export const rejectsTagSwitches = Task.make(
-  "no-tag-branching flags switches on _tag",
+  "no-tag-branching flags switches on _tag, read through optional chaining too",
   ruleTest("no-tag-branching", {
     valid: ["switch (event.kind) { case 'a': break; }"],
     invalid: [
       {
         code: "switch (event._tag) { case 'Want': break; case 'Done': break; }",
+        errors: [{ messageId: "switch" }],
+      },
+      {
+        code: "switch (event?._tag) { case 'Want': break; case 'Done': break; }",
         errors: [{ messageId: "switch" }],
       },
     ],
@@ -104,6 +113,70 @@ export const recommendsCatchTagForTaggedErrors = Task.make(
       {
         code: "const handled = program.pipe(Effect.mapError((error) => error._tag === 'Failed'));",
         errors: [{ messageId: "comparison" }],
+      },
+    ],
+  }),
+);
+
+export const rejectsTagComparisonCalls = Task.make(
+  "no-tag-branching flags _tag compared with Object.is or looked up with includes",
+  ruleTest("no-tag-branching", {
+    valid: [
+      "const same = Object.is(left, right);",
+      "const listed = KINDS.includes(event.kind);",
+      "const Object = { is: (left, right) => left }; const same = Object.is(event._tag, 'Want');",
+      "const read = [event._tag].map(String);",
+    ],
+    invalid: [
+      "const same = Object.is(event._tag, 'Want');",
+      "const same = Object.is('Want', event['_tag']);",
+      "const listed = ['Want', 'Done'].includes(event._tag);",
+      "const listed = TAGS.includes(event._tag);",
+    ].map((code) => ({ code, errors: [{ messageId: "comparison" }] })),
+  }),
+);
+
+export const rejectsBranchingOnDestructuredTags = Task.make(
+  "no-tag-branching flags comparisons and switches on a _tag destructured into a binding, while other destructured names and reassigned bindings pass",
+  ruleTest("no-tag-branching", {
+    valid: [
+      "const { kind } = event; const ok = kind === 'Want';",
+      "let { _tag } = event; _tag = other; const ok = _tag === 'Want';",
+      "const read = ({ _tag }) => describe(_tag);",
+      "const _tag = event.kind; const ok = _tag === 'Want';",
+    ],
+    invalid: [
+      {
+        code: "const { _tag } = event; const ok = _tag === 'Want';",
+        errors: [{ messageId: "comparison" }],
+      },
+      {
+        code: "const { _tag: tag } = event; const ok = 'Want' !== tag;",
+        errors: [{ messageId: "comparison" }],
+      },
+      {
+        code: "const isWant = ({ _tag }) => _tag === 'Want';",
+        errors: [{ messageId: "comparison" }],
+      },
+      {
+        code: "const { _tag: tag = 'Idle' } = event; const ok = tag === 'Want';",
+        errors: [{ messageId: "comparison" }],
+      },
+      {
+        code: "const { ['_tag']: tag } = event; switch (tag) { case 'Want': break; }",
+        errors: [{ messageId: "switch" }],
+      },
+      {
+        code: "const { _tag } = event; const same = Object.is(_tag, 'Want');",
+        errors: [{ messageId: "comparison" }],
+      },
+      {
+        code: "const { _tag: tag } = event; const listed = TAGS.includes(tag);",
+        errors: [{ messageId: "comparison" }],
+      },
+      {
+        code: "const handled = Effect.catch(program, ({ _tag }) => _tag === 'Failed' ? Effect.void : Effect.die(_tag));",
+        errors: [{ messageId: "catchTag" }],
       },
     ],
   }),

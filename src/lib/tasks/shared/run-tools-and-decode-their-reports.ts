@@ -7,6 +7,7 @@ import { Effect, FileSystem } from "effect";
 import {
   ToolExited,
   ToolNotStarted,
+  ToolNotStopped,
   ToolReportUndecodable,
   ToolStoppedBySignal,
 } from "./project-config-and-tool-errors.ts";
@@ -66,21 +67,24 @@ const openedStandardOutputFile = (file: string) =>
 const stopTheProcessGroupOf = (child: Subprocess) =>
   Effect.gen(function* () {
     if (process.platform === WINDOWS) {
-      yield* Effect.try(() =>
-        Bun.spawn(["taskkill", "/pid", `${child.pid}`, "/T", "/F"], {
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-        }),
-      ).pipe(
+      yield* Effect.try({
+        try: () =>
+          Bun.spawn(["taskkill", "/pid", `${child.pid}`, "/T", "/F"], {
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+          }),
+        catch: (cause) => new ToolNotStopped({ command: "taskkill", reason: String(cause) }),
+      }).pipe(
         Effect.flatMap((taskkill) => Effect.promise(() => taskkill.exited)),
-        Effect.catchTag("UnknownError", () => Effect.void),
+        Effect.catchTag("ToolNotStopped", () => Effect.void),
       );
       child.kill();
     } else {
-      yield* Effect.try(() => process.kill(-child.pid, "SIGKILL")).pipe(
-        Effect.catchTag("UnknownError", () => Effect.void),
-      );
+      yield* Effect.try({
+        try: () => process.kill(-child.pid, "SIGKILL"),
+        catch: (cause) => new ToolNotStopped({ command: "kill", reason: String(cause) }),
+      }).pipe(Effect.catchTag("ToolNotStopped", () => Effect.void));
     }
     yield* Effect.promise(() => child.exited);
   });

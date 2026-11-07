@@ -44,10 +44,7 @@ export const unbounded = (work: Effect.Effect<void>) => work.pipe(Effect.retry(S
 `;
 
 const ALL_PERMISSIONS =
-  '{ allow: ["pollsWithADeadline", "readsConfig", "importsDynamically", "exitsTheProcess", "spawnsCommands", "usesSqlDatabases", "locksFiles", "writesToTheTerminal", { trustsUnverifiedTypes: "ports cross threads as JSON" }, { handlesEveryFailure: "reports every outcome to its caller" }], services: ["Store"] }';
-
-const PERMISSION_NAMES =
-  '"readsConfig" | "spawnsCommands" | "locksFiles" | "importsDynamically" | "exitsTheProcess" | "usesSqlDatabases" | "writesToTheTerminal" | "usesAbbreviations" | "pollsWithADeadline" | "isAnUnlistedDirectory" | "patchesADependency" | "hasAnUnlistedFileType"';
+  '{ allow: ["pollsWithADeadline", "readsConfig", "importsDynamically", "exitsTheProcess", "spawnsCommands", "usesSqlDatabases", "locksFiles", "writesToTheTerminal", "trustsUnverifiedTypes", "handlesEveryFailure"], services: ["Store"] }';
 
 const COMMENT_RULE = "sshkeda/no-comments";
 const ABBREVIATION_RULE = "sshkeda/no-abbreviations";
@@ -105,7 +102,7 @@ export default {
 const expectOnlyUnpermittedViolations = (output: string) => {
   expect(output).toContain("importing node:path is banned");
   expect(output).toContain("JSON.parse");
-  expect(output).toContain("retries on a timer, which no file may do, even with a deadline");
+  expect(output).toContain("Schedule.spaced polls without a deadline");
   expect(output).not.toContain("declares a service");
   expect(output).not.toContain("dynamic import()");
   expect(output).toContain("appendFileSync from node:fs reaches the file system synchronously");
@@ -162,7 +159,26 @@ export const directoryGrantsLeaveDescendantCodeBansEnabled = Task.make(
   }).pipe(Effect.scoped),
 );
 
-const RUNTIME_NAMES = `export const env = new Map<string, string>();
+export const grantsThatLiftNothingAreReported = Task.make(
+  "a file granted a permission whose ban it no longer reaches is reported at its first line, while a grant the file uses and a readsConfig grant are not",
+  Effect.gen(function* () {
+    const output = yield* lintWithPermissions(
+      '{ "stop.ts": { allow: ["exitsTheProcess", "spawnsCommands", "usesSqlDatabases", "readsConfig"] } }',
+      { "stop.ts": "export const STOP = () => process.exit(1);\n" },
+    );
+    expect(output).toContain(
+      "stop.ts:1:1: error sshkeda(no-command-spawn): this file is granted spawnsCommands, but uses nothing spawnsCommands allows",
+    );
+    expect(output).toContain(
+      "stop.ts:1:1: error sshkeda(no-sql-clients): this file is granted usesSqlDatabases, but uses nothing usesSqlDatabases allows",
+    );
+    expect(output).not.toContain("granted exitsTheProcess");
+    expect(output).not.toContain("granted readsConfig");
+    expect(output).not.toContain("exits the process directly");
+  }).pipe(Effect.scoped),
+);
+
+const RUNTIME_NAMES = `export const env = new Map([["HOME", "/"]]);
 export const cwd = (directory: string) => directory;
 export const stdin = (input: ReadableStream) => input;
 `;
@@ -235,7 +251,18 @@ export const poll = (work: Effect.Effect<void>) =>
 const RETRIES_WITH_A_DEADLINE = `import { Effect, Schedule } from "effect";
 
 export const retried = (work: Effect.Effect<void>) =>
-  work.pipe(Effect.retry(Schedule.spaced("1 second")), Effect.timeout("30 seconds"));
+  Effect.retry(work, Schedule.spaced("1 second")).pipe(Effect.timeout("30 seconds"));
+`;
+
+const RETRIES_WITHOUT_A_DEADLINE = `import { Effect, Schedule } from "effect";
+
+export const retried = (work: Effect.Effect<void>) => Effect.retry(work, Schedule.spaced("1 second"));
+`;
+
+const RETRIES_AT_ONCE = `import { Effect, Schedule } from "effect";
+
+export const retried = (work: Effect.Effect<void>) =>
+  Effect.retry(work, Schedule.recurs(3)).pipe(Effect.timeout("30 seconds"));
 `;
 
 const MOVES_VIRTUAL_TIME = `import { Effect, Schedule } from "effect";
@@ -254,8 +281,34 @@ const POLLS_WITHOUT_A_DEADLINE = `import { Effect, Schedule } from "effect";
 export const poll = (work: Effect.Effect<void>) => work.pipe(Effect.repeat(Schedule.spaced("1 second")));
 `;
 
+const EXPONENTIAL_WITH_A_DEADLINE = `import { Effect, Schedule } from "effect";
+
+export const retried = (work: Effect.Effect<void>) =>
+  work.pipe(Effect.retry(Schedule.exponential("1 second")), Effect.timeout("30 seconds"));
+export const repeated = (work: Effect.Effect<void>) =>
+  work.pipe(Effect.repeat(Schedule.exponential("1 second")), Effect.timeout("30 seconds"));
+export const retriedWithJitter = (work: Effect.Effect<void>) =>
+  work.pipe(Effect.retry(Schedule.jittered(Schedule.exponential("1 second"))), Effect.timeout("30 seconds"));
+export const repeatedWithJitter = (work: Effect.Effect<void>) =>
+  work.pipe(Effect.repeat(Schedule.exponential("1 second").pipe(Schedule.jittered)), Effect.timeout("30 seconds"));
+`;
+
+const EXPONENTIAL_WITHOUT_A_DEADLINE = `import { Effect, Schedule } from "effect";
+
+export const retried = (work: Effect.Effect<void>) => Effect.retry(work, Schedule.exponential("1 second"));
+export const repeated = (work: Effect.Effect<void>) => Effect.repeat(work, Schedule.exponential("1 second"));
+`;
+
+const EXPONENTIAL_IN_A_TIMEOUT_FALLBACK = `import { Effect, Schedule } from "effect";
+
+export const retried = (work: Effect.Effect<void>) =>
+  Effect.timeoutOrElse(work, { duration: "30 seconds", orElse: () => Effect.retry(work, Schedule.exponential("1 second")) });
+export const repeated = (work: Effect.Effect<void>) =>
+  work.pipe(Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.repeat(work, Schedule.exponential("1 second")) }));
+`;
+
 export const testsPollOutsideSystemsOnlyWhenGrantedSchedules = Task.make(
-  "a test without a grant may not time out or poll on a timer, a test granted pollsWithADeadline may repeat with Schedule.spaced bounded by a timeout but neither without one nor by retrying, and tests may move TestClock and retry a counted Schedule.recurs",
+  "a test without a grant may not time out or poll on a timer, a test granted pollsWithADeadline may repeat or retry with Schedule.spaced bounded by a timeout but not without one, and tests may move TestClock and retry a counted Schedule.recurs",
   Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", {
       "tests/polls.ts": POLLS_WITH_A_DEADLINE,
@@ -280,8 +333,107 @@ export const testsPollOutsideSystemsOnlyWhenGrantedSchedules = Task.make(
       yield* lintWithPermissions('{ "tests/retries.ts": { allow: ["pollsWithADeadline"] } }', {
         "tests/retries.ts": RETRIES_WITH_A_DEADLINE,
       }),
-    ).toContain("Schedule.spaced retries on a timer, which no file may do, even with a deadline");
+    ).toBe("");
     expect(unbounded).not.toContain("no-test-timeouts");
+  }).pipe(Effect.scoped),
+);
+
+export const retriesOnATimerOnlyWhenGrantedSchedulesUnderADeadline = Task.make(
+  "a file granted pollsWithADeadline may retry with Schedule.spaced bounded by a timeout but not without one nor at once with Schedule.recurs, and a file without the grant may not retry on a timer",
+  Effect.gen(function* () {
+    const granted = '{ "retries.ts": { allow: ["pollsWithADeadline"] } }';
+    expect(yield* lintWithPermissions(granted, { "retries.ts": RETRIES_WITH_A_DEADLINE })).toBe("");
+    expect(
+      yield* lintWithPermissions(granted, { "retries.ts": RETRIES_WITHOUT_A_DEADLINE }),
+    ).toContain("Schedule.spaced polls without a deadline");
+    expect(yield* lintWithPermissions(granted, { "retries.ts": RETRIES_AT_ONCE })).toContain(
+      "Effect.retry retries at once, with no wait between attempts",
+    );
+    expect(yield* lintWithPermissions("{}", { "retries.ts": RETRIES_WITH_A_DEADLINE })).toContain(
+      "Schedule.spaced retries on a timer",
+    );
+  }).pipe(Effect.scoped),
+);
+
+export const exponentialSchedulesNeedAGrantAndADeadline = Task.make(
+  "a file granted pollsWithADeadline may repeat or retry with an exponential schedule, optionally jittered, under a deadline but not without one or in its uncovered fallback, and ungranted files may not use exponential schedules",
+  Effect.gen(function* () {
+    const granted = '{ "exponential.ts": { allow: ["pollsWithADeadline"] } }';
+    expect(
+      yield* lintWithPermissions(granted, { "exponential.ts": EXPONENTIAL_WITH_A_DEADLINE }),
+    ).toBe("");
+    const unbounded = yield* lintWithPermissions(granted, {
+      "exponential.ts": EXPONENTIAL_WITHOUT_A_DEADLINE,
+    });
+    expect(unbounded).toContain("Schedule.exponential polls without a deadline");
+    expect(unbounded).not.toContain("retries at once");
+    expect(
+      yield* lintWithPermissions(granted, { "exponential.ts": EXPONENTIAL_IN_A_TIMEOUT_FALLBACK }),
+    ).toContain("Schedule.exponential polls without a deadline");
+    const ungranted = yield* lintWithPermissions("{}", {
+      "exponential.ts": EXPONENTIAL_WITH_A_DEADLINE,
+    });
+    expect(ungranted).toContain("Schedule.exponential retries on a timer");
+    expect(ungranted).toContain("Schedule.exponential polls on a timer");
+    expect(ungranted).toContain("Schedule.jittered retries on a timer");
+    expect(ungranted).toContain("Schedule.jittered polls on a timer");
+  }).pipe(Effect.scoped),
+);
+
+const WAITS_ON_TIMERS = `import { Clock, Effect, Stream } from "effect";
+
+export const paused = Effect.sleep("1 second");
+export const pausedByTheClock = Effect.gen(function* () {
+  const clock = yield* Clock.Clock;
+  yield* clock.sleep("1 second");
+});
+export const later = Effect.void.pipe(Effect.delay("1 second"));
+export const ticks = Stream.tick("1 second");
+export const settled = Stream.make("a", "b").pipe(Stream.debounce("1 second"));
+export const paced = Stream.make("a", "b").pipe(
+  Stream.throttle({ cost: (items) => items.length, units: 1, duration: "1 second" }),
+);
+export const pacedByEffect = Stream.make("a", "b").pipe(
+  Stream.throttleEffect({ cost: (items) => Effect.succeed(items.length), units: 1, duration: "1 second" }),
+);
+`;
+
+const TIMER_OPERATIONS = [
+  "Effect.sleep",
+  "Effect.delay",
+  "Stream.tick",
+  "Stream.debounce",
+  "Stream.throttle",
+  "Stream.throttleEffect",
+  "Clock.sleep",
+] as const;
+
+export const timersWaitOnlyInFilesGrantedTimers = Task.make(
+  "a file granted waitsOnTimers may sleep, delay, sleep through the Clock service and use the Stream operations that wait on a timer, a file without the grant may not, and the grant lifts neither clock reads nor timed schedules",
+  Effect.gen(function* () {
+    const ungranted = yield* lintWithPermissions("{}", { "src/timers.ts": WAITS_ON_TIMERS });
+    for (const operation of TIMER_OPERATIONS) {
+      expect(ungranted).toContain(`${operation} is banned`);
+    }
+    expect(
+      yield* lintWithPermissions('{ "src/timers.ts": { allow: ["waitsOnTimers"] } }', {
+        "src/timers.ts": WAITS_ON_TIMERS,
+      }),
+    ).toBe("");
+    const stillBanned = yield* lintWithPermissions(
+      '{ "src/timers.ts": { allow: ["waitsOnTimers"] } }',
+      {
+        "src/timers.ts": `import { Schedule } from "effect";
+${WAITS_ON_TIMERS}export const now = new Date();
+export const polled = Effect.void.pipe(Effect.repeat(Schedule.spaced("1 second")));
+`,
+      },
+    );
+    expect(stillBanned).toContain("new Date() reads the current time");
+    expect(stillBanned).toContain("Schedule.spaced polls on a timer");
+    for (const operation of TIMER_OPERATIONS) {
+      expect(stillBanned).not.toContain(`${operation} is banned`);
+    }
   }).pipe(Effect.scoped),
 );
 
@@ -320,56 +472,25 @@ export const malformedGrantsAreRefusedAtRuntime = Task.make(
       },
       {
         permissionsByFile: '{ "a.ts": { allow: ["everything"] } }',
-        refusal: `"a.ts".allow[0]: Expected ${PERMISSION_NAMES}, got "everything"`,
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: ["trustsUnverifiedTypes"] } }',
-        refusal: '"a.ts".allow[0]: grants trustsUnverifiedTypes without a reason',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: ["isGeneratedByATool"] } }',
-        refusal: '"a.ts".allow[0]: grants isGeneratedByATool without a reason',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: ["handlesEveryFailure"] } }',
-        refusal: '"a.ts".allow[0]: grants handlesEveryFailure without a reason',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{ handlesEveryFailure: "" }] } }',
-        refusal: '"a.ts".allow[0].handlesEveryFailure: is blank',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{ handlesEveryFailure: "  " }] } }',
-        refusal: '"a.ts".allow[0].handlesEveryFailure: is blank',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{ handlesEveryFailure: true }] } }',
-        refusal: '"a.ts".allow[0].handlesEveryFailure: Expected string, got true',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{ trustsUnverifiedTypes: " " }] } }',
-        refusal: '"a.ts".allow[0].trustsUnverifiedTypes: is blank',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{ trustsUnverifiedTypes: 1 }] } }',
-        refusal: '"a.ts".allow[0].trustsUnverifiedTypes: Expected string, got 1',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{ usesSqlDatabases: "queries the cache" }] } }',
-        refusal: '"a.ts".allow[0].usesSqlDatabases: is not a permission that takes a reason',
-      },
-      {
-        permissionsByFile: '{ "a.ts": { allow: [{}] } }',
-        refusal: '"a.ts".allow[0]: grants nothing',
+        refusal: ['"a.ts".allow[0]: Expected "readsConfig"', 'got "everything"'].join("\n"),
       },
       {
         permissionsByFile:
-          '{ "a.ts": { allow: [{ trustsUnverifiedTypes: "one" }, { trustsUnverifiedTypes: "two" }] } }',
-        refusal: '"a.ts".allow: lists "trustsUnverifiedTypes" twice',
+          '{ "a.ts": { allow: [{ trustsUnverifiedTypes: "ports cross threads" }] } }',
+        refusal: '"a.ts".allow[0]: is not a permission name',
       },
       {
         permissionsByFile:
-          '{ "a.ts": { allow: [{ trustsUnverifiedTypes: "one" }, "trustsUnverifiedTypes"] } }',
+          '{ "a.ts": { allow: [{ handlesEveryFailure: "reports every outcome" }] } }',
+        refusal: '"a.ts".allow[0]: is not a permission name',
+      },
+      {
+        permissionsByFile: '{ "a.ts": { allow: [1] } }',
+        refusal: '"a.ts".allow[0]: is not a permission name',
+      },
+      {
+        permissionsByFile:
+          '{ "a.ts": { allow: ["trustsUnverifiedTypes", "trustsUnverifiedTypes"] } }',
         refusal: '"a.ts".allow: lists "trustsUnverifiedTypes" twice',
       },
       {
@@ -378,8 +499,7 @@ export const malformedGrantsAreRefusedAtRuntime = Task.make(
         refusal: '"a.ts".reason: is not one of the grant keys allow, services, cannotImport',
       },
       {
-        permissionsByFile:
-          '{ "a.ts": { allow: [{ trustsUnverifiedTypes: "one", isGeneratedByATool: "written by a code generator" }] } }',
+        permissionsByFile: '{ "a.ts": { allow: ["trustsUnverifiedTypes", "isGeneratedByATool"] } }',
         refusal:
           '"a.ts": generated outputs cannot also have permissions, services or import restrictions',
       },
@@ -401,7 +521,7 @@ export const malformedGrantsAreRefusedAtRuntime = Task.make(
         "isADirectoryCheckRefuses",
       ].map((name) => ({
         permissionsByFile: `{ "a.ts": { allow: ["${name}"] } }`,
-        refusal: `"a.ts".allow[0]: Expected ${PERMISSION_NAMES}, got "${name}"`,
+        refusal: ['"a.ts".allow[0]: Expected "readsConfig"', `got "${name}"`].join("\n"),
       })),
       {
         permissionsByFile: '{ "a-errors.ts": { allow: ["errors"] } }',
@@ -518,6 +638,14 @@ export const malformedGrantsAreRefusedAtRuntime = Task.make(
       {
         permissionsByFile: '{ "README.MD": { allow: ["usesSqlDatabases"] } }',
         refusal: '"README.MD": is Markdown, so it may only be granted hasAnUnlistedFileType',
+      },
+      {
+        permissionsByFile: '{ "docs/a.md": { services: ["Store"] } }',
+        refusal: '"docs/a.md": is Markdown, so it may only be granted hasAnUnlistedFileType',
+      },
+      {
+        permissionsByFile: '{ "docs/a.md": { cannotImport: ["src"] } }',
+        refusal: '"docs/a.md": is Markdown, so it may only be granted hasAnUnlistedFileType',
       },
     ];
     for (const { permissionsByFile, refusal } of refusals) {
@@ -711,11 +839,11 @@ export const loaded = () => [import.meta.require("./a.ts"), new Script("1")];
 export const greet = Console.log("hi");
 export const written = () => process.stdout.write("hi");
 export const polled = (work: Effect.Effect<void>) =>
-  work.pipe(Effect.repeat(Schedule.exponential("1 second")), Effect.timeout("30 seconds"));
+  work.pipe(Effect.repeat(Schedule.fibonacci("1 second")), Effect.timeout("30 seconds"));
 `;
 
 export const noGrantLiftsWhatAPermissionDoesNotAllow = Task.make(
-  "a file granted every permission still may not use the APIs no permission allows: other SQL clients, other ways to start commands, raw argument readers, import.meta.require and node:vm, Effect Console, process.stdout and timed schedules other than Schedule.spaced",
+  "a file granted every permission still may not use the APIs no permission allows: other SQL clients, other ways to start commands, raw argument readers, import.meta.require and node:vm, Effect Console, process.stdout and timed schedules such as Schedule.fibonacci",
   Effect.gen(function* () {
     const output = yield* lintWithPermissions(`{ "beyond.ts": ${ALL_PERMISSIONS} }`, {
       "beyond.ts": BEYOND_EVERY_ALLOW_LIST,
@@ -732,7 +860,7 @@ export const noGrantLiftsWhatAPermissionDoesNotAllow = Task.make(
       "node:vm loads code in a way no file may",
       "Console.log writes to the terminal in a way no file may",
       "process.stdout writes to the terminal in a way no file may",
-      "Schedule.exponential is a timed schedule no file may use",
+      "Schedule.fibonacci is a timed schedule no file may use",
     ]) {
       expect(output).toContain(report);
     }
@@ -837,7 +965,7 @@ export const unverifiedTypesLiftsOnlyThePredicateOfASchemaDeclaration = Task.mak
     expect(ungranted).toContain("`input is 80` is an unchecked type predicate");
     expect(ungranted).toContain("`value is 80` is an unchecked type predicate");
     const granted = yield* lintWithPermissions(
-      '{ "port.ts": { allow: [{ trustsUnverifiedTypes: "ports cross threads as JSON" }] } }',
+      '{ "port.ts": { allow: ["trustsUnverifiedTypes"] } }',
       {
         "port.ts": DECLARES_A_SCHEMA_FROM_A_GUARD,
       },
@@ -864,7 +992,7 @@ export const fallenBack = (work: Effect.Effect<number, string>) => Effect.catchT
 `;
 
 export const handlesEveryFailureLiftsTheUnnamedRecoveryBans = Task.make(
-  "without a grant, every operation that turns a failure it does not name into a success or a value is refused, and a file granted handlesEveryFailure with a reason may use all of them while orDie stays refused",
+  "without a grant, every operation that turns a failure it does not name into a success or a value is refused, and a file granted handlesEveryFailure may use all of them while orDie stays refused",
   Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", { "edge.ts": HANDLES_EVERY_FAILURE });
     for (const usage of [
@@ -884,7 +1012,7 @@ export const handlesEveryFailureLiftsTheUnnamedRecoveryBans = Task.make(
       "Effect.catchTags is given a fallback for failures it does not name",
     );
     const granted = yield* lintWithPermissions(
-      '{ "edge.ts": { allow: [{ handlesEveryFailure: "reports every outcome to its caller" }] } }',
+      '{ "edge.ts": { allow: ["handlesEveryFailure"] } }',
       {
         "edge.ts": `${HANDLES_EVERY_FAILURE}export const crashed = Effect.orDie(Effect.fail(1));\n`,
       },

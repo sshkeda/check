@@ -1,7 +1,7 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
 
-import { RETIRED_WORDS, retiredWordIn } from "../shared/find-retired-words.ts";
+import { retiredWordIn } from "../shared/find-retired-words.ts";
 import { fileNameOf } from "../shared/match-file-names-and-path-prefixes.ts";
 import { fileNameWords, identifierWords } from "./split-names-into-words.ts";
 import { declaredNameListeners } from "./visit-every-declared-name.ts";
@@ -11,9 +11,6 @@ const wordsOf = (name: string) => identifierWords(name).map((word) => word.text)
 export const noRetiredWords = defineRule({
   meta: {
     type: "suggestion",
-    docs: {
-      description: `Disallow the retired words ${[...RETIRED_WORDS].join(", ")} in the names a file declares and in its file name.`,
-    },
     messages: {
       name: "`{{name}}` uses the retired word {{word}}",
       fileName: "file name {{fileName}} uses the retired word {{word}}",

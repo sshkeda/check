@@ -238,10 +238,9 @@ const inferredType = (
     );
   });
 
-const annotationsStillNeeded = <CountingError>(
+const projectsWithoutAnnotations = (
   projectFile: string,
   candidates: readonly Effect.Success<ReturnType<typeof candidatesIn>>[number][],
-  countBaselineViolations: Effect.Effect<ReadonlyMap<string, number>, CountingError>,
 ) =>
   Effect.gen(function* () {
     const candidatesOfSourceFile = Map.groupBy(candidates, (candidate) => candidate.sourceFile);
@@ -257,16 +256,30 @@ const annotationsStillNeeded = <CountingError>(
         textWithoutAnnotations(sourceFile.text, fileCandidates),
       ]),
     );
-    const needed = new Set<(typeof candidates)[number]>();
-    const strippedProjects = yield* openTypeScriptProjects(projectFile, sourceTextOverrides);
-    for (const { checker, sourceFiles } of strippedProjects) {
+    const projects = yield* openTypeScriptProjects(projectFile, sourceTextOverrides);
+    for (const { sourceFiles } of projects) {
       for (const { sourceFile } of sourceFiles) {
         const override = sourceTextOverrides.get(sourceFile.fileName);
         const isOverrideMissingFromProgram = override !== undefined && override !== sourceFile.text;
         if (isOverrideMissingFromProgram) {
           return yield* new SourceOverlayNotApplied({ fileName: sourceFile.fileName });
         }
-        const fileCandidates = candidatesOfFile.get(sourceFile.fileName) ?? [];
+      }
+    }
+    return { projects, candidatesOfFile };
+  });
+
+const annotationsStillNeeded = <CountingError>(
+  projectFile: string,
+  candidates: readonly Effect.Success<ReturnType<typeof candidatesIn>>[number][],
+  countBaselineViolations: Effect.Effect<ReadonlyMap<string, number>, CountingError>,
+) =>
+  Effect.gen(function* () {
+    const typeChanging = new Set<(typeof candidates)[number]>();
+    const stripped = yield* projectsWithoutAnnotations(projectFile, candidates);
+    for (const { checker, sourceFiles } of stripped.projects) {
+      for (const { sourceFile } of sourceFiles) {
+        const fileCandidates = stripped.candidatesOfFile.get(sourceFile.fileName) ?? [];
         const annotatable = annotatableNodesByStart(sourceFile);
         for (const candidate of fileCandidates) {
           const node = annotatable.get(
@@ -280,18 +293,24 @@ const annotationsStillNeeded = <CountingError>(
             (yield* typeText(checker, yield* inferredType(checker, node))) !==
             candidate.annotatedTypeText;
           if (strippingChangedType) {
-            needed.add(candidate);
+            typeChanging.add(candidate);
           }
         }
       }
     }
-    if (needed.size === candidates.length) {
-      return needed;
+    const removable = candidates.filter((candidate) => !typeChanging.has(candidate));
+    if (removable.length === 0) {
+      return typeChanging;
     }
+    const strippedOfRemovable =
+      typeChanging.size === 0
+        ? stripped
+        : yield* projectsWithoutAnnotations(projectFile, removable);
+    const needed = new Set(typeChanging);
     const remainingBaseline = new Map(yield* countBaselineViolations);
-    for (const { program, sourceFiles } of strippedProjects) {
+    for (const { program, sourceFiles } of strippedOfRemovable.projects) {
       for (const { sourceFile } of sourceFiles) {
-        const fileCandidates = candidatesOfFile.get(sourceFile.fileName) ?? [];
+        const fileCandidates = strippedOfRemovable.candidatesOfFile.get(sourceFile.fileName) ?? [];
         const newViolations = (yield* typeScriptViolationsOf(program, sourceFile.fileName)).filter(
           (violation) => {
             const key = violationKey(sourceFile.fileName, violation);
@@ -301,7 +320,7 @@ const annotationsStillNeeded = <CountingError>(
           },
         );
         if (newViolations.length > 0) {
-          for (const candidate of fileCandidates.length > 0 ? fileCandidates : candidates) {
+          for (const candidate of fileCandidates.length > 0 ? fileCandidates : removable) {
             needed.add(candidate);
           }
         }

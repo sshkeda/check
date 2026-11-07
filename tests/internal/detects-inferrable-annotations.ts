@@ -5,6 +5,7 @@ import { Effect, FileSystem, Path, Array as Arrays, flow } from "effect";
 
 import { findInferrableAnnotations } from "../../src/lib/tasks/lib/detect-inferrable-annotations/internal/find-inferrable-annotations.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
+import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 
@@ -15,7 +16,7 @@ export type Box = HiddenBox;
 export const makeBox = (): HiddenBox => ({ size: 1 });
 `;
 
-const violations = (source: string) =>
+const violations = (source: string, otherFiles: Readonly<Record<string, string>> = {}) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -38,6 +39,9 @@ const violations = (source: string) =>
     );
     yield* fileSystem.writeFileString(path.join(directory, "box.ts"), HIDDEN_BOX);
     yield* fileSystem.writeFileString(path.join(directory, "source.ts"), source);
+    for (const [name, text] of Object.entries(otherFiles)) {
+      yield* fileSystem.writeFileString(path.join(directory, name), text);
+    }
     return yield* findInferrableAnnotations(
       path.join(directory, "tsconfig.json"),
       openTypeScriptProjects(path.join(directory, "tsconfig.json")),
@@ -74,7 +78,7 @@ export const levels: Set<Level> = new Set([Level.Low]);
       `source.ts:8:43: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
       `source.ts:10:22: error InferrableTypeAnnotation: levels has a type annotation TypeScript can infer`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const valuesEndingInAnEmptyArrayAreJudgedWithoutTheirAnnotation = Task.make(
@@ -96,7 +100,7 @@ export const viaComma = [1].map((): [] => (0, []));
     ).toEqual([
       `source.ts:8:23: error InferrableTypeAnnotation: checked has a type annotation TypeScript can infer`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const callbacksReturningAnEmptyArrayBranchAreReported = Task.make(
@@ -111,7 +115,7 @@ export const failures = results.flatMap((result): never[] | [string, ...string[]
     ).toEqual([
       `source.ts:2:51: error InferrableTypeAnnotation: the callback passed to flatMap has a return type annotation TypeScript can infer`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const neighboursOfACallbackReturningAnyAreReported = Task.make(
@@ -132,7 +136,7 @@ export const Holder = class { parsed = [text].map((value): number => JSON.parse(
       `source.ts:6:96: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
       `source.ts:7:114: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const annotationsTypeScriptNeedsPass = Task.make(
@@ -164,7 +168,7 @@ export const labelText = String(LABEL);
 export const none: [] = [];
 `),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const annotationsOutsideTheRulePass = Task.make(
@@ -181,7 +185,7 @@ export const LIMITS: Readonly<Record<string, number>> = { retries: 3 };
 count += numbers.length + read(greeting).length + Number(ready);
 `),
     ).toEqual([]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const onlyARealAnyKeepsAnAnnotation = Task.make(
@@ -198,5 +202,21 @@ export const loose = [1].map((value): Array<number> => JSON.parse(String(value))
       `source.ts:1:42: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
       `source.ts:3:42: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
     ]);
-  }),
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const annotationsThatChangeTypeKeepOnlyThemselves = Task.make(
+  "an annotation whose removal changes its type and adds errors in a file without annotations keeps only itself, and the other annotations are still reported",
+  Effect.gen(function* () {
+    expect(
+      yield* violations(
+        `export const ids: string[] = [];
+export const total: number = [1, 2].length;
+`,
+        { "uses-ids.ts": `import { ids } from "./source.ts";\nids.push("a");\n` },
+      ),
+    ).toEqual([
+      `source.ts:2:21: error InferrableTypeAnnotation: total has a type annotation TypeScript can infer`,
+    ]);
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
 );
