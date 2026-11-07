@@ -3,7 +3,10 @@ import { parseSync } from "oxc-parser";
 import type { ImportNameKind } from "oxc-parser";
 
 import { FORMAT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
+import { isWithin } from "../../../../../shared/match-file-names-and-path-prefixes.ts";
+import { SOURCE_DIRECTORY } from "../../../../../shared/test-home-directories.ts";
 import {
+  MODULE_ROOT_DIRECTORIES,
   isDeclarationFile,
   isTopLevelScript,
   isRootSupportFile,
@@ -253,15 +256,21 @@ export const findTheImporterGraph = (projectFile: string) =>
     ]);
     const importers = new Map<string, Set<string>>();
     for (const [importer, parsed] of files) {
-      const isCountedImporter = reachable.has(importer) && !isUnderTestDirectory(importer);
+      const isCountedImporter = reachable.has(importer);
       for (const use of isCountedImporter ? parsed.uses : []) {
-        if (use.file !== importer) {
+        const isCountedUse =
+          use.file !== importer &&
+          (!isUnderTestDirectory(importer) || !isWithin(use.file, SOURCE_DIRECTORY));
+        if (isCountedUse) {
           importers.set(use.file, (importers.get(use.file) ?? new Set()).add(importer));
         }
       }
     }
     const importersOf = (file: string) => [...(importers.get(file) ?? [])];
-    const moduleDirectories = moduleDirectoriesAmong(paths);
+    const moduleDirectories = new Set([
+      ...MODULE_ROOT_DIRECTORIES,
+      ...moduleDirectoriesAmong(paths),
+    ]);
     return {
       paths,
       files,

@@ -873,7 +873,7 @@ export const workerPreloadsAreReached = Task.make(
 );
 
 export const looseFilesInAModuleAreOutsideTheLayout = Task.make(
-  "a used file directly in a module directory, or in a directory without an index.ts inside a module, is FileOutsideModuleLayout naming that module, while index files, declaration files, files in shared/ with two users and a scripts/shared/ file with one file directly in scripts/ as its user, which has no narrower place, pass",
+  "a used file directly in a module directory, or in a directory without an index.ts inside a module, is FileOutsideModuleLayout naming that module, while index files, declaration files, files in shared/ with two users pass, while a scripts/shared/ file used only directly in scripts/ belongs in scripts/internal/",
   Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
@@ -918,6 +918,7 @@ export const looseFilesInAModuleAreOutsideTheLayout = Task.make(
       }),
     ).toEqual(
       [
+        sharedByOne("scripts/shared/tool.ts", "scripts"),
         outsideModuleLayout("src/helper.ts", "src"),
         outsideModuleLayout("src/flat-module/helper.ts", "src/flat-module"),
         outsideModuleLayout("src/flat/a.ts", "src"),
@@ -1157,28 +1158,29 @@ export const directoriesWithoutIndexOutsideModulesKeepTheirLayout = Task.make(
   Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
-        "package.json": '{ "name": "placement", "type": "module", "main": "./src/cli/index.ts" }\n',
-        "src/cli/index.ts": [
+        "package.json":
+          '{ "name": "placement", "type": "module", "main": "./tools/cli/index.ts" }\n',
+        "tools/cli/index.ts": [
           'import { LOOSE } from "../loose.ts";',
           'import { PLAIN } from "./plain/a.ts";',
           "export const CLI = [LOOSE, PLAIN];",
           "",
         ].join("\n"),
-        "src/cli/plain/a.ts": "export const PLAIN = 1;\n",
-        "src/loose.ts": 'import { HELP } from "./shared/help.ts";\nexport const LOOSE = HELP;\n',
-        "src/shared/help.ts": "export const HELP = 1;\n",
+        "tools/cli/plain/a.ts": "export const PLAIN = 1;\n",
+        "tools/loose.ts": 'import { HELP } from "./shared/help.ts";\nexport const LOOSE = HELP;\n',
+        "tools/shared/help.ts": "export const HELP = 1;\n",
       }),
     ).toEqual(
       [
-        besideSubdirectories("src/loose.ts"),
-        outsideModuleLayout("src/cli/plain/a.ts", "src/cli"),
+        besideSubdirectories("tools/loose.ts"),
+        outsideModuleLayout("tools/cli/plain/a.ts", "tools/cli"),
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 
 export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make(
-  "outside every module, a file directly in a directory that has subdirectories holding code is FileBesideSubdirectories, while a shared/ file used only under one subdirectory and a scripts/shared/ file with one file directly in scripts/ as its user pass",
+  "outside every module, a file directly in a directory that has subdirectories holding code is FileBesideSubdirectories, while a shared/ file used only under one subdirectory passes, and a scripts/shared/ file used only directly in scripts/ belongs in scripts/internal/",
   Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
@@ -1202,7 +1204,11 @@ export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make(
         "tools/shared/format.ts": "export const FORMAT = 1;\n",
       }),
     ).toEqual(
-      [besideSubdirectories("tools/help.ts"), besideSubdirectories("tools/run.ts")].toSorted(),
+      [
+        sharedByOne("scripts/shared/tool.ts", "scripts"),
+        besideSubdirectories("tools/help.ts"),
+        besideSubdirectories("tools/run.ts"),
+      ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );

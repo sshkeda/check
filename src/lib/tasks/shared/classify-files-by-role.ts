@@ -63,8 +63,13 @@ export const isTestEntryFile = (path: string) =>
 
 export const isRootSupportFile = (path: string) => !path.includes("/") && toolFileIsPlaced(path);
 
-export const isSpecialContainer = (directory: string) =>
-  directory === "" || directory === SCRIPTS_DIRECTORY;
+export const isSpecialContainer = (directory: string) => directory === "";
+
+export const MODULE_ROOT_DIRECTORIES: ReadonlySet<string> = new Set([
+  SOURCE_DIRECTORY,
+  TEST_DIRECTORY,
+  SCRIPTS_DIRECTORY,
+]);
 
 export const isStrictlyUnder = (directory: string, scope: string) =>
   directory !== scope && (scope === "" || directory.startsWith(`${scope}/`));

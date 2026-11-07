@@ -195,7 +195,7 @@ export const libraryDirectoriesOutsideModulesAreReported = Task.make(
           "src/lib/a/lib/b/index.ts",
           "src/internal/lib/data.json",
           "src/lib/a/shared/lib/data.json",
-          "scripts/lib/tests/c.ts",
+          "scripts/lib/tool/index.ts",
           "tests/shared/lib/d.json",
           "lib/e.ts",
           ".github/lib/a.ts",
@@ -203,14 +203,8 @@ export const libraryDirectoriesOutsideModulesAreReported = Task.make(
         ]),
       ),
     ).toEqual([
-      "src/other: error DirectoryOutsideModuleLayout: is a directory in the module src/ other than internal/, shared/ or lib/",
-      ...[
-        "src/internal/lib",
-        "src/lib/a/shared/lib",
-        "scripts/lib",
-        "tests/shared/lib",
-        ".github/lib",
-      ].map(
+      "src/other: error DirectoryOutsideModuleLayout: is a directory in the module src/ other than internal/, shared/ or lib/. Move it to src/lib/other/",
+      ...["src/internal/lib", "src/lib/a/shared/lib", "tests/shared/lib", ".github/lib"].map(
         (path) =>
           `${path}: error LibraryDirectory: is a lib/ directory that is not directly in a module`,
       ),
@@ -219,10 +213,10 @@ export const libraryDirectoriesOutsideModulesAreReported = Task.make(
 );
 
 const outsideModuleLayout = (directory: string, module: string) =>
-  `${directory}: error DirectoryOutsideModuleLayout: is a directory in the module ${module}/ other than internal/, shared/ or lib/`;
+  `${directory}: error DirectoryOutsideModuleLayout: is a directory in the module ${module}/ other than internal/, shared/ or lib/. Move it to ${module}/lib/${directory.split("/").at(-1)}/`;
 
 export const modulesHoldOnlyTheirIndexInternalSharedAndLibrary = Task.make(
-  "src/, tests/ and every module in a lib/ below them may hold only its index, internal/, shared/ and lib/, so any other directory directly in one is DirectoryOutsideModuleLayout once, without reports for what it holds, while directories inside internal/ and shared/ and paths outside src/ and tests/ are left to other rules",
+  "src/, scripts/, tests/ and every module in a lib/ below them may hold only its index, internal/, shared/ and lib/, so any other directory directly in one is DirectoryOutsideModuleLayout once, without reports for what it holds, while directories inside internal/ and shared/ and paths outside src/, scripts/ and tests/ are left to other rules",
   Effect.sync(() => {
     expect(
       taggedViolations(
@@ -256,6 +250,7 @@ export const modulesHoldOnlyTheirIndexInternalSharedAndLibrary = Task.make(
         "src/lib/tasks/lib/layout/lib/deep/fixtures",
         "src/lib/tasks/lib/layout/lib/deep",
       ),
+      outsideModuleLayout("scripts/release", "scripts"),
       outsideModuleLayout("tests/fixtures", "tests"),
     ]);
   }),
@@ -393,7 +388,7 @@ export const aLibraryDirectoryHoldingOneModulePasses = Task.make(
           NO_NESTED_PACKAGES,
         ),
       ),
-    ).toEqual([holdsOnly("scripts", "lib"), holdsOnly("scripts/lib", "only")]);
+    ).toEqual([holdsOnly("scripts", "lib")]);
   }),
 );
 
