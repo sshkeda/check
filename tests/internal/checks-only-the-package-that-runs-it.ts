@@ -3,7 +3,6 @@ import { expect } from "bun:test";
 import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Path, Array as Arrays, flow } from "effect";
 
-import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { installedBinary } from "../../src/lib/tasks/shared/find-installed-package-binaries.ts";
 import { listedPackageFiles } from "../../src/lib/tasks/shared/list-package-files.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
@@ -16,8 +15,7 @@ import {
   linkNodeModulesWithCheck,
   NO_PERMISSIONS,
   OWNER_WRITES_EVERYONE_READS,
-  RUNNER,
-  TASKS,
+  theCheckCommand,
   writtenFiles,
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
@@ -45,7 +43,6 @@ const workspacePackage = (directory: string, name: string, include: readonly str
       [`${directory}tsconfig.json`]: `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: [...include] })}\n`,
       [`${directory}oxlint.config.ts`]: `import { lintConfig } from "@sshkeda/check";\n\nexport default lintConfig({});\n`,
       [`${directory}oxfmt.config.ts`]: FORMAT_CONFIG_TEXT,
-      [`${directory}index.ts`]: `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\n\nTask.main(check);\n`,
     };
   });
 
@@ -83,11 +80,14 @@ const workspaceWithTwoPackages = Effect.gen(function* () {
 
 const runCheck = (
   workspace: { readonly root: string; readonly taskStateDirectory: string },
-  taskFile: string,
+  packageDirectory: string,
 ) =>
-  runTaskFile(`bun ${taskFile}`, {
-    cwd: workspace.root,
-    taskStateDirectory: workspace.taskStateDirectory,
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    return yield* runTaskFile(yield* theCheckCommand, {
+      cwd: path.join(workspace.root, packageDirectory),
+      taskStateDirectory: workspace.taskStateDirectory,
+    });
   }).pipe(
     Effect.catchTag("CommandFailed", (failure) =>
       Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
@@ -131,9 +131,9 @@ const workspaceWithNestedPackages = (extraFiles: Readonly<Record<string, string>
   });
 
 export const rootPackageChecksEachNestedPackageFromItsOwnRoot = Task.make(
-  "check run by the workspace root's task file checks each nested package, at any depth, as its own package: its files are judged from its own root with its own config files, and each report names the file from the root",
+  "the check command run on the workspace root checks each nested package, at any depth, as its own package: its files are judged from its own root with its own config files, and each report names the file from the root",
   Effect.gen(function* () {
-    const printed = yield* runCheck(yield* workspaceWithNestedPackages(), "index.ts");
+    const printed = yield* runCheck(yield* workspaceWithNestedPackages(), ".");
     expect(printed).not.toContain("left out nested packages");
     expect(printed).toContain(
       "packages/app/inner/src/Bad_Name.ts: error NotKebabCase: Bad_Name.ts is not kebab-case",
@@ -150,14 +150,14 @@ export const rootPackageChecksEachNestedPackageFromItsOwnRoot = Task.make(
 );
 
 export const nestedPackageNeedsItsOwnConfigFiles = Task.make(
-  "check run by the workspace root's task file reports each config file a nested package lacks at that package's root, instead of leaving the package unchecked",
+  "the check command run on the workspace root reports each config file a nested package lacks at that package's root, instead of leaving the package unchecked",
   Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "packages/bare/package.json": '{ "name": "bare", "type": "module" }\n',
         "packages/bare/src/index.ts": "export const BARE = 1;\n",
       }),
-      "index.ts",
+      ".",
     );
     for (const missing of [
       "[lint-config] packages/bare/oxlint.config.ts: error ConfigFileMissing",
@@ -170,14 +170,14 @@ export const nestedPackageNeedsItsOwnConfigFiles = Task.make(
 );
 
 export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make(
-  "check run by the workspace root's task file names a tsconfig that a nested package references outside itself by its path from the root",
+  "the check command run on the workspace root names a tsconfig that a nested package references outside itself by its path from the root",
   Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "packages/app/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/**/*.ts"], references: [{ path: "../library" }] })}\n`,
         "packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: { ...PACKAGE_COMPILER_OPTIONS, strictNullChecks: false }, include: ["src/**/*.ts"] })}\n`,
       }),
-      "index.ts",
+      ".",
     );
     expect(printed).toContain(
       "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
@@ -187,7 +187,7 @@ export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make(
 );
 
 export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make(
-  "check run by the workspace root's task file names a tsconfig that a nested package references inside itself by its path from the root, even when that path repeats the package's directory",
+  "the check command run on the workspace root names a tsconfig that a nested package references inside itself by its path from the root, even when that path repeats the package's directory",
   Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
@@ -195,7 +195,7 @@ export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make(
         "packages/library/packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: { ...PACKAGE_COMPILER_OPTIONS, strictNullChecks: false }, include: ["src/**/*.ts"] })}\n`,
         "packages/library/packages/library/src/index.ts": "export const NESTED = 1;\n",
       }),
-      "index.ts",
+      ".",
     );
     expect(printed).toContain(
       "[typescript-config] packages/library/packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
@@ -207,14 +207,14 @@ export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make(
 );
 
 export const projectCheckedByTwoPackagesIsReportedOnce = Task.make(
-  "check run by the workspace root's task file reports a tsconfig problem once when the root references a nested package that is also checked on its own",
+  "the check command run on the workspace root reports a tsconfig problem once when the root references a nested package that is also checked on its own",
   Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/index.ts"], references: [{ path: "./packages/library" }] })}\n`,
         "packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: { ...PACKAGE_COMPILER_OPTIONS, strictNullChecks: false }, include: ["src/**/*.ts"] })}\n`,
       }),
-      "index.ts",
+      ".",
     );
     expect(
       printed
@@ -229,17 +229,17 @@ export const projectCheckedByTwoPackagesIsReportedOnce = Task.make(
 );
 
 export const packageCheckReportsPathsFromItsDirectory = Task.make(
-  "check run by a workspace package's task file reports paths from that package and reruns when a declaration file of an imported sibling package changes",
+  "the check command started in a workspace package's directory reports paths from that package and reruns when a declaration file of an imported sibling package changes",
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const workspace = yield* workspaceWithTwoPackages;
-    expect(yield* runCheck(workspace, "packages/app/index.ts")).toContain("passed: ");
+    expect(yield* runCheck(workspace, "packages/app")).toContain("passed: ");
     yield* fileSystem.writeFileString(
       path.join(workspace.root, "packages/library/src/answer.d.ts"),
       "export declare const ANSWER: string;\n",
     );
-    const printed = yield* runCheck(workspace, "packages/app/index.ts");
+    const printed = yield* runCheck(workspace, "packages/app");
     expect(printed).toContain("[type-check] src/index.ts:3:31: error TS2551");
     expect(printed).not.toContain("lowercaseConstant");
   }).pipe(Effect.scoped),
@@ -272,7 +272,7 @@ export const passesWithTrackedFilesMissingFromTheWorkingTree = Task.make(
     yield* fileSystem.remove(path.join(root, "src/sparse.ts"));
     const printed = yield* runCheck(
       { root, taskStateDirectory: yield* fileSystem.makeTempDirectoryScoped() },
-      "index.ts",
+      ".",
     );
     expect(printed).not.toContain("NotFound");
     expect(printed).not.toContain(" error ");

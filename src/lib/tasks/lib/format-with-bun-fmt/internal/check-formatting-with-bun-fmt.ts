@@ -16,8 +16,6 @@ import {
 } from "../../../shared/run-tools-and-decode-their-reports.ts";
 import { UnformattedFile } from "./unformatted-file-errors.ts";
 
-export const FORMATTED_PACKAGE_DIRECTORY = ".";
-
 const BUN_FORMAT = "bun fmt";
 
 const BUN_FORMAT_TASK = "bun-fmt";
@@ -33,11 +31,11 @@ const BUN_FORMAT_ARGUMENTS = [
 
 const CONTROL_CHARACTER = /\p{Cc}/u;
 
-const filesBunFormatFormatsAmong = (files: readonly string[]) =>
+const filesBunFormatFormatsAmong = (checkedProject: string, files: readonly string[]) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const onDisk = (file: string) => path.join(FORMATTED_PACKAGE_DIRECTORY, file);
+    const onDisk = (file: string) => path.join(checkedProject, file);
     const listed = files.filter((file) => file !== FORMAT_CONFIG_FILE);
     const linkedDirectories = new Set(
       yield* Effect.filter(
@@ -87,12 +85,13 @@ const filesListedInARunOfOneFileNotPrintedOnOneLine = (file: string, standardOut
 
 const formatArgumentOf = (file: string) => `./${file}`;
 
-const ranBunFormat = (fileArguments: readonly string[]) =>
-  runTool(BUN_FORMAT, process.execPath, [
-    ...BUN_FORMAT_ARGUMENTS,
-    formatArgumentOf(FORMAT_CONFIG_FILE),
-    ...fileArguments,
-  ]).pipe(
+const ranBunFormat = (checkedProject: string, fileArguments: readonly string[]) =>
+  runTool(
+    BUN_FORMAT,
+    process.execPath,
+    [...BUN_FORMAT_ARGUMENTS, formatArgumentOf(FORMAT_CONFIG_FILE), ...fileArguments],
+    checkedProject,
+  ).pipe(
     Effect.map(({ standardOutput }) => ({ exited: undefined, standardOutput })),
     Effect.catchTag("ToolExited", (exited) =>
       Effect.succeed({ exited, standardOutput: exited.standardOutput }),
@@ -105,9 +104,9 @@ const unformattedFileOf = (file: string) =>
     return printableError(new UnformattedFile({ file: location }));
   });
 
-const bunFormatReportOn = (packageFiles: readonly string[]) =>
+const bunFormatReportOn = (checkedProject: string, packageFiles: readonly string[]) =>
   Effect.gen(function* () {
-    const formatted = yield* filesBunFormatFormatsAmong(packageFiles);
+    const formatted = yield* filesBunFormatFormatsAmong(checkedProject, packageFiles);
     const runs = [
       ...argumentsInRunsOfBoundedSize(
         formatted.filter((file) => isPrintedOnOneLine(file)).map((file) => formatArgumentOf(file)),
@@ -127,7 +126,7 @@ const bunFormatReportOn = (packageFiles: readonly string[]) =>
       runs.push({ fileArguments: [], listedIn: listedLinesOf });
     }
     const ran = yield* Effect.forEach(runs, (run) =>
-      ranBunFormat(run.fileArguments).pipe(
+      ranBunFormat(checkedProject, run.fileArguments).pipe(
         Effect.map(({ exited, standardOutput }) => ({
           exited,
           listed: run.listedIn(standardOutput),
@@ -141,9 +140,11 @@ const bunFormatReportOn = (packageFiles: readonly string[]) =>
     };
   });
 
-export const unformattedFilesAmong = (packageFiles: readonly string[]) =>
+export const unformattedFilesAmong = (checkedProject: string, packageFiles: readonly string[]) =>
   Effect.gen(function* () {
-    const report = yield* bunFormatReportOn(packageFiles).pipe(quietViolations(BUN_FORMAT_TASK));
+    const report = yield* bunFormatReportOn(checkedProject, packageFiles).pipe(
+      quietViolations(BUN_FORMAT_TASK),
+    );
     if (report.exited !== undefined) {
       return yield* failQuietly(
         BUN_FORMAT_TASK,

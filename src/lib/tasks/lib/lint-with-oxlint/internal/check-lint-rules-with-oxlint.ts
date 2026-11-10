@@ -17,6 +17,7 @@ import {
   runTool,
 } from "../../../shared/run-tools-and-decode-their-reports.ts";
 import { checkUnsafeEnumAssignmentsIn } from "./check-unsafe-enum-assignments.ts";
+import { findShebangsOutsideBin } from "./find-shebangs-outside-bin.ts";
 import { tsgolintExecutable } from "./find-tsgolint-executable.ts";
 import {
   OXLINT_TASK,
@@ -114,6 +115,12 @@ export const checkLintRulesWithOxlintIn = (directory: string) =>
         reportedErrorsOf(
           checkUnsafeEnumAssignmentsIn(directory, files).pipe(
             Effect.withSpan("unsafe-enum-assignments"),
+          ),
+        ),
+        reportedErrorsOf(
+          findShebangsOutsideBin(directory, files).pipe(
+            Effect.withSpan("shebangs-outside-bin"),
+            quietViolations(OXLINT_TASK),
           ),
         ),
       ],

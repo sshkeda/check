@@ -73,16 +73,32 @@ export class TopLevelScriptWithoutMain extends Schema.TaggedError<TopLevelScript
   { location: Schema.String },
 ) {
   public override get message() {
-    return `sits directly in ${SCRIPTS_DIRECTORY}/ and does not call ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER} imported from ${TASK_PACKAGE}`;
+    return `sits directly in ${SCRIPTS_DIRECTORY}/ and neither calls ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER} imported from ${TASK_PACKAGE} nor has a default export`;
   }
 }
 
+const SCRIPT_ENTRY_POINTS = ["main-guard", "default-export"] as const;
+
+const STATEMENTS_A_SCRIPT_MAY_HOLD = {
+  "main-guard": `an import and if (import.meta.main) { ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER}(task); }`,
+  "default-export": "an import and export default task",
+} satisfies Record<(typeof SCRIPT_ENTRY_POINTS)[number], string>;
+
 export class TopLevelScriptHoldsOtherStatement extends Schema.TaggedError<TopLevelScriptHoldsOtherStatement>()(
   "TopLevelScriptHoldsOtherStatement",
+  { location: Schema.String, entryPoint: Schema.Literals(SCRIPT_ENTRY_POINTS) },
+) {
+  public override get message() {
+    return `holds a statement other than ${STATEMENTS_A_SCRIPT_MAY_HOLD[this.entryPoint]}`;
+  }
+}
+
+export class TopLevelScriptWithMainAndDefaultExport extends Schema.TaggedError<TopLevelScriptWithMainAndDefaultExport>()(
+  "TopLevelScriptWithMainAndDefaultExport",
   { location: Schema.String },
 ) {
   public override get message() {
-    return `holds a statement other than an import and if (import.meta.main) { ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER}(task); }`;
+    return `calls ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER} and also has a default export. Keep one of them`;
   }
 }
 
@@ -388,6 +404,7 @@ export class FileLayoutViolations extends Schema.TaggedError<FileLayoutViolation
         TopLevelNonScript,
         TopLevelScriptWithoutMain,
         TopLevelScriptHoldsOtherStatement,
+        TopLevelScriptWithMainAndDefaultExport,
         LibraryDirectory,
         DirectoryOutsideModuleLayout,
         ModuleWithoutIndex,

@@ -11,6 +11,6 @@ export const directives = Task.make(
   "directives",
   Effect.andThen(
     Task.all([typeScriptConfig, lintConfigFile]),
-    inEachPackage("directives", ".", findDisableDirectivesInLintedFilesOf),
+    inEachPackage("directives", findDisableDirectivesInLintedFilesOf),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

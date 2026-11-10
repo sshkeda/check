@@ -1,6 +1,6 @@
 {
   "name": "@sshkeda/check",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "homepage": "https://github.com/sshkeda/check#readme",
   "bugs": {
     "url": "https://github.com/sshkeda/check/issues"
@@ -10,14 +10,17 @@
     "type": "git",
     "url": "git+https://github.com/sshkeda/check.git"
   },
+  "bin": {
+    "check": "./scripts/check.ts"
+  },
   "files": [
     "docs",
+    "scripts/check.ts",
     "src"
   ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./tasks": "./src/lib/tasks/index.ts"
+    ".": "./src/index.ts"
   },
   "publishConfig": {
     "access": "public",
@@ -27,6 +30,7 @@
     "@effect/platform-bun": "4.1.0",
     "@effect/tsgo": "0.67.4",
     "@oxlint/plugins": "1.88.0",
+    "@sshkeda/task": "1.0.2",
     "oxc-parser": "0.153.0",
     "oxc-resolver": "11.24.2",
     "oxlint": "1.88.0",
@@ -34,18 +38,11 @@
     "typescript": "7.0.2"
   },
   "devDependencies": {
-    "@sshkeda/task": "^1.0.0",
     "@types/bun": "1.4.3",
     "effect": "4.1.0"
   },
   "peerDependencies": {
-    "@sshkeda/task": "^1.0.0",
     "effect": "^4.1.0"
-  },
-  "peerDependenciesMeta": {
-    "@sshkeda/task": {
-      "optional": true
-    }
   },
   "engines": {
     "bun": ">=1.4.4"

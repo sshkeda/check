@@ -9,6 +9,7 @@ Check may not catch every violation of these principles. Review your code agains
 - Use a grant only for an unavoidable exception.
 - Move the code that needs a grant into its own small file and grant that file. A grant covers the whole file, so Check stops reporting that ban for everything else in it.
 - Design for the current requirement as if you were starting fresh. Delete code the new design doesn't need.
+- Handle a forked effect's failure before the fork, or keep the fiber and join it.
 - Grant `isGeneratedByATool` only to a file a tool generates.
 
 ## Grant a permission

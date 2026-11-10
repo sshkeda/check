@@ -38,6 +38,7 @@ import * as typeOnlySchemas from "./internal/refuses-schemas-used-only-as-types.
 import * as syncCalls from "./internal/refuses-sync-calls-in-every-file.ts";
 import * as assertions from "./internal/refuses-test-runners-and-assertions-outside-test-home.ts";
 import * as testingHelpers from "./internal/refuses-testing-helpers-outside-test-files.ts";
+import * as unobservedForkFailures from "./internal/refuses-unobserved-fork-failures.ts";
 import * as identifierNaming from "./internal/rejects-abbreviated-names.ts";
 import * as bunModuleImports from "./internal/rejects-bun-module-imports.ts";
 import * as sharedHolders from "./internal/rejects-captured-writes-inside-effect-callbacks.ts";
@@ -82,6 +83,7 @@ import * as serviceLayers from "./internal/requires-separate-service-layers.ts";
 import * as consumerChecks from "./internal/runs-every-check-in-a-consumer.ts";
 import * as sharedTypeScriptProject from "./internal/shares-one-typescript-project-per-run.ts";
 import * as nestedWorktrees from "./internal/skips-nested-git-worktrees.ts";
+import * as checkCommand from "./internal/starts-check-as-a-command.ts";
 import * as pickedLintRules from "./internal/turns-on-the-picked-lint-rules.ts";
 import { stageCheckUnderNodeModules } from "./shared/checked-project.ts";
 
@@ -111,6 +113,7 @@ export const ci = Task.make(
         repeatedServiceYields,
         serviceLayers,
         errorMappingsToDone,
+        unobservedForkFailures,
         dynamicRuntimeCalls,
         effectLanguageServiceRules,
         effectNativeRestrictions,
@@ -173,6 +176,7 @@ export const ci = Task.make(
         typeOnlySchemas,
         pickedLintRules,
         nestedWorktrees,
+        checkCommand,
       ],
       { concurrency: 6 },
     ),

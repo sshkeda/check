@@ -11,6 +11,6 @@ export const effectStrict = Task.make(
   "effect-tsgo",
   Effect.andThen(
     Task.all([typeScriptConfig, lintConfigFile]),
-    inEachPackage("effect-tsgo", ".", effectDiagnosticsIn),
+    inEachPackage("effect-tsgo", effectDiagnosticsIn),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

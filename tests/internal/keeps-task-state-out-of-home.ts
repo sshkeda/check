@@ -3,9 +3,8 @@ import { expect } from "bun:test";
 import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Path } from "effect";
 
-import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
-import { makeProject as makeProjectWith, RUNNER, TASKS } from "../shared/checked-project.ts";
+import { theCheckCommand, makeProject as makeProjectWith } from "../shared/checked-project.ts";
 import { runTaskFile } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
@@ -17,11 +16,10 @@ export const keepsTaskStateOutOfHome = Task.make(
     const path = yield* Path.Path;
     const home = yield* fileSystem.makeTempDirectoryScoped();
     const { directory, taskStateDirectory } = yield* makeProject({
-      ".gitignore": "node_modules\nrun.ts\n",
+      ".gitignore": "node_modules\n",
       "index.ts": "export const COUNT = 1;\n",
-      "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
     });
-    const printed = yield* runTaskFile("bun run.ts", {
+    const printed = yield* runTaskFile(yield* theCheckCommand, {
       cwd: directory,
       taskStateDirectory,
       env: { HOME: home },

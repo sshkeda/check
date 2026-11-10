@@ -49,6 +49,7 @@ import {
   directoriesNestedInLayoutDirectoriesOf,
 } from "../../../shared/classify-files-by-role.ts";
 import { lineNumbersIn } from "../../../shared/count-the-line-of-an-offset.ts";
+import { listedBinaryFilesOf } from "../../../shared/find-installed-package-binaries.ts";
 import { PACKAGE_MANIFEST_FILE } from "../../../shared/find-named-package-manifests.ts";
 import { isInsideAnyDirectory, listedPackageFiles } from "../../../shared/list-package-files.ts";
 import { loadedLintConfigIn } from "../../../shared/load-the-lint-config.ts";
@@ -92,6 +93,7 @@ import {
   MisplacedToolFile,
   TopLevelNonScript,
   TopLevelScriptHoldsOtherStatement,
+  TopLevelScriptWithMainAndDefaultExport,
   TopLevelScriptWithoutMain,
   UngrantedDocument,
   UngrantedDirectory,
@@ -271,26 +273,61 @@ const isMainGuard = (statement: Statement, imports: ReadonlyMap<string, readonly
   return testsImportMetaMain && alternate === null && runsOneNamedTask;
 };
 
+const isDefaultExport = (statement: Statement) =>
+  statement.type === "ExportDefaultDeclaration" &&
+  statement.declaration.type !== "TSInterfaceDeclaration";
+
+const statementsOtherThanImports = (parsed: ParseResult) =>
+  parsed.program.body.filter((statement) => statement.type !== "ImportDeclaration");
+
 const statementsOtherThanImportsAndMain = (
   parsed: ParseResult,
   imports: ReadonlyMap<string, readonly string[]>,
 ) => {
-  const nonImports = parsed.program.body.filter(
-    (statement) => statement.type !== "ImportDeclaration",
-  );
+  const nonImports = statementsOtherThanImports(parsed);
   const firstGuard = nonImports.findIndex((statement) => isMainGuard(statement, imports));
   return nonImports.filter((_statement, index) => index !== firstGuard);
+};
+
+const mainScriptViolations = (
+  path: string,
+  text: string,
+  parsed: ParseResult,
+  imports: ReadonlyMap<string, readonly string[]>,
+) => {
+  const lineAt = lineNumbersIn(text);
+  return statementsOtherThanImportsAndMain(parsed, imports).map((statement) => {
+    const location = `${path}:${lineAt(statement.start)}`;
+    return isDefaultExport(statement)
+      ? new TopLevelScriptWithMainAndDefaultExport({ location })
+      : new TopLevelScriptHoldsOtherStatement({ location, entryPoint: "main-guard" });
+  });
+};
+
+const defaultExportScriptViolations = (path: string, text: string, parsed: ParseResult) => {
+  const lineAt = lineNumbersIn(text);
+  return statementsOtherThanImports(parsed)
+    .filter((statement) => !isDefaultExport(statement))
+    .map(
+      (statement) =>
+        new TopLevelScriptHoldsOtherStatement({
+          location: `${path}:${lineAt(statement.start)}`,
+          entryPoint: "default-export",
+        }),
+    );
 };
 
 export const sourceViolations = (
   path: string,
   text: string,
   resolvedImports?: ReadonlyMap<string, readonly string[]>,
+  isListedUnderBin = false,
 ) => {
   const violations: (
     | MisplacedAtPackageRoot
     | SourceOutsideInternalOrShared
     | TopLevelScriptHoldsOtherStatement
+    | TopLevelScriptWithMainAndDefaultExport
     | TopLevelScriptWithoutMain
   )[] = [];
   const isMisplacedTool = toolFileOf(path) !== undefined && !toolFileIsPlaced(path);
@@ -324,22 +361,18 @@ export const sourceViolations = (
       }),
     );
   }
-  const isTopLevelScriptWithoutMain =
-    isTopLevelScript(path) && !callsTaskMember(parsed, TASK_MAIN_MEMBER, imports);
-  if (isTopLevelScriptWithoutMain) {
-    violations.push(new TopLevelScriptWithoutMain({ location: path }));
+  const isTaskScript = isTopLevelScript(path) && !isListedUnderBin;
+  if (!isTaskScript) {
+    return violations;
   }
-  const isTopLevelScriptWithMain = isTopLevelScript(path) && !isTopLevelScriptWithoutMain;
-  if (isTopLevelScriptWithMain) {
-    const lineAt = lineNumbersIn(text);
-    violations.push(
-      ...statementsOtherThanImportsAndMain(parsed, imports).map(
-        (statement) =>
-          new TopLevelScriptHoldsOtherStatement({
-            location: `${path}:${lineAt(statement.start)}`,
-          }),
-      ),
-    );
+  const callsMain = callsTaskMember(parsed, TASK_MAIN_MEMBER, imports);
+  const hasDefaultExport = parsed.program.body.some((statement) => isDefaultExport(statement));
+  if (callsMain) {
+    violations.push(...mainScriptViolations(path, text, parsed, imports));
+  } else if (hasDefaultExport) {
+    violations.push(...defaultExportScriptViolations(path, text, parsed));
+  } else {
+    violations.push(new TopLevelScriptWithoutMain({ location: path }));
   }
   return violations;
 };
@@ -772,6 +805,7 @@ export const findFileLayoutViolations = (directory: string) =>
       ),
     );
     const rootManifest = yield* rootManifestIn(directory, paths);
+    const binaryFiles = listedBinaryFilesOf(rootManifest);
     const generated = Option.match(grants, {
       onNone: () => new Set<string>(),
       onSome: generatedPathsOf,
@@ -829,7 +863,7 @@ export const findFileLayoutViolations = (directory: string) =>
           return [
             ...found,
             ...(isScriptFile
-              ? sourceViolations(path, text, imports)
+              ? sourceViolations(path, text, imports, binaryFiles.has(path))
               : yield* manifestViolations(path, text, repository)),
           ];
         }),

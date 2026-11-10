@@ -2,6 +2,8 @@ import { lintConfig } from "./src/index.ts";
 
 export default lintConfig({
   "docs/how-to-make-check-pass.md": { allow: ["hasAnUnlistedFileType"] },
+  "scripts/check.ts": { allow: ["readsConfig"] },
+  "src/lib/project-directory/internal/read-the-project-directory.ts": { allow: ["readsConfig"] },
   "src/lib/tasks/lib/lint-with-oxlint/internal/check-unsafe-enum-assignments.ts": {
     allow: ["spawnsCommands"],
   },

@@ -376,6 +376,7 @@ export const findExportPlacementViolations = <Failure, Requirements>(
       reach,
       exportsAreReadFromOutside,
       roots,
+      runsItsDefaultExport,
       reachable,
       moduleDirectories,
     } = graph;
@@ -402,6 +403,7 @@ export const findExportPlacementViolations = <Failure, Requirements>(
           : [],
       ),
     );
+    const servedByThePackage = reach(graph.binaryEntries, (use) => use.kind !== "type");
     const isServedOnlyToScripts = (file: string) =>
       isWithin(file, SOURCE_DIRECTORY) &&
       !builtByScripts.has(file) &&
@@ -506,6 +508,10 @@ export const findExportPlacementViolations = <Failure, Requirements>(
         continue;
       }
       for (const [name, { line }] of parsed.exports) {
+        const isATaskDefaultExport = name === DEFAULT_EXPORT && runsItsDefaultExport.has(file);
+        if (isATaskDefaultExport) {
+          continue;
+        }
         const location = `${file}:${line}`;
         const recordedUsers = [...allUsersOf(file, name)];
         const everyUser = recordedUsers.filter((user) => reachable.has(user));
@@ -518,7 +524,9 @@ export const findExportPlacementViolations = <Failure, Requirements>(
           elsewhere.every(
             (user) =>
               isUnderTestDirectory(user) ||
-              (isWithin(user, SCRIPTS_DIRECTORY) && isServedOnlyToScripts(file)),
+              (isWithin(user, SCRIPTS_DIRECTORY) &&
+                !servedByThePackage.has(user) &&
+                isServedOnlyToScripts(file)),
           ) &&
           !(usedInOwnFile && elsewhere.length > 0) &&
           (elsewhere.length === 0 || !isWithin(file, SCRIPTS_DIRECTORY));

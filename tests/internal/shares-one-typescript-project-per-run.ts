@@ -11,6 +11,7 @@ import { findInferrableAnnotations } from "../../src/lib/tasks/lib/detect-inferr
 import { findRepeatedServiceYields } from "../../src/lib/tasks/lib/detect-repeated-service-yields/internal/find-repeated-service-yields.ts";
 import { findExportPlacementViolations } from "../../src/lib/tasks/lib/place-exports-in-the-narrowest-directory/internal/find-export-placement-violations.ts";
 import { findErrorMappingsToDone } from "../../src/lib/tasks/lib/refuse-error-mappings-that-end-streams/internal/find-error-mappings-to-done.ts";
+import { findUnobservedForkFailures } from "../../src/lib/tasks/lib/refuse-forks-whose-failures-nothing-observes/internal/find-unobserved-fork-failures.ts";
 import { findServiceLayerViolations } from "../../src/lib/tasks/lib/require-separate-service-layers/internal/find-service-layer-violations.ts";
 import { moduleResolverFor } from "../../src/lib/tasks/shared/create-the-module-resolver.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
@@ -43,6 +44,7 @@ export const checksQueryOneSharedProject = Task.make(
       outcomeOf(findDeclaredUseViolations(tsconfigFile, openedProjects)),
       outcomeOf(findExportPlacementViolations(tsconfigFile, openedProjects)),
       outcomeOf(findInferrableAnnotations(tsconfigFile, openedProjects)),
+      outcomeOf(findUnobservedForkFailures(tsconfigFile, openedProjects)),
     ]);
     expect(yield* Ref.get(reads)).toBe(results.length);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),

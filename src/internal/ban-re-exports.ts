@@ -1,8 +1,10 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
+import { Schema } from "effect";
 
 import { FORMAT_CONFIG_BINDING, FORMAT_CONFIG_FILE } from "../shared/config-file-names.ts";
 import { fileNameOf, isEntryFileName } from "../shared/match-file-names-and-path-prefixes.ts";
+import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
 import {
   DEFAULT_EXPORT,
   importedBindingOf,
@@ -12,6 +14,12 @@ import {
   textOnOneLine,
   unwrappedExpression,
 } from "./resolve-what-an-expression-imports.ts";
+
+const DEFAULT_EXPORTS_OF_IMPORTS = ["banned", "allowed"] as const;
+
+const RE_EXPORTS_OPTIONS = Schema.Struct({
+  defaultExportOfAnImport: Schema.optionalKey(Schema.Literals(DEFAULT_EXPORTS_OF_IMPORTS)),
+});
 
 export const noReExports = defineRule({
   meta: {
@@ -30,8 +38,11 @@ export const noReExports = defineRule({
       importEquals: "export import {{name}} re-exports another module",
       exportAssignment: "export = replaces the module's exports",
     },
+    schema: ruleOptionsJsonSchema(RE_EXPORTS_OPTIONS),
   },
   create(context) {
+    const defaultExportOfAnImport =
+      decodeRuleOptions(RE_EXPORTS_OPTIONS, context.options)?.defaultExportOfAnImport ?? "banned";
     const isIndexFile = isEntryFileName(fileNameOf(context.filename));
     const isFormatConfigFile = fileNameOf(context.filename) === FORMAT_CONFIG_FILE;
     const reportImport = (
@@ -195,7 +206,9 @@ export const noReExports = defineRule({
               statement.declaration.name === FORMAT_CONFIG_BINDING &&
               importedExpression(statement.declaration, context.sourceCode)?.members.join() ===
                 FORMAT_CONFIG_BINDING;
-            if (!exportsTheFormatConfig) {
+            const isAllowedDefaultExport =
+              exportsTheFormatConfig || defaultExportOfAnImport === "allowed";
+            if (!isAllowedDefaultExport) {
               reportImported(statement, DEFAULT_EXPORT, statement.declaration);
             }
           } else if (statement.type === "TSExportAssignment") {

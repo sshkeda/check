@@ -4,7 +4,6 @@ import { NodeFlags } from "typescript/unstable/ast";
 import type { CallExpression, Node, SourceFile } from "typescript/unstable/ast";
 import {
   isArrowFunction,
-  isAsExpression,
   isBlock,
   isCallExpression,
   isConditionalExpression,
@@ -12,13 +11,9 @@ import {
   isFunctionDeclaration,
   isFunctionExpression,
   isIdentifier,
-  isNonNullExpression,
   isObjectLiteralExpression,
   isParameterDeclaration,
-  isParenthesizedExpression,
-  isPropertyAccessExpression,
   isReturnStatement,
-  isSatisfiesExpression,
   isSpreadElement,
   isVariableDeclaration,
   isVariableStatement,
@@ -37,6 +32,12 @@ import {
   typeScriptRequest,
 } from "../../../shared/query-the-typescript-project.ts";
 import type { openTypeScriptProjects } from "../../../shared/query-the-typescript-project.ts";
+import {
+  outermostWrapperOf,
+  pipedStepsOf,
+  referencedNameOf,
+  withoutWrappers,
+} from "../../../shared/read-piped-steps-through-wrappers.ts";
 import { absolutePathOf } from "../../../shared/resolve-absolute-paths.ts";
 import {
   LayerProvidedOutsideProgramStart,
@@ -78,25 +79,12 @@ const EFFECT_OPERATIONS = [
   { module: STREAM_MODULE, names: PROVIDE_OPERATIONS },
 ];
 const PROVIDING_MODULES = [EFFECT_MODULE, STREAM_MODULE];
-const PIPE = "pipe";
 const PROVIDED_ARGUMENTS = 2;
 
 const anyOf = <Item, Failure>(
   items: Iterable<Item>,
   predicate: (item: Item) => Effect.Effect<boolean, Failure>,
 ) => Effect.findFirst(items, predicate).pipe(Effect.map(Option.isSome));
-
-const isWrapper = (node: Node) =>
-  isParenthesizedExpression(node) ||
-  isAsExpression(node) ||
-  isSatisfiesExpression(node) ||
-  isNonNullExpression(node);
-
-const withoutWrappers = (node: Node): Node =>
-  isWrapper(node) ? withoutWrappers(node.expression) : node;
-
-const outermostWrapperOf = (node: Node): Node =>
-  isWrapper(node.parent) ? outermostWrapperOf(node.parent) : node;
 
 const isFunctionLike = (node: Node) =>
   isFunctionDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node);
@@ -122,30 +110,12 @@ const returnedBy = (callable: Node) => {
   return returned;
 };
 
-const referencedNameOf = (node: Node) => {
-  const reference = withoutWrappers(node);
-  if (isPropertyAccessExpression(reference)) {
-    return reference.name;
-  }
-  return isIdentifier(reference) ? reference : undefined;
-};
-
 const isExportOf = (
   apis: Effect.Success<ReturnType<typeof importedPackageApis>>,
   symbol: TypeScriptSymbol | undefined,
   module: string,
   names: ReadonlySet<string>,
 ) => symbol !== undefined && names.has(symbol.name) && apis.effectExports.get(symbol.id) === module;
-
-const pipedStepsOf = (call: CallExpression) => {
-  if (referencedNameOf(call.expression)?.text !== PIPE) {
-    return;
-  }
-  const callee = withoutWrappers(call.expression);
-  return isPropertyAccessExpression(callee)
-    ? [callee.expression, ...call.arguments]
-    : [...call.arguments];
-};
 
 const stepsBefore = (step: Node) => {
   const { parent } = step;

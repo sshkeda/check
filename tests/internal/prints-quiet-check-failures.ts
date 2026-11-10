@@ -6,10 +6,10 @@ import { Effect, FileSystem, Path } from "effect";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
 import {
+  theCheckCommand,
   FORMAT_CONFIG_TEXT,
   linkNodeModulesWithCheck,
   RUNNER,
-  TASKS,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
@@ -89,13 +89,12 @@ export const printsToolOutputWithDetailInTrace = Task.make(
         path.join(directory, "index.ts"),
         'export const double = (input: number): string => input * 2;\nexport const identifier = crypto.randomUUID();\nexport const greeting = "hello";\nexport const PARSED: number = JSON.parse("1");\nexport type Choice = "a hint: b" | string;\nexport const SCHEDULED = setTimeout(() => 1, 1);\n',
       );
-      yield* fileSystem.writeFileString(
-        path.join(directory, "run.ts"),
-        `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
-      );
       yield* Task.exec("git", ["init", "--quiet"], options);
       yield* Task.exec("bun", ["fmt", "."], options);
-      const failures = yield* runTaskFile("bun run.ts", { ...options, taskStateDirectory }).pipe(
+      const failures = yield* runTaskFile(yield* theCheckCommand, {
+        ...options,
+        taskStateDirectory,
+      }).pipe(
         Effect.as(""),
         Effect.catchTag("CommandFailed", (failure) =>
           Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
@@ -246,14 +245,16 @@ export const reportsEachCauseOnce = Task.make(
           "}",
           "",
         ].join("\n"),
-        "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
       };
       for (const [file, text] of Object.entries(files)) {
         yield* fileSystem.writeFileString(path.join(directory, file), text);
       }
       yield* Task.exec("git", ["init", "--quiet"], options);
       yield* Task.exec("bun", ["fmt", "."], options);
-      const printed = yield* runTaskFile("bun run.ts", { ...options, taskStateDirectory }).pipe(
+      const printed = yield* runTaskFile(yield* theCheckCommand, {
+        ...options,
+        taskStateDirectory,
+      }).pipe(
         Effect.as(""),
         Effect.catchTag("CommandFailed", (failure) =>
           Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
@@ -382,7 +383,6 @@ const fullCheckOutputWith = (
       "package.json": `${yield* encodeIndentedJson({ name: "project", type: "module", main: "./index.ts" })}\n`,
       "tsconfig.json": `${yield* encodeIndentedJson(STRICT_INDEX_TSCONFIG)}\n`,
       "index.ts": "export const COUNT = 1;\n",
-      "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
       ...projectFiles,
     };
     for (const [file, text] of Object.entries(files)) {
@@ -392,7 +392,7 @@ const fullCheckOutputWith = (
       yield* fileSystem.writeFileString(path.join(project, file), text);
     }
     yield* Task.exec("git", ["init", "--quiet"], { cwd: project });
-    return yield* runTaskFile("bun run.ts", { cwd: project, taskStateDirectory }).pipe(
+    return yield* runTaskFile(yield* theCheckCommand, { cwd: project, taskStateDirectory }).pipe(
       Effect.as(""),
       Effect.catchTag("CommandFailed", (failure) =>
         Effect.succeed(`${failure.standardOutput}${failure.standardError}`),

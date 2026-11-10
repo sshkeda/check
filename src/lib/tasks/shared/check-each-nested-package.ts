@@ -3,8 +3,10 @@ import type { PrintableError } from "@sshkeda/task/errors";
 import { Array as Arrays, Effect, Path } from "effect";
 import type { PlatformError } from "effect";
 
+import { projectDirectory } from "../../project-directory/index.ts";
 import { listedPackageFiles } from "./list-package-files.ts";
 import { quietViolations } from "./print-failures-and-keep-detail-in-the-trace.ts";
+import { locatedFromTheProject, printedFromTheProject } from "./report-paths-from-the-project.ts";
 
 const CHECKED_PACKAGE = ".";
 
@@ -61,18 +63,22 @@ export const packageDirectoriesIn = (directory: string) =>
 
 export const inEachPackage = <Requirements>(
   tool: string,
-  directory: string,
   checkPackage: (
     packageDirectory: string,
+    packageDirectoryFromTheProject: string,
   ) => Effect.Effect<void, PlatformError.PlatformError | ReportedErrors, Requirements>,
 ) =>
   Effect.gen(function* () {
     const pathModule = yield* Path.Path;
-    const packageDirectories = yield* packageDirectoriesIn(directory).pipe(quietViolations(tool));
+    const checkedProject = yield* projectDirectory.pipe(quietViolations(tool));
+    const packageDirectories = yield* packageDirectoriesIn(checkedProject).pipe(
+      quietViolations(tool),
+      locatedFromTheProject,
+    );
     const reportedByPackage = yield* Effect.forEach(
       packageDirectories,
       (packageDirectory) =>
-        checkPackage(pathModule.join(directory, packageDirectory)).pipe(
+        checkPackage(pathModule.join(checkedProject, packageDirectory), packageDirectory).pipe(
           Effect.as([]),
           Effect.catchTag("ReportedErrors", ({ reportedErrors }) =>
             Effect.succeed(
@@ -84,7 +90,9 @@ export const inEachPackage = <Requirements>(
         ),
       { concurrency: "unbounded" },
     );
-    const reportedErrors = distinctPrintedErrors(reportedByPackage.flat());
+    const reportedErrors = distinctPrintedErrors(
+      yield* printedFromTheProject(reportedByPackage.flat()),
+    );
     if (Arrays.isArrayNonEmpty(reportedErrors)) {
       return yield* new ReportedErrors({ reportedErrors });
     }

@@ -7,7 +7,7 @@ export const PLUGIN = new URL("../../src/index.ts", import.meta.url).href;
 
 const STAGED_CHECK = new URL("../../node_modules/@sshkeda/check-under-test/", import.meta.url);
 
-const STAGED_FILES = ["package.json", "src", "docs"] as const;
+const STAGED_FILES = ["package.json", "src", "scripts", "docs"] as const;
 
 export const stagedCheckModule = (file: string) => new URL(file, STAGED_CHECK).href;
 
@@ -25,7 +25,11 @@ export const stageCheckUnderNodeModules = Task.make(
   }),
 );
 
-export const TASKS = stagedCheckModule("src/lib/tasks/index.ts");
+export const theCheckCommand = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  const command = yield* path.fromFileUrl(new URL("scripts/check.ts", STAGED_CHECK));
+  return `bun ${yield* encodeJson(command)}`;
+});
 
 export const RUNNER = import.meta.resolve("@sshkeda/task");
 

@@ -6,12 +6,12 @@ import { Effect, FileSystem, Path } from "effect";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
 import {
+  theCheckCommand,
   FORMAT_CONFIG_TEXT,
   linkNodeModulesWithCheck,
   makeProject as makeProjectWith,
   PLUGIN,
   RUNNER,
-  TASKS,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { runTaskFile } from "../shared/run-task-files.ts";
@@ -352,11 +352,9 @@ const ERROR_LINE = /^(?:\[[^\]]+\] )?(?:\S+: )?error \S+:/u;
 
 const wholeCheckOutputWithFormatConfig = (formatConfig: string) =>
   Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
       {
-        ".gitignore": "node_modules\nrun.ts\n",
+        ".gitignore": "node_modules\n",
         "package.json":
           '{\n  "name": "checked",\n  "type": "module",\n  "main": "./src/index.ts"\n}\n',
         "node_modules/@sshkeda/check/package.json": TYPED_CHECK_SHIM,
@@ -370,11 +368,7 @@ const wholeCheckOutputWithFormatConfig = (formatConfig: string) =>
       "lintConfig({})",
       { include: ["src/**/*.ts", "oxlint.config.ts", "oxfmt.config.ts"] },
     );
-    yield* fileSystem.writeFileString(
-      path.join(directory, "run.ts"),
-      `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
-    );
-    return yield* outputIn(directory, taskStateDirectory, "bun run.ts");
+    return yield* outputIn(directory, taskStateDirectory, yield* theCheckCommand);
   });
 
 export const reportsTheRetiredFormatConfigCallOnce = Task.make(
