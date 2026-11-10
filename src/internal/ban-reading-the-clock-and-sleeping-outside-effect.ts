@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { ESTree, SourceCode } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree, SourceCode } from "@oxlint/plugins";
 import { Schema } from "effect";
 
 import { moduleSpecifiersOfGlobalObject } from "../shared/bans-each-permission-lifts.ts";
@@ -119,7 +118,7 @@ const isPipeFunction = (node: ESTree.Node, sourceCode: SourceCode) => {
   return imported?.module.startsWith("effect") === true && imported.members.at(-1) === PIPE;
 };
 
-export const noClockReadsAndSleeps = defineRule({
+export const noClockReadsAndSleeps = {
   meta: {
     type: "problem",
     messages: {
@@ -133,7 +132,7 @@ export const noClockReadsAndSleeps = defineRule({
     },
     schema: ruleOptionsJsonSchema(CLOCK_OPTIONS),
   },
-  create(context) {
+  create(context: Pick<Context, "options" | "report" | "sourceCode">) {
     const { sourceCode } = context;
     const clockServiceSleeps =
       decodeRuleOptions(CLOCK_OPTIONS, context.options)?.clockServiceSleeps ?? "banned";
@@ -320,4 +319,4 @@ export const noClockReadsAndSleeps = defineRule({
       },
     };
   },
-});
+} satisfies CreateRule;

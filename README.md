@@ -4,7 +4,7 @@ Check sends your AI slop code back to the kitchen!
 
 Check holds your TypeScript code to a strict standard built around Effect and Bun, so the code stays type-safe, observable and predictable.
 
-It runs about 308 lint rules, 65 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
+It runs about 310 lint rules, 67 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
 
 No comment or setting turns a rule off everywhere. A small set of rules was picked to allow an override, and you grant each one to a single file in `oxlint.config.ts`. See [Grant a permission](docs/how-to-make-check-pass.md#grant-a-permission).
 

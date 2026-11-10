@@ -178,6 +178,41 @@ export const grantsThatLiftNothingAreReported = Task.make(
   }).pipe(Effect.scoped),
 );
 
+const CODE_GRANTS = [
+  "handlesEveryFailure",
+  "waitsOnTimers",
+  "pollsWithADeadline",
+  "usesAbbreviations",
+  "trustsUnverifiedTypes",
+] as const;
+
+export const codeGrantsThatLiftNothingAreReported = Task.make(
+  "a file granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes that uses nothing the grant allows is reported once per permission at its first line, and a grant the file uses is not, in the test home as elsewhere",
+  Effect.gen(function* () {
+    const output = yield* lintWithPermissions(
+      `{ "src/idle.ts": { allow: ${yield* encodeJson(CODE_GRANTS)} }, "src/catches.ts": { allow: ["handlesEveryFailure"] }, "tests/bounded.ts": { allow: ["pollsWithADeadline"] }, "tests/idle.ts": { allow: ["pollsWithADeadline"] } }`,
+      {
+        "src/idle.ts": "export const IDLE = 1;\n",
+        "src/catches.ts":
+          'import { Effect } from "effect";\n\nexport const quiet = (work: Effect.Effect<void>) => work.pipe(Effect.catch(() => Effect.void));\n',
+        "tests/bounded.ts":
+          'import { Effect } from "effect";\n\nexport const bounded = (work: Effect.Effect<void>) => work.pipe(Effect.timeout("1 minute"));\n',
+        "tests/idle.ts": "export const IDLE = 1;\n",
+      },
+    );
+    for (const permission of CODE_GRANTS) {
+      expect(output).toContain(
+        `src/idle.ts:1:1: error sshkeda(no-unused-code-grants): this file is granted ${permission}, but uses nothing ${permission} allows`,
+      );
+    }
+    expect(output).toContain(
+      "tests/idle.ts:1:1: error sshkeda(no-unused-code-grants): this file is granted pollsWithADeadline, but uses nothing pollsWithADeadline allows",
+    );
+    expect(output).not.toContain("src/catches.ts:1:1");
+    expect(output).not.toContain("tests/bounded.ts:1:1");
+  }).pipe(Effect.scoped),
+);
+
 const RUNTIME_NAMES = `export const env = new Map([["HOME", "/"]]);
 export const cwd = (directory: string) => directory;
 export const stdin = (input: ReadableStream) => input;
@@ -1021,5 +1056,47 @@ export const handlesEveryFailureLiftsTheUnnamedRecoveryBans = Task.make(
     expect(granted).not.toContain("turns each failure into a result");
     expect(granted).not.toContain("is given a fallback");
     expect(granted).toContain("Effect.orDie is banned");
+  }).pipe(Effect.scoped),
+);
+
+const FALLS_BACK_TO_FIXED_VALUES = `import { Effect } from "effect";
+
+export const listed = (work: Effect.Effect<readonly string[], { readonly _tag: "PlatformError" }>) =>
+  work.pipe(Effect.catchTag("PlatformError", () => Effect.succeed([])));
+`;
+
+const FIXED_FALLBACK =
+  "Effect.catchTag answers PlatformError with the fixed value [] and never reads the failure";
+
+const UNUSED_FIXED_FALLBACKS_GRANT =
+  "this file is granted fallsBackToFixedValues, but uses nothing fallsBackToFixedValues allows";
+
+export const fixedFallbacksNeedAGrant = Task.make(
+  "a recovery that answers a whole library error with a fixed value and never reads it is refused outside the test home, a file granted fallsBackToFixedValues may keep it, and a granted file with no fixed fallback is reported",
+  Effect.gen(function* () {
+    const ungranted = yield* lintWithPermissions("{}", {
+      "src/listed.ts": FALLS_BACK_TO_FIXED_VALUES,
+      "tests/listed.ts": FALLS_BACK_TO_FIXED_VALUES,
+    });
+    expect(ungranted).toContain(
+      `src/listed.ts:4:52: error sshkeda(no-fixed-fallbacks): ${FIXED_FALLBACK}. Name the reason you expect, or fail`,
+    );
+    expect(ungranted).not.toContain("tests/listed.ts");
+    const granted = yield* lintWithPermissions(
+      '{ "src/listed.ts": { allow: ["fallsBackToFixedValues"] } }',
+      { "src/listed.ts": FALLS_BACK_TO_FIXED_VALUES },
+    );
+    expect(granted).not.toContain(FIXED_FALLBACK);
+    expect(granted).not.toContain(UNUSED_FIXED_FALLBACKS_GRANT);
+    const unused = yield* lintWithPermissions(
+      '{ "src/listed.ts": { allow: ["fallsBackToFixedValues"] } }',
+      {
+        "src/listed.ts":
+          'import { Effect } from "effect";\n\nexport const listed = Effect.succeed([]);\n',
+      },
+    );
+    expect(unused).toContain(
+      `src/listed.ts:1:1: error sshkeda(no-fixed-fallbacks): ${UNUSED_FIXED_FALLBACKS_GRANT}`,
+    );
   }).pipe(Effect.scoped),
 );

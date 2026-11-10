@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { ESTree } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 
 import { effectModuleOperation, propertyKeyName } from "./resolve-what-an-expression-imports.ts";
 
@@ -28,7 +27,7 @@ const unsafeOptionsMessage = (options: ESTree.Node | undefined) => {
   return isDefaultMode ? undefined : "results";
 };
 
-export const noFailuresAsResults = defineRule({
+export const noFailuresAsResults = {
   meta: {
     type: "problem",
     messages: {
@@ -36,7 +35,7 @@ export const noFailuresAsResults = defineRule({
       opaqueOptions: "Effect.all is given options that are not written inline",
     },
   },
-  create(context) {
+  create(context: Pick<Context, "report" | "sourceCode">) {
     return {
       CallExpression(node) {
         const operation = effectModuleOperation(node.callee, context.sourceCode, "Effect");
@@ -50,4 +49,4 @@ export const noFailuresAsResults = defineRule({
       },
     };
   },
-});
+} satisfies CreateRule;

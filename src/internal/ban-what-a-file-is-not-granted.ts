@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { Context, ESTree, SourceCode, Visitor } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree, SourceCode, Visitor } from "@oxlint/plugins";
 import { Schema } from "effect";
 
 import {
@@ -11,6 +10,7 @@ import {
   moduleSpecifiersOfGlobalObject,
   PERMISSION_BANS,
   UNUSED_GRANT_REPORTED,
+  unusedGrantMessage,
 } from "../shared/bans-each-permission-lifts.ts";
 import type { importsBan } from "../shared/bans-each-permission-lifts.ts";
 import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
@@ -147,7 +147,7 @@ const isGlobalObjectReference = (
   );
 };
 
-const mergedVisitors = (visitors: readonly Visitor[]): Visitor => {
+export const mergedVisitors = (visitors: readonly Visitor[]): Visitor => {
   const handlers = new Map<string, ((node: never) => void)[]>();
   for (const visitor of visitors) {
     for (const [key, handler] of Object.entries(visitor)) {
@@ -192,7 +192,7 @@ const isInATypeQuery = (node: ESTree.Node): boolean => {
 };
 
 const createdRequireVisitors = (
-  context: Context,
+  context: Pick<Context, "sourceCode">,
   createdRequires: readonly {
     readonly matchesModule: (specifier: string) => boolean;
     readonly importNames: readonly string[];
@@ -328,7 +328,7 @@ const compiledBans = (bans: Parameters<typeof bansByKind>[0]) => {
 };
 
 const banVisitors = (
-  context: Context,
+  context: Pick<Context, "sourceCode">,
   {
     isBannedModule,
     bannedImport,
@@ -489,17 +489,17 @@ export const permissionBanRule = (permission: keyof typeof PERMISSION_BANS) => {
   const messageEvenWhenGranted =
     "bannedEvenWhenGranted" in entry ? entry.bannedEvenWhenGranted.message : message;
 
-  return defineRule({
+  return {
     meta: {
       type: "problem",
       messages: {
         banned: message,
         bannedEvenWhenGranted: messageEvenWhenGranted,
-        unusedGrant: `this file is granted ${permission}, but uses nothing ${permission} allows`,
+        unusedGrant: unusedGrantMessage(permission),
       },
       schema: ruleOptionsJsonSchema(BAN_OPTIONS),
     },
-    create(context) {
+    create(context: Pick<Context, "options" | "report" | "sourceCode">) {
       const options = decodeRuleOptions(BAN_OPTIONS, context.options);
       const isGranted = options?.bans === BANS_NO_GRANT_LIFTS;
       const reporterOf =
@@ -531,5 +531,5 @@ export const permissionBanRule = (permission: keyof typeof PERMISSION_BANS) => {
           : []),
       ]);
     },
-  });
+  } satisfies CreateRule;
 };

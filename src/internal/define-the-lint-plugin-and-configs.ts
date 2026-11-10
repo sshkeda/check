@@ -17,9 +17,11 @@ import {
   grantPermissions,
   permissionBanRuleId,
   FAILURES_AS_RESULTS_RULE,
+  FIXED_FALLBACKS_RULE,
   STDIO_SERVICE_RULE,
   TEST_TIMEOUTS_RULE,
   TYPE_PREDICATES_RULE,
+  UNUSED_CODE_GRANTS_RULE,
 } from "../shared/record-and-grant-permissions-by-path.ts";
 import { noAbbreviations } from "./ban-abbreviated-words-in-declared-names.ts";
 import { noUncalledMembers } from "./ban-checked-members-outside-calls.ts";
@@ -30,6 +32,7 @@ import { noDeclaredValues } from "./ban-declared-values.ts";
 import { effectOperationRule } from "./ban-dropped-failures-detached-fibers-sleeps-and-untraced-functions.ts";
 import { noFailuresAsResults } from "./ban-failures-collected-as-results.ts";
 import { noUnnamedFallbacks } from "./ban-fallbacks-of-named-recoveries.ts";
+import { noFixedFallbacks } from "./ban-fixed-values-in-recoveries.ts";
 import { noOverloads } from "./ban-function-overloads.ts";
 import { noPlainErrorFailures } from "./ban-global-error-in-failure-types.ts";
 import { noErrorInstanceof } from "./ban-instanceof-in-effect-recovery-callbacks.ts";
@@ -69,6 +72,7 @@ import {
 } from "./keep-assertions-in-the-test-home-and-ban-test-runners.ts";
 import { noTestingHelpers } from "./keep-effect-testing-helpers-in-test-files.ts";
 import { bansByKind } from "./match-banned-modules-and-globals.ts";
+import { noUnusedCodeGrants } from "./report-code-grants-nothing-uses.ts";
 import { noUnnamedCompoundConditions } from "./require-a-named-const-for-compound-conditions.ts";
 import { noLooseLiteralConstants } from "./require-capital-snake-case-and-as-const-on-literal-constants.ts";
 import { noMismatchedServiceKeys } from "./require-service-keys-to-end-with-their-class-name.ts";
@@ -136,6 +140,7 @@ const NAMED_RULES = {
   "no-instant-retries": noInstantRetries,
   "no-service-declarations": noServiceDeclarations,
   "no-unused-service-grants": noUnusedServiceGrants,
+  [UNUSED_CODE_GRANTS_RULE]: noUnusedCodeGrants,
   "no-glob-scan": noGlobScan,
   "no-unknown-boundaries": noUnknownBoundaries,
   "no-loose-literal-constants": noLooseLiteralConstants,
@@ -158,6 +163,7 @@ const NAMED_RULES = {
   "no-uncalled-members": noUncalledMembers,
   "no-unnamed-fallbacks": noUnnamedFallbacks,
   "no-exists-recovery": noExistsRecovery,
+  [FIXED_FALLBACKS_RULE]: noFixedFallbacks,
   "no-namespace-aliases": noNamespaceAliases(
     new Set([
       ...RESTRICTED_PROPERTIES.map(({ object }) => object),

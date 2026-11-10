@@ -1,11 +1,11 @@
 import { defineRule } from "@oxlint/plugins";
 import type { ESTree, SourceCode } from "@oxlint/plugins";
 
+import { stepsAppliedTo } from "./follow-the-steps-applied-to-an-effect.ts";
 import {
   constantValue,
   effectOperation,
   importedExpression,
-  isPipeFunction,
   memberName,
   propertyKeyName,
   resolvedVariable,
@@ -15,8 +15,6 @@ import {
 } from "./resolve-what-an-expression-imports.ts";
 
 const EXISTS = "exists";
-
-const PIPE = "pipe";
 
 const PLATFORM_ERROR = "PlatformError";
 
@@ -167,17 +165,6 @@ const RECOVERIES = new Map([
   ["option", { arity: 0, swallows: alwaysSwallows }],
 ]);
 
-const stepOperation = (step: ESTree.Node, sourceCode: SourceCode) => {
-  const node = constantValue(step, sourceCode);
-  if (node.type === "CallExpression") {
-    return {
-      operation: effectOperation(node.callee, sourceCode),
-      callArguments: node.arguments,
-    };
-  }
-  return { operation: effectOperation(node, sourceCode), callArguments: [] };
-};
-
 const swallowingRecovery = (
   operation: string | undefined,
   callArguments: readonly ESTree.Node[],
@@ -199,79 +186,25 @@ const keepsTheFailures = (operation: string | undefined, callArguments: readonly
   callArguments.length === 1;
 
 const recoveryAmongSteps = (
-  steps: readonly ESTree.Node[],
+  steps: ReturnType<typeof stepsAppliedTo>,
   sourceCode: SourceCode,
-): { readonly recovery?: string; readonly isEveryStepKeepingTheFailures: boolean } => {
+): string | undefined => {
   const [step, ...rest] = steps;
   if (step === undefined) {
-    return { isEveryStepKeepingTheFailures: true };
-  }
-  const { operation, callArguments } = stepOperation(step, sourceCode);
-  const recovery = swallowingRecovery(operation, callArguments, sourceCode);
-  if (recovery !== undefined) {
-    return { recovery, isEveryStepKeepingTheFailures: false };
-  }
-  return keepsTheFailures(operation, callArguments)
-    ? recoveryAmongSteps(rest, sourceCode)
-    : { isEveryStepKeepingTheFailures: false };
-};
-
-const recoveryOf = (effect: ESTree.Node, sourceCode: SourceCode): string | undefined => {
-  const { parent } = effect;
-  const isWrappedByTypeScript =
-    parent?.type === "TSAsExpression" ||
-    parent?.type === "TSSatisfiesExpression" ||
-    parent?.type === "TSNonNullExpression";
-  if (isWrappedByTypeScript) {
-    return recoveryOf(parent, sourceCode);
-  }
-  const call = parent?.parent;
-  const isPipeMethod =
-    parent?.type === "MemberExpression" &&
-    parent.object === effect &&
-    memberName(parent) === PIPE &&
-    call?.type === "CallExpression" &&
-    call.callee === parent;
-  if (isPipeMethod) {
-    const { recovery, isEveryStepKeepingTheFailures } = recoveryAmongSteps(
-      call.arguments,
-      sourceCode,
-    );
-    return isEveryStepKeepingTheFailures ? recoveryOf(call, sourceCode) : recovery;
-  }
-  const isFirstArgument = parent?.type === "CallExpression" && parent.arguments[0] === effect;
-  if (!isFirstArgument) {
     return;
   }
-  const isAppliedStep =
-    constantValue(parent.callee, sourceCode).type === "CallExpression" &&
-    parent.arguments.length === 1;
-  if (isAppliedStep) {
-    const { recovery, isEveryStepKeepingTheFailures } = recoveryAmongSteps(
-      [parent.callee],
-      sourceCode,
-    );
-    return isEveryStepKeepingTheFailures ? recoveryOf(parent, sourceCode) : recovery;
-  }
-  if (isPipeFunction(parent.callee, sourceCode)) {
-    const { recovery, isEveryStepKeepingTheFailures } = recoveryAmongSteps(
-      parent.arguments.slice(1),
-      sourceCode,
-    );
-    return isEveryStepKeepingTheFailures ? recoveryOf(parent, sourceCode) : recovery;
-  }
-  const operation = effectOperation(parent.callee, sourceCode);
-  const dataLastArguments = parent.arguments.slice(1);
-  const isDataFirstRecovery =
-    operation !== undefined && RECOVERIES.get(operation)?.arity === dataLastArguments.length;
-  const recovery = isDataFirstRecovery
-    ? swallowingRecovery(operation, dataLastArguments, sourceCode)
+  const { operation, callArguments, isDataFirst } = step;
+  const isRecoveryShape =
+    !isDataFirst ||
+    (operation !== undefined && RECOVERIES.get(operation)?.arity === callArguments.length);
+  const recovery = isRecoveryShape
+    ? swallowingRecovery(operation, callArguments, sourceCode)
     : undefined;
   if (recovery !== undefined) {
     return recovery;
   }
-  return keepsTheFailures(operation, dataLastArguments)
-    ? recoveryOf(parent, sourceCode)
+  return keepsTheFailures(operation, callArguments)
+    ? recoveryAmongSteps(rest, sourceCode)
     : undefined;
 };
 
@@ -290,7 +223,7 @@ export const noExistsRecovery = defineRule({
         if (!isFileSystemExists(node.callee, sourceCode)) {
           return;
         }
-        const recovery = recoveryOf(node, sourceCode);
+        const recovery = recoveryAmongSteps(stepsAppliedTo(node, sourceCode), sourceCode);
         if (recovery !== undefined) {
           context.report({ node, messageId: "recovered", data: { recovery } });
         }

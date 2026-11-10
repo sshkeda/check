@@ -39,7 +39,7 @@ const locatedInPackage = (
         message: printable.message,
       };
 
-const distinctPrintedErrors = (printables: readonly PrintableError[]) => {
+export const distinctPrintedErrors = (printables: readonly PrintableError[]) => {
   const printedByLocation = new Map<string | undefined, Set<string>>();
   return printables.filter(({ tag, location, message }) => {
     const printed = printedByLocation.get(location) ?? new Set<string>();

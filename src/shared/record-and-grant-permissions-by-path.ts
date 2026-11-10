@@ -16,7 +16,7 @@ import {
 } from "./bans-each-permission-lifts.ts";
 import { isWithin } from "./match-file-names-and-path-prefixes.ts";
 import { MalformedGrant, PermissionGrantsRefused } from "./permission-grant-errors.ts";
-import { SCRIPTS_DIRECTORY, TEST_HOME } from "./test-home-directories.ts";
+import { SCRIPTS_DIRECTORY, TEST_DIRECTORY, TEST_HOME } from "./test-home-directories.ts";
 
 export const DIRECTORY = "isAnUnlistedDirectory";
 export const GENERATED = "isGeneratedByATool";
@@ -26,11 +26,17 @@ export const TEST_TIMEOUTS_RULE = "no-test-timeouts";
 export const TYPE_PREDICATES_RULE = "no-type-predicates";
 export const STDIO_SERVICE_RULE = "no-stdio-service";
 export const FAILURES_AS_RESULTS_RULE = "no-failures-as-results";
-const UNNAMED_FALLBACKS_RULE = "no-unnamed-fallbacks";
+export const UNNAMED_FALLBACKS_RULE = "no-unnamed-fallbacks";
+export const FIXED_FALLBACKS = "fallsBackToFixedValues";
+export const FIXED_FALLBACKS_RULE = "no-fixed-fallbacks";
+export const FIXED_FALLBACKS_GRANTED = "granted";
 const SCHEDULES = "pollsWithADeadline";
 const TIMERS = "waitsOnTimers";
-const SLEEP_RULE = "no-sleep";
-const CLOCK_RULE = "no-clock-reads-and-sleeps";
+export const SCHEDULES_RULE = "no-schedules";
+export const SLEEP_RULE = "no-sleep";
+export const CLOCK_RULE = "no-clock-reads-and-sleeps";
+export const UNUSED_CODE_GRANTS_RULE = "no-unused-code-grants";
+export const INSIDE_THE_TEST_HOME = "inside";
 const GLOB_CHARACTERS = /[*?[\]{}]/u;
 const ROUTE_PARAMETER_SEGMENT = /^\[\[?(?:\.\.\.)?[A-Za-z0-9_-]+\]\]?$/u;
 
@@ -50,6 +56,7 @@ export const PERMISSION_NAMES = [
   FILE_TYPE,
   TRUSTS_UNVERIFIED_TYPES,
   HANDLES_EVERY_FAILURE,
+  FIXED_FALLBACKS,
   GENERATED,
 ] as const;
 
@@ -93,7 +100,7 @@ const rulesGrantedBy = (permission: (typeof PERMISSION_NAMES)[number]) => {
   }
   if (permission === SCHEDULES) {
     return ruleSeverities({
-      "sshkeda/no-schedules": ["error", { timedSchedules: "allowedWithDeadline" }],
+      [`sshkeda/${SCHEDULES_RULE}`]: ["error", { timedSchedules: "allowedWithDeadline" }],
       [`sshkeda/${TEST_TIMEOUTS_RULE}`]: "off",
     } as const);
   }
@@ -116,6 +123,11 @@ const rulesGrantedBy = (permission: (typeof PERMISSION_NAMES)[number]) => {
       [`sshkeda/${UNNAMED_FALLBACKS_RULE}`]: "off",
     } as const);
   }
+  if (permission === FIXED_FALLBACKS) {
+    return ruleSeverities({
+      [`sshkeda/${FIXED_FALLBACKS_RULE}`]: ["error", { fixedFallbacks: FIXED_FALLBACKS_GRANTED }],
+    } as const);
+  }
   if (permission === TRUSTS_UNVERIFIED_TYPES) {
     return ruleSeverities({
       [permissionBanRuleId(permission)]: "off",
@@ -134,6 +146,16 @@ const rulesGrantedBy = (permission: (typeof PERMISSION_NAMES)[number]) => {
     [permissionBanRuleId(permission)]: severityOnceGranted(permission),
   } as const);
 };
+
+export const CODE_GRANTS = [
+  HANDLES_EVERY_FAILURE,
+  TIMERS,
+  SCHEDULES,
+  SHORT_NAMES,
+  TRUSTS_UNVERIFIED_TYPES,
+] as const;
+
+const isCodeGrant = Schema.is(Schema.Literals(CODE_GRANTS));
 
 const ABORT_ON_FAILURE = true;
 
@@ -278,12 +300,23 @@ const GRANTS_AGAINST_THEIR_PATHS = Schema.Record(Schema.String, Schema.Unknown).
 
 const STANDARD_SCHEMA_ISSUES = SchemaIssue.makeFormatterStandardSchemaV1();
 
+const unusedCodeGrantsRule = (path: string, permissions: readonly string[]) => {
+  const codeGrants = permissions.filter((permission) => isCodeGrant(permission));
+  const place = isWithin(path, TEST_DIRECTORY) ? { testHome: INSIDE_THE_TEST_HOME } : {};
+  return codeGrants.length > 0
+    ? Object.entries({
+        [`sshkeda/${UNUSED_CODE_GRANTS_RULE}`]: ["error", { permissions: codeGrants, ...place }],
+      } as const)
+    : [];
+};
+
 const grantOverride = (
   grant: Extract<ReturnType<typeof recordedGrantsOf>, { grants: unknown }>["grants"][number],
 ) => ({
   files: [`./${grant.path.replaceAll("[", String.raw`\[`).replaceAll("]", String.raw`\]`)}`],
   rules: {
     ...Object.fromEntries(grant.allow.flatMap((permission) => rulesGrantedBy(permission))),
+    ...Object.fromEntries(unusedCodeGrantsRule(grant.path, grant.allow)),
     ...Object.fromEntries(
       grant.services.length > 0
         ? Object.entries({
@@ -300,12 +333,32 @@ const TEST_HOME_OVERRIDE = {
   rules: {
     "sshkeda/no-testing-helpers": "off",
     "sshkeda/no-assertions": "off",
-    "sshkeda/no-schedules": "off",
+    [`sshkeda/${SCHEDULES_RULE}`]: "off",
+    [`sshkeda/${FIXED_FALLBACKS_RULE}`]: "off",
     "sshkeda/no-instant-retries": "off",
     "sshkeda/no-shared-holders": "off",
     [`sshkeda/${TEST_TIMEOUTS_RULE}`]: "error",
   },
 } as const;
+
+const TEST_HOME_SEVERITIES: ReadonlyMap<string, string> = new Map(
+  Object.entries(TEST_HOME_OVERRIDE.rules),
+);
+
+const isOnWithoutAGrant = (ruleId: string, isInTheTestHome: boolean) => {
+  const testHomeSeverity = TEST_HOME_SEVERITIES.get(ruleId);
+  return isInTheTestHome ? testHomeSeverity !== "off" : testHomeSeverity !== "error";
+};
+
+export const rulesACodeGrantChanges = (
+  permission: (typeof CODE_GRANTS)[number],
+  isInTheTestHome: boolean,
+) =>
+  rulesGrantedBy(permission).map(([ruleId, granted]) => ({
+    ruleId,
+    granted,
+    isOnWithoutTheGrant: isOnWithoutAGrant(ruleId, isInTheTestHome),
+  }));
 
 const SCRIPTS_OVERRIDE = {
   files: [`./${SCRIPTS_DIRECTORY}/*`],

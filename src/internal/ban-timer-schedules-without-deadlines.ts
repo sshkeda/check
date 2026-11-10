@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { Context, ESTree } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 import { Schema } from "effect";
 
 import { SCHEDULE_MESSAGES } from "../shared/lint-rule-messages-and-patterns.ts";
@@ -63,7 +62,7 @@ export const scheduleVisitors = ({
   context,
   timedSchedules,
 }: {
-  readonly context: Context;
+  readonly context: Pick<Context, "report" | "sourceCode">;
   readonly timedSchedules: (typeof TIMED_SCHEDULES)[number];
 }) => {
   const isDeadlineCall = (node: ESTree.Node) => {
@@ -308,17 +307,17 @@ export const scheduleVisitors = ({
   };
 };
 
-export const noSchedules = defineRule({
+export const noSchedules = {
   meta: {
     type: "problem",
     messages: SCHEDULE_MESSAGES,
     schema: ruleOptionsJsonSchema(SCHEDULE_OPTIONS),
   },
-  create(context) {
+  create(context: Pick<Context, "options" | "report" | "sourceCode">) {
     return scheduleVisitors({
       context,
       timedSchedules:
         decodeRuleOptions(SCHEDULE_OPTIONS, context.options)?.timedSchedules ?? "banned",
     });
   },
-});
+} satisfies CreateRule;

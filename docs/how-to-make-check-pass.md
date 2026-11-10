@@ -7,6 +7,7 @@ Check may not catch every violation of these principles. Review your code agains
 ## Meet the requirement behind the error
 
 - Use a grant only for an unavoidable exception.
+- Move the code that needs a grant into its own small file and grant that file. A grant covers the whole file, so Check stops reporting that ban for everything else in it.
 - Design for the current requirement as if you were starting fresh. Delete code the new design doesn't need.
 - Grant `isGeneratedByATool` only to a file a tool generates.
 
@@ -36,6 +37,7 @@ export default lintConfig({
 - `patchesADependency`: Allows a patch file from `bun patch`.
 - `trustsUnverifiedTypes`: Allows trusting a value's type without checking it, through `Schema.declare`.
 - `handlesEveryFailure`: Allows catching every error, through `Effect.catch`, `Effect.exit`, a forked fiber or `Effect.runPromise`.
+- `fallsBackToFixedValues`: Allows answering every failure, or a whole library error such as `PlatformError`, with a fixed value that never reads the failure.
 - `isGeneratedByATool`: Check skips this path, so it can't have any other permission.
 
 ## Make the code explain itself

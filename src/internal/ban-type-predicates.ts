@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { ESTree, SourceCode } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree, SourceCode } from "@oxlint/plugins";
 import { Schema } from "effect";
 
 import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
@@ -47,7 +46,7 @@ const isSchemaDeclarationCallback = (predicate: ESTree.TSTypePredicate, sourceCo
   );
 };
 
-export const noTypePredicates = defineRule({
+export const noTypePredicates = {
   meta: {
     type: "problem",
     messages: {
@@ -55,7 +54,7 @@ export const noTypePredicates = defineRule({
     },
     schema: ruleOptionsJsonSchema(TYPE_PREDICATE_OPTIONS),
   },
-  create(context) {
+  create(context: Pick<Context, "options" | "report" | "sourceCode">) {
     const schemaDeclarations =
       decodeRuleOptions(TYPE_PREDICATE_OPTIONS, context.options)?.schemaDeclarations ?? "banned";
     return {
@@ -75,4 +74,4 @@ export const noTypePredicates = defineRule({
       },
     };
   },
-});
+} satisfies CreateRule;

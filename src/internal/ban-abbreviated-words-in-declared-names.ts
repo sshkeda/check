@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { ESTree } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 import { Schema } from "effect";
 
 import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
@@ -128,7 +127,7 @@ const allowList = (options: readonly unknown[]): ReadonlySet<string> =>
     ),
   );
 
-export const noAbbreviations = defineRule({
+export const noAbbreviations = {
   meta: {
     type: "suggestion",
     messages: {
@@ -136,7 +135,7 @@ export const noAbbreviations = defineRule({
     },
     schema: ruleOptionsJsonSchema(ABBREVIATION_OPTIONS),
   },
-  create(context) {
+  create(context: Pick<Context, "options" | "report">) {
     const allowed = allowList(context.options);
 
     const check = (node: ESTree.Node) => {
@@ -158,4 +157,4 @@ export const noAbbreviations = defineRule({
 
     return declaredNameListeners(check);
   },
-});
+} satisfies CreateRule;

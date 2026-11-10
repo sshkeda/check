@@ -3,6 +3,7 @@ import { Effect, FileSystem, Option, Path, References } from "effect";
 
 import { enclosingDirectoriesOf } from "./classify-files-by-role.ts";
 import { PACKAGE_MANIFEST_FILE } from "./find-named-package-manifests.ts";
+import { isSymbolicLink } from "./find-symbolic-links.ts";
 import { namedPackageManifestAt } from "./read-named-package-manifests.ts";
 
 const isNamedPackageDirectory = (directory: string) =>
@@ -29,9 +30,21 @@ export const nestedPackageDirectoriesAmong = (
 export const isInsideAnyDirectory = (relativePath: string, directories: readonly string[]) =>
   directories.some((directory) => relativePath.startsWith(`${directory}/`));
 
-const existingListedFiles = (packageDirectory: string, pathspecs: readonly string[]) =>
+const isExistingNonDirectory = (location: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
+    const exists = yield* fileSystem.exists(location);
+    if (!exists) {
+      return false;
+    }
+    if (yield* isSymbolicLink(location)) {
+      return true;
+    }
+    return (yield* fileSystem.stat(location)).type !== "Directory";
+  });
+
+const existingListedFiles = (packageDirectory: string, pathspecs: readonly string[]) =>
+  Effect.gen(function* () {
     const path = yield* Path.Path;
     const listed = yield* Task.exec(
       "git",
@@ -40,7 +53,7 @@ const existingListedFiles = (packageDirectory: string, pathspecs: readonly strin
     ).pipe(Effect.provideService(References.MinimumLogLevel, "Warn"));
     return yield* Effect.filter(
       new Set(listed.split("\0").filter((file) => file !== "")),
-      (file) => fileSystem.exists(path.join(packageDirectory, file)),
+      (file) => isExistingNonDirectory(path.join(packageDirectory, file)),
       { concurrency: "unbounded" },
     );
   });
