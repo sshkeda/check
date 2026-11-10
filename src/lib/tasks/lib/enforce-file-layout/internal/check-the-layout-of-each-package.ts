@@ -4,6 +4,6 @@ import { findFileLayoutViolations } from "./find-file-layout-violations.ts";
 
 const LAYOUT = "layout";
 
-export const fileLayoutViolationsOfEachPackage = inEachPackage(LAYOUT, ".", (packageDirectory) =>
+export const fileLayoutViolationsOfEachPackage = inEachPackage(LAYOUT, (packageDirectory) =>
   findFileLayoutViolations(packageDirectory).pipe(quietViolations(LAYOUT)),
 );

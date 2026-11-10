@@ -3,7 +3,6 @@ import { expect } from "bun:test";
 import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Path } from "effect";
 
-import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { loadedLintConfigIn } from "../../src/lib/tasks/shared/load-the-lint-config.ts";
 import {
   LintConfigRefused,
@@ -12,9 +11,8 @@ import {
 import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-project-query-caches.ts";
 import { recordedGrantsOf } from "../../src/shared/record-and-grant-permissions-by-path.ts";
 import {
+  theCheckCommand,
   makeProject as makeProjectWith,
-  RUNNER,
-  TASKS,
   FORMAT_CONFIG_TEXT,
   writtenFiles,
 } from "../shared/checked-project.ts";
@@ -119,10 +117,8 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
         },
       },
     );
-    yield* writtenFiles(directory, {
-      "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
-    });
-    const runCheck = () => runTaskFile("bun run.ts", { cwd: directory, taskStateDirectory });
+    const checkCommand = yield* theCheckCommand;
+    const runCheck = () => runTaskFile(checkCommand, { cwd: directory, taskStateDirectory });
     yield* runTaskFile(
       "bun fmt --config=oxfmt.config.ts --disable-nested-config oxfmt.config.ts oxlint.config.ts tsconfig.json package.json src/internal/read.ts tests/index.ts tests/internal/example.ts",
       { cwd: directory, taskStateDirectory },

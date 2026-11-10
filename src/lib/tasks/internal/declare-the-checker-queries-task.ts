@@ -10,6 +10,7 @@ import { findRepeatedServiceYields } from "../lib/detect-repeated-service-yields
 import { findIndexReExportViolations } from "../lib/judge-index-re-exports/index.ts";
 import { findExportPlacementViolations } from "../lib/place-exports-in-the-narrowest-directory/index.ts";
 import { findErrorMappingsToDone } from "../lib/refuse-error-mappings-that-end-streams/index.ts";
+import { findUnobservedForkFailures } from "../lib/refuse-forks-whose-failures-nothing-observes/index.ts";
 import { findServiceLayerViolations } from "../lib/require-separate-service-layers/index.ts";
 import { inEachPackage } from "../shared/check-each-nested-package.ts";
 import { lintConfigFile } from "../shared/declare-lint-config-task.ts";
@@ -22,7 +23,7 @@ export const checkerQueries = Task.make(
   "checker-queries",
   Effect.andThen(
     Task.all([typeScriptConfig, lintConfigFile]),
-    inEachPackage("checker-queries", ".", (packageDirectory) =>
+    inEachPackage("checker-queries", (packageDirectory) =>
       Path.Path.use((path) =>
         runChecksOverOneTypeScriptProject(path.join(packageDirectory, TYPESCRIPT_PROJECT_FILE), {
           "service-yields": findRepeatedServiceYields,
@@ -34,6 +35,7 @@ export const checkerQueries = Task.make(
           "export-placement": findExportPlacementViolations,
           "layer-provides": findLayerProvidesOutsideProgramStarts,
           "error-mappings": findErrorMappingsToDone,
+          "fork-failures": findUnobservedForkFailures,
           "re-exports": findIndexReExportViolations,
         }),
       ),

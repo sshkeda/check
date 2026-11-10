@@ -36,6 +36,7 @@ const isTypeChecked = (
 
 const violationFor = (
   file: string,
+  shownPathOf: (configFile: string) => string,
   projectFile: string,
   compilingProjects: readonly {
     readonly configFile: string;
@@ -44,17 +45,22 @@ const violationFor = (
 ) => {
   const [firstProject] = compilingProjects;
   if (firstProject === undefined) {
-    return new LintedFileOutsideTypeScriptProgram({ location: file, projectFile });
+    return new LintedFileOutsideTypeScriptProgram({
+      location: file,
+      projectFile: shownPathOf(projectFile),
+    });
   }
-  const configFiles = compilingProjects.map(({ configFile }) => configFile);
+  const configFiles = compilingProjects.map(({ configFile }) => shownPathOf(configFile));
   return firstProject.isDeclarationFile
     ? new LintedDeclarationFileNotTypeChecked({ location: file, configFiles })
     : new LintedJavaScriptFileNotTypeChecked({ location: file, configFiles });
 };
 
-export const findLintedFilesNotTypeChecked = (projectFile: string) =>
+export const findLintedFilesNotTypeChecked = (projectFile: string, shownPackageDirectory = ".") =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
+    const shownPathOf = (configFile: string) =>
+      path.join(shownPackageDirectory, path.relative(path.dirname(projectFile), configFile));
     const linted = yield* scriptFiles(projectFile);
     const owned = new Set(yield* ownedFilesAmong(path.dirname(projectFile), linted));
     const compilations = (yield* Effect.forEach(
@@ -94,7 +100,7 @@ export const findLintedFilesNotTypeChecked = (projectFile: string) =>
         (isDeclarationFile(file) || compiling.some((compilation) => compilation.isDeclarationFile));
       const isTypeCheckedOrExempt =
         isGeneratedDeclarationFile || compiling.some(({ typeChecked }) => typeChecked);
-      return isTypeCheckedOrExempt ? [] : [violationFor(file, projectFile, compiling)];
+      return isTypeCheckedOrExempt ? [] : [violationFor(file, shownPathOf, projectFile, compiling)];
     });
     if (violations.length > 0) {
       return yield* new LintedFilesNotTypeChecked({ violations });
@@ -105,11 +111,11 @@ const LINTED_FILES_TYPE_CHECKED = "linted-files-type-checked";
 
 export const lintedFilesNotTypeCheckedInEachPackage = inEachPackage(
   LINTED_FILES_TYPE_CHECKED,
-  ".",
-  (packageDirectory) =>
+  (packageDirectory, packageDirectoryFromTheProject) =>
     Path.Path.use((path) =>
-      findLintedFilesNotTypeChecked(path.join(packageDirectory, TYPESCRIPT_PROJECT_FILE)).pipe(
-        quietViolations(LINTED_FILES_TYPE_CHECKED),
-      ),
+      findLintedFilesNotTypeChecked(
+        path.join(packageDirectory, TYPESCRIPT_PROJECT_FILE),
+        packageDirectoryFromTheProject,
+      ).pipe(quietViolations(LINTED_FILES_TYPE_CHECKED)),
     ),
 );

@@ -3,14 +3,12 @@ import { expect } from "bun:test";
 import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Path } from "effect";
 
-import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { listedPackageFiles } from "../../src/lib/tasks/shared/list-package-files.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
 import {
+  theCheckCommand,
   FORMAT_CONFIG_TEXT,
   linkNodeModulesWithCheck,
-  RUNNER,
-  TASKS,
   writtenFiles,
 } from "../shared/checked-project.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
@@ -31,14 +29,11 @@ const WORKTREE_DIRECTORY = ".claude/worktrees/one";
 
 const PRINTED_VIOLATION = "src/Bad_Name.ts: error NotKebabCase: Bad_Name.ts is not kebab-case";
 
-const toolFiles = Effect.gen(function* () {
-  return {
-    "oxlint.config.ts":
-      'import { lintConfig } from "@sshkeda/check";\n\nexport default lintConfig({ "src/images.bin": { allow: ["hasAnUnlistedFileType"] } });\n',
-    "oxfmt.config.ts": FORMAT_CONFIG_TEXT,
-    "index.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\n\nTask.main(check);\n`,
-  };
-});
+const TOOL_FILES = {
+  "oxlint.config.ts":
+    'import { lintConfig } from "@sshkeda/check";\n\nexport default lintConfig({ "src/images.bin": { allow: ["hasAnUnlistedFileType"] } });\n',
+  "oxfmt.config.ts": FORMAT_CONFIG_TEXT,
+};
 
 const committedProject = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -46,7 +41,7 @@ const committedProject = Effect.gen(function* () {
   const root = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
   yield* linkNodeModulesWithCheck(root);
   yield* writtenFiles(root, {
-    ...(yield* toolFiles),
+    ...TOOL_FILES,
     "package.json": `${yield* encodeIndentedJson({ name: "checked", type: "module", main: "./src/index.ts" })}\n`,
     "tsconfig.json": `${yield* encodeIndentedJson({
       compilerOptions: {
@@ -60,7 +55,7 @@ const committedProject = Effect.gen(function* () {
       },
       include: ["src/**/*.ts"],
     })}\n`,
-    ".gitignore": "node_modules\nindex.ts\noxlint.config.ts\noxfmt.config.ts\n",
+    ".gitignore": "node_modules\noxlint.config.ts\noxfmt.config.ts\n",
     "src/index.ts": "export const ROOT = 1;\n",
   });
   yield* fileSystem.makeDirectory(path.join(root, "empty"));
@@ -76,14 +71,17 @@ const committedProject = Effect.gen(function* () {
   });
   yield* linkNodeModulesWithCheck(worktree);
   yield* writtenFiles(worktree, {
-    ...(yield* toolFiles),
+    ...TOOL_FILES,
     "src/Bad_Name.ts": "export const BAD = 1;\n",
   });
   return { root, worktree, taskStateDirectory: yield* fileSystem.makeTempDirectoryScoped() };
 });
 
 const printedCheckAt = (directory: string, taskStateDirectory: string) =>
-  runTaskFile("bun index.ts", { cwd: directory, taskStateDirectory }).pipe(
+  theCheckCommand.pipe(
+    Effect.flatMap((checkCommand) =>
+      runTaskFile(checkCommand, { cwd: directory, taskStateDirectory }),
+    ),
     Effect.catchTag("CommandFailed", (failure) =>
       Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
     ),

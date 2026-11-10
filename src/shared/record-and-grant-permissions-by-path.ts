@@ -362,7 +362,10 @@ export const rulesACodeGrantChanges = (
 
 const SCRIPTS_OVERRIDE = {
   files: [`./${SCRIPTS_DIRECTORY}/*`],
-  rules: { [permissionBanRuleId(SCRIPT)]: "off" },
+  rules: {
+    [permissionBanRuleId(SCRIPT)]: "off",
+    "sshkeda/no-re-exports": ["error", { defaultExportOfAnImport: "allowed" }],
+  },
 } as const;
 
 const DECODE_OPTIONS = {

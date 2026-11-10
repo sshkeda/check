@@ -50,7 +50,6 @@ import { noExistsRecovery } from "./ban-recovering-file-system-exists.ts";
 import { noRetiredWords } from "./ban-retired-words-in-names.ts";
 import { noInstantRetries } from "./ban-retries-without-a-wait.ts";
 import { noGlobScan } from "./ban-scanning-directories-with-bun-glob.ts";
-import { noShebang } from "./ban-shebang-lines.ts";
 import { globalRule } from "./ban-timer-globals-and-the-global-object.ts";
 import { noSchedules } from "./ban-timer-schedules-without-deadlines.ts";
 import { noTypeDeclarations } from "./ban-type-and-interface-declarations.ts";
@@ -158,7 +157,6 @@ const NAMED_RULES = {
   "no-let": noLet,
   "no-mutable-ref": noMutableRef,
   "no-while": noWhile,
-  "no-shebang": noShebang,
   "no-shared-holders": noSharedHolders,
   "no-uncalled-members": noUncalledMembers,
   "no-unnamed-fallbacks": noUnnamedFallbacks,

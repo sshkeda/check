@@ -147,7 +147,7 @@ export const sourceExportsOnlyScriptsUseAreReported = Task.make(
 );
 
 export const unusedAndTestOnlyExportsAreReported = Task.make(
-  "an export nothing uses is UnusedExport, one only tests use is TestOnlyExport, and package entries, scripts and root tool configs are pinned",
+  "an export nothing uses is UnusedExport, a default export included, one only tests use is TestOnlyExport, and package entries, scripts with their default exports and root tool configs are pinned",
   Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
@@ -155,12 +155,13 @@ export const unusedAndTestOnlyExportsAreReported = Task.make(
           'import { PUBLIC } from "./internal/public.ts";\nexport const MAIN = PUBLIC;\n',
         "src/internal/public.ts": "export const PUBLIC = 1;\n",
         "src/shared/values.ts":
-          "export const USED = 1;\nexport const NOBODY = 2;\nexport const TESTED = 3;\n",
+          "export const USED = 1;\nexport const NOBODY = 2;\nexport const TESTED = 3;\nexport default 4;\n",
         "src/tasks/run.ts":
           'import { USED } from "../shared/values.ts";\nexport const RUN = USED;\n',
         "src/rules/rule.ts":
           'import { USED } from "../shared/values.ts";\nexport const RULE = USED;\n',
         "scripts/build.ts": "export const BUILD = 1;\n",
+        "scripts/ci.ts": "export default 1;\n",
         "tests/values.ts":
           'import { TESTED } from "../src/shared/values.ts";\nexport const CHECKED = TESTED;\n',
         "vite.config.ts": "export default {};\n",
@@ -170,8 +171,171 @@ export const unusedAndTestOnlyExportsAreReported = Task.make(
         unused("src/rules/rule.ts:2", "RULE"),
         deadUsed("src/shared/values.ts:1", "USED", "src/rules/rule.ts"),
         unused("src/shared/values.ts:2", "NOBODY"),
+        unused("src/shared/values.ts:4", "default"),
         unused("src/tasks/run.ts:2", "RUN"),
         testOnly("src/shared/values.ts:3", "TESTED"),
+      ].toSorted(),
+    );
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+const TASK_IMPORTS = 'import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\n';
+
+export const aDefaultExportThatMakesTasksIsRunFromOutside = Task.make(
+  "a default export that calls Task.make, Task.all or Task.allSettled on a Task imported from the literal @sshkeda/task, by name, renamed or through a namespace, is used in src/, scripts/ and tests/ and makes its file reached, while a default export that calls anything else, Task.main, a local Task or a Task re-exported through a local module or another package stays unused",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        ".gitignore": "node_modules\n",
+        "src/index.ts": "export const MAIN = 1;\n",
+        "src/internal/warm.ts": `${TASK_IMPORTS}export default Task.make("warm", Effect.void);\n`,
+        "src/internal/helper.ts": "export const HELPER = 1;\n",
+        "src/internal/tested.ts": "export const TESTED = 1;\n",
+        "src/internal/batch.ts": [
+          'import { Task as Tasks } from "@sshkeda/task";',
+          'import { Effect } from "effect";',
+          'import { HELPER } from "./helper.ts";',
+          'const first = Tasks.make("first", Effect.succeed(HELPER));',
+          "export default Tasks.all([first]);",
+          "",
+        ].join("\n"),
+        "scripts/internal/release.ts": [
+          'import * as TaskModule from "@sshkeda/task";',
+          'import { Effect } from "effect";',
+          'const release = TaskModule.Task.make("release", Effect.void);',
+          "export default TaskModule.Task.allSettled([release]);",
+          "",
+        ].join("\n"),
+        "tests/suite.ts": [
+          `${TASK_IMPORTS}import { TESTED } from "../src/internal/tested.ts";`,
+          'const tested = Task.make("tested", Effect.succeed(TESTED));',
+          "export default Task.all([tested]);",
+          "",
+        ].join("\n"),
+        "src/internal/plain.ts": "const make = () => 1;\nexport default make();\n",
+        "src/internal/main.ts": `${TASK_IMPORTS}export default Task.main(Task.make("main", Effect.void));\n`,
+        "src/internal/local.ts":
+          'const Task = { make: (name: string) => name };\nexport default Task.make("local");\n',
+        "src/internal/task-again.ts": 'export { Task } from "@sshkeda/task";\n',
+        "src/internal/via-local.ts":
+          'import { Effect } from "effect";\nimport { Task } from "./task-again.ts";\nexport default Task.make("via local", Effect.void);\n',
+        "node_modules/barrel/package.json":
+          '{ "name": "barrel", "type": "module", "main": "index.js" }\n',
+        "node_modules/barrel/index.js": 'export * from "@sshkeda/task";\n',
+        "src/internal/via-barrel.ts":
+          'import { Effect } from "effect";\nimport { Task } from "barrel";\nexport default Task.make("via barrel", Effect.void);\n',
+        "node_modules/impostor/package.json":
+          '{ "name": "impostor", "type": "module", "main": "index.js" }\n',
+        "node_modules/impostor/index.js":
+          'export * from "@sshkeda/task";\nexport const Task = { make: () => 1 };\n',
+        "src/internal/via-impostor.ts":
+          'import { Task } from "impostor";\nexport default Task.make("via impostor");\n',
+      }),
+    ).toEqual(
+      [
+        testOnly("src/internal/tested.ts:1", "TESTED"),
+        unused("src/internal/plain.ts:2", "default"),
+        unused("src/internal/main.ts:3", "default"),
+        unused("src/internal/local.ts:2", "default"),
+        deadUsed("src/internal/task-again.ts:1", "Task", "src/internal/via-local.ts"),
+        unused("src/internal/via-local.ts:3", "default"),
+        unused("src/internal/via-barrel.ts:3", "default"),
+        unused("src/internal/via-impostor.ts:2", "default"),
+      ].toSorted(),
+    );
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const aTaskDefaultExportIsRecognisedThroughTransparentWrappers = Task.make(
+  "a default export that calls Task.make is used when parentheses or satisfies wrap the call, or parentheses wrap its callee",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        "src/index.ts": "export const MAIN = 1;\n",
+        "src/internal/satisfied.ts": `${TASK_IMPORTS}export default Task.make("satisfied", Effect.void) satisfies Task.Task<void>;\n`,
+        "src/internal/parenthesized.ts": `${TASK_IMPORTS}export default (Task.make("parenthesized", Effect.void));\n`,
+        "src/internal/parenthesized-callee.ts": `${TASK_IMPORTS}export default (Task.make)("parenthesized callee", Effect.void);\n`,
+      }),
+    ).toEqual([]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const aTaskDefaultExportIsRecognisedWhenAnotherImportCannotBeFollowed = Task.make(
+  "a default export that calls Task.make on a Task imported from the literal @sshkeda/task stays used when another import of its file comes from a package whose own re-export cannot be resolved",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        ".gitignore": "node_modules\n",
+        "src/index.ts": "export const MAIN = 1;\n",
+        "node_modules/bridge/package.json":
+          '{ "name": "bridge", "type": "module", "main": "index.js" }\n',
+        "node_modules/bridge/index.js": 'export { Factory } from "broken";\n',
+        "node_modules/broken/package.json": '{ "name": 5, "type": "module", "main": "index.js" }\n',
+        "node_modules/broken/index.js": "export const Factory = { make: () => 1 };\n",
+        "src/internal/bridged.ts": [
+          'import { Task } from "@sshkeda/task";',
+          'import { Effect } from "effect";',
+          'import { Factory } from "bridge";',
+          'export default Task.make("bridged", Effect.succeed(Factory.make()));',
+          "",
+        ].join("\n"),
+      }),
+    ).toEqual([]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const tasksOwnPackageRecognisesItsTaskImportedByName = Task.make(
+  "in the @sshkeda/task package itself, a default export that calls Task.make on a Task imported by the package's own name is used",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        "package.json":
+          '{ "name": "@sshkeda/task", "type": "module", "main": "./src/index.ts", "exports": { ".": "./src/index.ts" } }\n',
+        "src/index.ts": "export const Task = { make: (name: string) => name };\n",
+        "src/internal/demo.ts":
+          'import { Task } from "@sshkeda/task";\nexport default Task.make("demo");\n',
+      }),
+    ).toEqual([]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const anExportOnlyATaskDefaultExportReferencesIsUnused = Task.make(
+  "an export that only a task default export of its own file references, inline, through an unexported binding, beside another declarator or destructured beside a binding it defaults to, is used by nothing like any export used only in its own file",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        "src/index.ts": "export const MAIN = 1;\n",
+        "src/internal/inline.ts": [
+          `${TASK_IMPORTS}export const child = Task.make("inline child", Effect.void);`,
+          'export default Task.make("inline parent", Task.all([child]));',
+          "",
+        ].join("\n"),
+        "src/internal/local.ts": [
+          `${TASK_IMPORTS}export const child = Task.make("local child", Effect.void);`,
+          "const body = Task.all([child]);",
+          'export default Task.make("local parent", body);',
+          "",
+        ].join("\n"),
+        "src/internal/mates.ts": [
+          `${TASK_IMPORTS}export const child = Task.make("mates child", Effect.void), UNUSED = 1;`,
+          'export default Task.make("mates parent", child);',
+          "",
+        ].join("\n"),
+        "src/internal/destructured.ts": [
+          `${TASK_IMPORTS}const pair = { a: 1, b: undefined };`,
+          "export const { a, b = a } = pair;",
+          'export default Task.make("destructured", Effect.succeed(b));',
+          "",
+        ].join("\n"),
+      }),
+    ).toEqual(
+      [
+        unused("src/internal/inline.ts:3", "child"),
+        unused("src/internal/local.ts:3", "child"),
+        unused("src/internal/mates.ts:3", "child"),
+        unused("src/internal/mates.ts:3", "UNUSED"),
+        unused("src/internal/destructured.ts:4", "a"),
+        unused("src/internal/destructured.ts:4", "b"),
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
@@ -413,6 +577,22 @@ export const onlyRecognizedLoadsAreReached = Task.make(
         unused("src/preload/test-setup.ts:1", "TEST_SETUP"),
       ].toSorted(),
     );
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
+);
+
+export const aBinTargetAnywhereUsesWhatItImports = Task.make(
+  "a file package.json lists under bin, wherever it lives, counts as a user of what it imports, while its own exports stay unused",
+  Effect.gen(function* () {
+    expect(
+      yield* placementViolationsIn({
+        "package.json":
+          '{ "name": "placement", "type": "module", "main": "./src/index.ts", "bin": { "placement": "./src/internal/cli.ts" } }\n',
+        "src/index.ts": "export const MAIN = 1;\n",
+        "src/internal/cli.ts":
+          'import { MESSAGE } from "./message.ts";\n\nexport const PRINTED = MESSAGE;\n',
+        "src/internal/message.ts": 'export const MESSAGE = "hello";\n',
+      }),
+    ).toEqual([unused("src/internal/cli.ts:3", "PRINTED")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 );
 

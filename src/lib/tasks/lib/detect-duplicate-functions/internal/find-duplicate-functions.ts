@@ -142,9 +142,8 @@ export const findDuplicateFunctions = (directory: string, shownDirectory = ".") 
 
 export const duplicateFunctionsOfEachPackage = inEachPackage(
   DUPLICATE_FUNCTIONS,
-  ".",
-  (packageDirectory) =>
-    findDuplicateFunctions(packageDirectory, packageDirectory).pipe(
+  (packageDirectory, packageDirectoryFromTheProject) =>
+    findDuplicateFunctions(packageDirectory, packageDirectoryFromTheProject).pipe(
       quietViolations(DUPLICATE_FUNCTIONS),
     ),
 );

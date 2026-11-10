@@ -4,11 +4,11 @@ Check sends your AI slop code back to the kitchen!
 
 Check holds your TypeScript code to a strict standard built around Effect and Bun, so the code stays type-safe, observable and predictable.
 
-It runs about 310 lint rules, 67 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
+It runs about 310 lint rules, 66 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
 
 No comment or setting turns a rule off everywhere. A small set of rules was picked to allow an override, and you grant each one to a single file in `oxlint.config.ts`. See [Grant a permission](docs/how-to-make-check-pass.md#grant-a-permission).
 
-Check is built on [Task](https://github.com/sshkeda/task), a task runner for Bun.
+Check is a command you run in your repo. It runs its checks with [Task](https://github.com/sshkeda/task), a task runner for Bun.
 
 ## See it catch slop
 
@@ -37,13 +37,13 @@ Here's what Check prints when it runs on that code:
 [effect-tsgo] src/index.ts:1:25: error effect(asyncFunction): This code declares an async function, consider representing this async control flow with Effect values and `Effect.gen`.
 [effect-tsgo] src/index.ts:3:28: error effect(globalFetch): This code uses the global `fetch` function, HTTP requests are represented through `HttpClient` from `effect/http`.
 [effect-tsgo] error ToolExited: effect-tsgo exited with code 1
-[oxlint] src/index.ts:4:12: error typescript(consistent-type-assertions): Do not use any type assertions.
-[oxlint] src/index.ts:4:39: error typescript(no-explicit-any): Unexpected `any`. Specify a different type.
-[oxlint] src/index.ts:7:5: error eslint(no-console): Unexpected console statement.
 [oxlint] src/index.ts:1:25: error sshkeda(no-index-logic): index file holds an arrow function expression
-[oxlint] src/index.ts:4:19: error sshkeda(no-unchecked-parsing): json() parses JSON without a Schema
-[oxlint] src/index.ts:6:5: error sshkeda(no-comments): comment in code
 [oxlint] src/index.ts:4:5: error typescript(no-unsafe-return): Unsafe return of a value of type `any`.
+[oxlint] src/index.ts:4:12: error typescript(consistent-type-assertions): Do not use any type assertions.
+[oxlint] src/index.ts:4:19: error sshkeda(no-unchecked-parsing): json() parses JSON without a Schema
+[oxlint] src/index.ts:4:39: error typescript(no-explicit-any): Unexpected `any`. Specify a different type.
+[oxlint] src/index.ts:6:5: error sshkeda(no-comments): comment in code
+[oxlint] src/index.ts:7:5: error eslint(no-console): Unexpected console statement.
 [oxlint] error ToolExited: oxlint exited with code 1
 [typed-checks] error SettledTasksFailed: 2 of 6 tasks failed: oxlint, effect-tsgo
 [check] read node_modules/@sshkeda/check/docs/how-to-make-check-pass.md before you change the code
@@ -84,7 +84,7 @@ Check passes.
 
 - **No comments.** When code is hard to follow, the fix is better names and simpler code, which stay true as the code changes. Comments drift out of date, and agents fill them with noise. When you need more explanation, ask your agent to explain the code.
 - **No `type` or `interface` declarations.** Types are inferred from the code that produces each value, so every type has one source of truth and nothing to keep in sync.
-- **No `let` and no loops.** Values don't change after they're made, which leaves an agent fewer ways to get state wrong.
+- **No `let`, and no `while` or counting `for` loops.** Values don't change after they're made, which leaves an agent fewer ways to get state wrong.
 - **Modules with `internal/`, `shared/` and `lib/`.** Each module exposes its public code in `index.ts`, keeps private code in `internal/`, which only that module may import, puts code its parts share in `shared/` and holds its child modules in `lib/`. Code stays easy to organize and hard to tangle.
 - **No abbreviations.** `imABigFanWhenVariablesAreLongBecauseThenItsEasierToUnderstandWhatTheCodeDoes`. Full words read the same to every person and every agent.
 - **No unchecked data.** JSON and other input pass through a Schema before the code trusts them, because a type assertion or a hand-written type guard proves nothing.
@@ -93,17 +93,17 @@ Check passes.
 - **Tests are tasks.** Every test is a Task task in `tests/`, never a Vitest, Jest or `bun:test` suite. Tests run in parallel and clean up after themselves.
 - **Each service in its own layer.** Services are declared only in files you grant, which keeps their wiring in one place.
 - **No polling.** Code waits for an event or a signal instead of checking on a timer, so it reacts right away. When there's nothing to listen to, such as a server that's still starting, polling needs a grant and a time limit.
-- **No dropped failures.** Every error is handled or passed on, so nothing fails silently.
+- **No dropped failures.** Every error is handled or passed on, and a fork that can fail must keep its fiber, so nothing fails silently.
 - **Risky access only where you grant it.** Reading environment variables, starting commands and printing to the terminal each need a grant on the exact file that does it.
 
 ## Get started
 
 Check needs Bun 1.4.4 or newer and a Git repository.
 
-1. Install Check, Task, Effect and Bun's types.
+1. Install Check, Effect and Bun's types.
 
    ```bash
-   bun add @sshkeda/check @sshkeda/task effect
+   bun add @sshkeda/check effect
    bun add -d @types/bun
    ```
 
@@ -142,22 +142,52 @@ Check needs Bun 1.4.4 or newer and a Git repository.
    export default FORMAT_CONFIG;
    ```
 
-5. Create `scripts/ci.ts` to run Check.
-
-   ```ts
-   import { check } from "@sshkeda/check/tasks";
-   import { Task } from "@sshkeda/task";
-
-   if (import.meta.main) {
-     Task.main(check);
-   }
-   ```
-
-6. Run it, and have your agent fix what it reports. Expect the first run to fail, even on a new project from `bun init`.
+5. Run Check, and have your agent fix what it reports. Expect the first run to fail, even on a new project from `bun init`.
 
    ```bash
-   bun scripts/ci.ts
+   bunx @sshkeda/check
    ```
+
+   Check checks the package in the directory you start it in.
+
+## Run it from a script
+
+To run Check beside your own tasks, such as your tests, add Task and start the command from a task in `scripts/`.
+
+```bash
+bun add @sshkeda/task
+```
+
+`scripts/internal/start-check.ts` starts the command:
+
+```ts
+import { Task } from "@sshkeda/task";
+
+export const check = Task.make("check", Task.exec("bunx", ["@sshkeda/check"]));
+```
+
+`scripts/ci.ts` runs it:
+
+```ts
+import { Task } from "@sshkeda/task";
+
+import { check } from "./internal/start-check.ts";
+
+if (import.meta.main) {
+  Task.main(check);
+}
+```
+
+To run your tests too, make one task in `scripts/internal/run-checks-and-tests.ts` that runs both, and pass it to `Task.main` in `scripts/ci.ts`:
+
+```ts
+import { Task } from "@sshkeda/task";
+
+import { tests } from "../../tests/index.ts";
+import { check } from "./start-check.ts";
+
+export const ci = Task.make("ci", Task.allSettled([check, tests]));
+```
 
 ## Make it yours
 

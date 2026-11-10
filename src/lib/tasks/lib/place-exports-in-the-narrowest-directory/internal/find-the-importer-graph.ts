@@ -16,9 +16,12 @@ import {
   packagePathOf,
 } from "../../../shared/classify-files-by-role.ts";
 import { lineNumbersIn, lineOfTheFirstLabel } from "../../../shared/count-the-line-of-an-offset.ts";
+import { listedBinaryFilesOf } from "../../../shared/find-installed-package-binaries.ts";
 import { moduleRequestsIn, URL_REQUESTS } from "../../../shared/find-module-requests.ts";
 import type { MODULE_REQUEST_KINDS } from "../../../shared/find-module-requests.ts";
+import { PACKAGE_MANIFEST_FILE } from "../../../shared/find-named-package-manifests.ts";
 import { existingPackageFiles } from "../../../shared/list-package-files.ts";
+import { rootManifestIn } from "../../../shared/match-granted-patch-files.ts";
 import { isFormatConfigTextRefusedIn } from "../../../shared/parse-config-files-that-import-from-check.ts";
 import {
   BunConfigInvalid,
@@ -33,6 +36,7 @@ import {
 import { resolveModuleRequest } from "../../../shared/resolve-module-requests.ts";
 import { ImportUnresolvableInTheImportBoundaryCheck } from "./export-placement-errors.ts";
 import { packageEntrySourcesAmong } from "./find-package-entry-sources.ts";
+import { makesATaskInItsDefaultExport } from "./recognise-task-default-exports.ts";
 
 export const EVERY_EXPORT = "*";
 export const DEFAULT_EXPORT = "default";
@@ -190,6 +194,11 @@ export const findTheImporterGraph = (projectFile: string) =>
       const text = yield* fileSystem.readFileString(path.join(packageDirectory, file));
       files.set(file, yield* moduleUsesIn(file, text, resolverFor(file)));
     }
+    const runsItsDefaultExport = new Set(
+      [...files].flatMap(([file, { parsed }]) =>
+        makesATaskInItsDefaultExport(parsed) ? [file] : [],
+      ),
+    );
 
     const trackedPackageFiles = new Set(
       yield* existingPackageFiles(packageDirectory, [BUN_CONFIG_FILE]),
@@ -250,8 +259,18 @@ export const findTheImporterGraph = (projectFile: string) =>
       ...preloaded,
       ...testPreloaded,
     ]);
+    const binaryEntries = [
+      ...listedBinaryFilesOf(
+        yield* rootManifestIn(
+          packageDirectory,
+          yield* existingPackageFiles(packageDirectory, [PACKAGE_MANIFEST_FILE]),
+        ),
+      ),
+    ];
     const reachable = reach([
       ...roots,
+      ...binaryEntries,
+      ...runsItsDefaultExport,
       ...[...files.keys()].filter((file) => isDeclarationFile(file) || isUnderTestDirectory(file)),
     ]);
     const importers = new Map<string, Set<string>>();
@@ -278,6 +297,8 @@ export const findTheImporterGraph = (projectFile: string) =>
       reach,
       exportsAreReadFromOutside,
       roots,
+      runsItsDefaultExport,
+      binaryEntries,
       reachable,
       moduleDirectories,
       importersOf,

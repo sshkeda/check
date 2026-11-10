@@ -11,6 +11,6 @@ export const oxlint = Task.make(
   "oxlint",
   Effect.andThen(
     Task.all([typeScriptConfig, lintConfigFile]),
-    inEachPackage("oxlint", ".", checkLintRulesWithOxlintIn),
+    inEachPackage("oxlint", checkLintRulesWithOxlintIn),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

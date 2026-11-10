@@ -8,7 +8,7 @@ import { ProjectQueryCachesLive } from "./provide-project-query-caches.ts";
 
 export const lintConfigFile = Task.make(
   "lint-config",
-  inEachPackage("lint-config", ".", (packageDirectory) =>
+  inEachPackage("lint-config", (packageDirectory) =>
     loadedLintConfigIn(packageDirectory).pipe(Effect.asVoid, quietViolations("lint-config")),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
 );

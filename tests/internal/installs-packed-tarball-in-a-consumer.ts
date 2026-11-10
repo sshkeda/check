@@ -18,6 +18,32 @@ const formatConfigText = encodeJson(packageJson.name).pipe(
   Effect.map((name) => `import { FORMAT_CONFIG } from ${name};\n\nexport default FORMAT_CONFIG;\n`),
 );
 
+const CHECK_COMMAND = `bunx ${packageJson.name}`;
+
+const TASK_DEPENDENCY = { "@sshkeda/task": packageJson.dependencies["@sshkeda/task"] };
+
+const startTheCheckCommandText = encodeJson(packageJson.name).pipe(
+  Effect.map(
+    (name) =>
+      `import { Task } from "@sshkeda/task";\n\nexport const check = Task.make("check", Task.exec("bunx", [${name}]));\n`,
+  ),
+);
+
+const CI_SCRIPT_TEXT =
+  'import { Task } from "@sshkeda/task";\n\nimport { check } from "./internal/start-the-check-command.ts";\n\nif (import.meta.main) {\n  Task.main(check);\n}\n';
+
+const DEFAULT_EXPORT_SCRIPT_TEXT =
+  'import { check } from "./internal/start-the-check-command.ts";\n\nexport default check;\n';
+
+const SCRIPT_FILES = ["scripts/ci.ts", "scripts/internal/start-the-check-command.ts"] as const;
+
+const throughTheCheckTask = (output: string) =>
+  output
+    .split("\n")
+    .filter((line) => line.startsWith("[check] "))
+    .map((line) => line.slice("[check] ".length))
+    .join("\n");
+
 const REPLACED_PACKAGE_LOCK_KEYS = ['"oxfmt@', '"@oxfmt/'] as const;
 
 const GUIDE_IN_THE_PACKAGE = `node_modules/${packageJson.name}/docs/how-to-make-check-pass.md`;
@@ -68,6 +94,7 @@ export const runsChecksFromPackedTarball = Task.make(
           dependencies: {
             [packageJson.name]: `file:./${path.basename(tarball)}`,
             ...peersAtDevelopmentVersions,
+            ...TASK_DEPENDENCY,
             "@types/bun": packageJson.devDependencies["@types/bun"],
           },
         })}\n`,
@@ -83,7 +110,7 @@ export const runsChecksFromPackedTarball = Task.make(
             types: ["bun"],
             ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           },
-          files: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", "scripts/ci.ts"],
+          files: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", ...SCRIPT_FILES],
         })}\n`,
       );
       yield* fileSystem.writeFileString(
@@ -94,10 +121,11 @@ export const runsChecksFromPackedTarball = Task.make(
         path.join(consumer, "oxfmt.config.ts"),
         yield* formatConfigText,
       );
-      yield* fileSystem.makeDirectory(path.join(consumer, "scripts"));
+      yield* fileSystem.makeDirectory(path.join(consumer, "scripts/internal"), { recursive: true });
+      yield* fileSystem.writeFileString(path.join(consumer, "scripts/ci.ts"), CI_SCRIPT_TEXT);
       yield* fileSystem.writeFileString(
-        path.join(consumer, "scripts/ci.ts"),
-        `import { Task } from "@sshkeda/task";\nimport { check } from ${yield* encodeJson(`${packageJson.name}/tasks`)};\n\nif (import.meta.main) {\n  Task.main(check);\n}\n`,
+        path.join(consumer, "scripts/internal/start-the-check-command.ts"),
+        yield* startTheCheckCommandText,
       );
       const source = path.join(consumer, "src/index.ts");
       yield* fileSystem.makeDirectory(path.dirname(source), { recursive: true });
@@ -146,7 +174,7 @@ export const runsChecksFromPackedTarball = Task.make(
         lintConfigFile,
         lintConfig.replace('"src/index.ts"', '"src/*.ts"'),
       );
-      const configMistake = yield* runTaskFile("bun scripts/ci.ts", {
+      const configMistake = yield* runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
       }).pipe(failureAsValue);
@@ -164,7 +192,7 @@ export const runsChecksFromPackedTarball = Task.make(
         source,
         'export const greeting = "hello";\nexport const LABEL = String("label");\n',
       );
-      const failure = yield* runTaskFile("bun scripts/ci.ts", {
+      const failure = yield* runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
       }).pipe(failureAsValue);
@@ -180,7 +208,7 @@ export const runsChecksFromPackedTarball = Task.make(
       expect(pointersToTheGuide(failure.message)).toEqual([pointerTo(installedGuide)]);
       yield* fileSystem.remove(misnamedFile);
       yield* fileSystem.writeFileString(source, 'export const GREETING = "hello";\n');
-      const passing = yield* runTaskFile("bun scripts/ci.ts", {
+      const passing = yield* runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
       });
@@ -198,7 +226,7 @@ export const runsChecksFromPackedTarball = Task.make(
             ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
             ...STRICTEST_OPTIONS_A_CONSUMER_MAY_TURN_ON,
           },
-          files: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", "scripts/ci.ts"],
+          files: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", ...SCRIPT_FILES],
         })}\n`,
       );
       yield* Task.exec("bun", ["fmt", "tsconfig.json"], options);
@@ -206,14 +234,14 @@ export const runsChecksFromPackedTarball = Task.make(
         ...options,
         taskStateDirectory,
       });
-      expect(strictest).toContain("[type-check] passed");
+      expect(throughTheCheckTask(strictest)).toContain("[type-check] passed");
       expect(strictest).toContain("passed");
     }),
   ),
 );
 
 export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
-  "the packed tarball checks a workspace package whose dependencies are hoisted to the workspace root, and a failed run points at the guide by its path from that package",
+  "the packed tarball checks a workspace package whose dependencies are hoisted to the workspace root, with one script that calls Task.main and one whose default export is the check task, and a failed run points at the guide by its path from that package",
   Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -232,7 +260,7 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
         )),
         "@types/bun": packageJson.devDependencies["@types/bun"],
       };
-      yield* fileSystem.makeDirectory(path.join(consumer, "scripts"), { recursive: true });
+      yield* fileSystem.makeDirectory(path.join(consumer, "scripts/internal"), { recursive: true });
       yield* fileSystem.writeFileString(
         path.join(workspace, "bunfig.toml"),
         '[install]\nlinker = "hoisted"\n',
@@ -258,6 +286,7 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
           dependencies: {
             [packageJson.name]: `file:../../${path.basename(tarball)}`,
             ...peersAtDevelopmentVersions,
+            ...TASK_DEPENDENCY,
           },
         })}\n`,
       );
@@ -271,7 +300,7 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
             types: ["bun"],
             ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           },
-          include: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", "scripts/*.ts"],
+          include: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", "scripts/**/*.ts"],
         })}\n`,
       );
       yield* fileSystem.writeFileString(
@@ -282,9 +311,14 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
         path.join(consumer, "oxfmt.config.ts"),
         yield* formatConfigText,
       );
+      yield* fileSystem.writeFileString(path.join(consumer, "scripts/ci.ts"), CI_SCRIPT_TEXT);
       yield* fileSystem.writeFileString(
-        path.join(consumer, "scripts/ci.ts"),
-        `import { Task } from "@sshkeda/task";\nimport { check } from ${yield* encodeJson(`${packageJson.name}/tasks`)};\n\nif (import.meta.main) {\n  Task.main(check);\n}\n`,
+        path.join(consumer, "scripts/check.ts"),
+        DEFAULT_EXPORT_SCRIPT_TEXT,
+      );
+      yield* fileSystem.writeFileString(
+        path.join(consumer, "scripts/internal/start-the-check-command.ts"),
+        yield* startTheCheckCommandText,
       );
       const source = path.join(consumer, "src/index.ts");
       yield* fileSystem.makeDirectory(path.dirname(source), { recursive: true });
@@ -297,17 +331,21 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
         ...options,
         taskStateDirectory,
       }).pipe(failureAsValue);
-      expect(failure.message).toContain("index.ts:1:14: error sshkeda(no-loose-literal-constants)");
+      const printedByCheck = throughTheCheckTask(failure.message);
+      expect(printedByCheck).toContain(
+        "[oxlint] src/index.ts:1:14: error sshkeda(no-loose-literal-constants)",
+      );
       const hoistedGuide = path.join("../..", GUIDE_IN_THE_PACKAGE);
-      expect(pointersToTheGuide(failure.message)).toEqual([pointerTo(hoistedGuide)]);
+      expect(pointersToTheGuide(printedByCheck)).toEqual([pointerTo(hoistedGuide)]);
       expect(yield* fileSystem.exists(path.join(consumer, hoistedGuide))).toBe(true);
       yield* fileSystem.writeFileString(source, 'export const GREETING = "hello";\n');
       const passing = yield* runTaskFile("bun packages/app/scripts/ci.ts", {
         ...options,
         taskStateDirectory,
       });
-      expect(passing).toContain("passed");
-      expect(pointersToTheGuide(passing)).toEqual([]);
+      expect(throughTheCheckTask(passing)).toMatch(/^passed: /mu);
+      expect(passing).toMatch(/^passed: 1 task, /mu);
+      expect(pointersToTheGuide(throughTheCheckTask(passing))).toEqual([]);
     }),
   ),
 );
@@ -337,6 +375,7 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
           dependencies: {
             [packageJson.name]: `file:./${path.basename(tarball)}`,
             ...peersAtDevelopmentVersions,
+            ...TASK_DEPENDENCY,
             "@types/bun": packageJson.devDependencies["@types/bun"],
           },
         })}\n`,
@@ -349,11 +388,12 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
             types: ["bun"],
             ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
           },
-          files: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", "scripts/ci.ts"],
+          files: ["src/index.ts", "oxlint.config.ts", "oxfmt.config.ts", ...SCRIPT_FILES],
         })}\n`,
         "oxlint.config.ts": `import { lintConfig } from ${yield* encodeJson(packageJson.name)};\n\nexport default lintConfig({});\n`,
         "oxfmt.config.ts": yield* formatConfigText,
-        "scripts/ci.ts": `import { Task } from "@sshkeda/task";\nimport { check } from ${yield* encodeJson(`${packageJson.name}/tasks`)};\n\nif (import.meta.main) {\n  Task.main(check);\n}\n`,
+        "scripts/ci.ts": CI_SCRIPT_TEXT,
+        "scripts/internal/start-the-check-command.ts": yield* startTheCheckCommandText,
         "src/index.ts":
           'export   const GREETING="hello there, a line longer than forty characters"',
       };
@@ -365,7 +405,7 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
       }
       yield* Task.exec("bun", ["install"], options);
       yield* Task.exec("git", ["init", "--quiet"], options);
-      const checkOutput = runTaskFile("bun scripts/ci.ts", {
+      const checkOutput = runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
       }).pipe(
@@ -376,9 +416,6 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
       const unformattedSource = "[bun-fmt] src/index.ts: error UnformattedFile: is not formatted";
       const unformatted = yield* checkOutput;
       expect(unformatted).toContain(unformattedSource);
-      expect(unformatted).toContain(
-        "[bun-fmt] scripts/ci.ts: error UnformattedFile: is not formatted",
-      );
       yield* Task.exec("bun", ["fmt"], options);
       expect(yield* checkOutput).toContain("passed");
       const installedConfigs = path.join(

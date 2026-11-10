@@ -73,6 +73,6 @@ export const findFileTypeViolations = (directory: string) =>
     }
   });
 
-export const fileTypeViolationsOfEachPackage = inEachPackage(FILE_TYPES, ".", (packageDirectory) =>
+export const fileTypeViolationsOfEachPackage = inEachPackage(FILE_TYPES, (packageDirectory) =>
   findFileTypeViolations(packageDirectory).pipe(quietViolations(FILE_TYPES)),
 );

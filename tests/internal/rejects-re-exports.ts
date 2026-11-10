@@ -197,6 +197,41 @@ export const exportsAreDefinedWhereTheyAreWritten = Task.make(
   }),
 );
 
+const DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED = [{ defaultExportOfAnImport: "allowed" }] as const;
+
+export const aScriptMayDefaultExportAnImport = Task.make(
+  "no-re-exports with defaultExportOfAnImport allowed, as files directly in scripts/ have it, accepts export default of an imported binding, a member of one or a local initialized to one, while it still rejects export { }, export from, export * and an exported variable initialized to an imported binding",
+  ruleTest("no-re-exports", {
+    valid: [
+      'import { check } from "./internal/start-check.ts"; export default check;',
+      'import * as tasks from "./internal/start-check.ts"; export default tasks.check;',
+      'import { check } from "./internal/start-check.ts"; const ci = check; export default ci;',
+    ].map((code) => ({ code, options: DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED })),
+    invalid: [
+      {
+        code: 'import { check } from "./internal/start-check.ts"; export { check };',
+        options: DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED,
+        errors: [{ message: reExport("check", "check", "./internal/start-check.ts") }],
+      },
+      {
+        code: 'export { check } from "./internal/start-check.ts";',
+        options: DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED,
+        errors: [{ message: "export from ./internal/start-check.ts re-exports another module" }],
+      },
+      {
+        code: 'export * from "./internal/start-check.ts";',
+        options: DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED,
+        errors: [{ message: "export * from ./internal/start-check.ts re-exports another module" }],
+      },
+      {
+        code: 'import { check } from "./internal/start-check.ts"; export const ci = check;',
+        options: DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED,
+        errors: [{ message: initializedTo("ci", "check", "./internal/start-check.ts") }],
+      },
+    ],
+  }),
+);
+
 export const aStaticMemberOfAnImportIsReExported = Task.make(
   "no-re-exports reports export default of a static member of an imported binding, a member of a member included, whether a namespace, named or default import, naming the export and the binding, while import x = require() bindings are not followed",
   ruleTest("no-re-exports", {

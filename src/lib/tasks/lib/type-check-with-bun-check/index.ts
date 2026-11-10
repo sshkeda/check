@@ -7,5 +7,5 @@ import { checkTypesWithBunCheckIn } from "./internal/check-types-with-bun-check.
 
 export const typeCheck = Task.make(
   "type-check",
-  Effect.andThen(typeScriptConfig, inEachPackage("type-check", ".", checkTypesWithBunCheckIn)),
+  Effect.andThen(typeScriptConfig, inEachPackage("type-check", checkTypesWithBunCheckIn)),
 );

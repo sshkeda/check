@@ -16,10 +16,9 @@ import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-proje
 import { openTypeScriptProjects } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
 import { formattedError, printableError } from "../../src/shared/format-reported-failures.ts";
 import {
+  theCheckCommand,
   FORMAT_CONFIG_TEXT,
   makeProject as makeProjectWith,
-  RUNNER,
-  TASKS,
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
@@ -411,15 +410,11 @@ const printedCheckOf = (directory: string) =>
       path.join(directory, "package.json"),
       `${yield* encodeIndentedJson({ name: path.basename(directory), type: "module", main: "./src/index.ts" })}\n`,
     );
-    yield* fileSystem.writeFileString(path.join(directory, ".gitignore"), "node_modules\nrun.ts\n");
+    yield* fileSystem.writeFileString(path.join(directory, ".gitignore"), "node_modules\n");
     yield* fileSystem.writeFileString(path.join(directory, "oxfmt.config.ts"), FORMAT_CONFIG_TEXT);
-    yield* fileSystem.writeFileString(
-      path.join(directory, "run.ts"),
-      `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { check } from ${yield* encodeJson(TASKS)};\nTask.main(check);\n`,
-    );
     yield* Task.exec("git", ["init", "--quiet"], options);
     yield* Task.exec("bun", ["fmt", "."], options);
-    return yield* runTaskFile("bun run.ts", {
+    return yield* runTaskFile(yield* theCheckCommand, {
       ...options,
       taskStateDirectory: yield* fileSystem.makeTempDirectoryScoped(),
     }).pipe(

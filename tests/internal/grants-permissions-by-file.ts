@@ -984,6 +984,26 @@ export const scriptsRunTasksByPosition = Task.make(
   }).pipe(Effect.scoped),
 );
 
+export const scriptsDefaultExportImportsByPosition = Task.make(
+  "a file directly in scripts/ may default export an imported task with no grant, while a file under a subdirectory of scripts/ or in src/ may not, and a named re-export stays refused in scripts/",
+  Effect.gen(function* () {
+    const defaultExportsATask = 'import { tests } from "./tests.ts";\nexport default tests;\n';
+    const output = yield* lintWithPermissions("{}", {
+      "scripts/ci.ts": defaultExportsATask,
+      "scripts/shared/helper.ts": defaultExportsATask,
+      "src/main.ts": defaultExportsATask,
+      "scripts/build.ts": 'import { tests } from "./tests.ts";\nexport { tests };\n',
+    });
+    expect(
+      output
+        .split("\n")
+        .filter((line) => line.includes("sshkeda(no-re-exports)"))
+        .map((line) => line.slice(0, line.indexOf(":")))
+        .toSorted(),
+    ).toEqual(["scripts/build.ts", "scripts/shared/helper.ts", "src/main.ts"]);
+  }).pipe(Effect.scoped),
+);
+
 const DECLARES_A_SCHEMA_FROM_A_GUARD = `import { Schema } from "effect";
 
 export const Port = Schema.declare((input): input is 80 => input === 80);

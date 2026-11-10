@@ -28,7 +28,7 @@ const locatedFromThePackage = (
 
 export const typeScriptConfig = Task.make(
   "typescript-config",
-  inEachPackage("typescript-config", ".", (packageDirectory) =>
+  inEachPackage("typescript-config", (packageDirectory) =>
     Path.Path.use((path) =>
       findTypeScriptConfigViolations(path.join(packageDirectory, TYPESCRIPT_PROJECT_FILE)).pipe(
         quietViolations("typescript-config"),

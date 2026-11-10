@@ -42,7 +42,7 @@ const nonScript = (path: string) =>
   `${path}: error TopLevelNonScript: sits directly in scripts/ and is not a TypeScript or JavaScript file`;
 
 const withoutMain = (path: string) =>
-  `${path}: error TopLevelScriptWithoutMain: sits directly in scripts/ and does not call Task.main imported from @sshkeda/task`;
+  `${path}: error TopLevelScriptWithoutMain: sits directly in scripts/ and neither calls Task.main imported from @sshkeda/task nor has a default export`;
 
 const AT_REPOSITORY_ROOT = { root: "/repository", packageDirectory: "/repository" } as const;
 
@@ -571,6 +571,12 @@ export const directoryNamesAreCheckedOnceEach = Task.make(
 const holdsOtherStatement = (location: string) =>
   `${location}: error TopLevelScriptHoldsOtherStatement: holds a statement other than an import and if (import.meta.main) { Task.main(task); }`;
 
+const holdsOtherThanItsDefaultExport = (location: string) =>
+  `${location}: error TopLevelScriptHoldsOtherStatement: holds a statement other than an import and export default task`;
+
+const mainAndDefaultExport = (location: string) =>
+  `${location}: error TopLevelScriptWithMainAndDefaultExport: calls Task.main and also has a default export. Keep one of them`;
+
 const guarded = (imports: string, call: string) =>
   `${imports}\n\nif (import.meta.main) {\n  ${call};\n}\n`;
 
@@ -673,6 +679,68 @@ export const scriptsHoldOnlyImportsAndTheirMainCall = Task.make(
         sourceViolations(
           "scripts/shared/ci.ts",
           `${TASK}\nexport const ci = Task.make("ci", work);\nTask.main(ci);\n`,
+        ),
+      ),
+    ).toEqual([]);
+  }),
+);
+
+export const scriptsMayRunTheirDefaultExport = Task.make(
+  "a script directly in scripts/ may hold only imports and one export default of any expression, such as an imported task, Task.all, Task.allSettled or Task.make, so each other statement is TopLevelScriptHoldsOtherStatement, a default export beside a Task.main call is TopLevelScriptWithMainAndDefaultExport, and a script with neither is TopLevelScriptWithoutMain",
+  Effect.sync(() => {
+    const TASK = 'import { Task } from "@sshkeda/task";';
+    const CHECK = 'import { check } from "./internal/start-check.ts";';
+    const TESTS = 'import { tests } from "../tests/index.ts";';
+    for (const script of [
+      `${CHECK}\n\nexport default check;\n`,
+      `${TASK}\n${CHECK}\n${TESTS}\n\nexport default Task.all([check, tests]);\n`,
+      `${TASK}\n${CHECK}\n${TESTS}\n\nexport default Task.allSettled([check, tests]);\n`,
+      `${TASK}\n${CHECK}\n\nexport default Task.make({ name: "ci", run: check });\n`,
+      `${TASK}\n${CHECK}\n\nexport default Task.make("ci", check);\n`,
+    ]) {
+      expect(taggedViolations(sourceViolations("scripts/ci.ts", script))).toEqual([]);
+    }
+    expect(
+      taggedViolations(
+        sourceViolations(
+          "scripts/ci.ts",
+          `${TASK}\n${CHECK}\nconst ci = Task.all([check]);\nexport default ci;\nexport const CI = ci;\n`,
+        ),
+      ),
+    ).toEqual([
+      holdsOtherThanItsDefaultExport("scripts/ci.ts:3"),
+      holdsOtherThanItsDefaultExport("scripts/ci.ts:5"),
+    ]);
+    expect(
+      taggedViolations(
+        sourceViolations(
+          "scripts/ci.ts",
+          guarded(`${TASK}\n${CHECK}\n\nexport default check;`, "Task.main(check)"),
+        ),
+      ),
+    ).toEqual([mainAndDefaultExport("scripts/ci.ts:4")]);
+    expect(
+      taggedViolations(
+        sourceViolations(
+          "scripts/ci.ts",
+          `${TASK}\n${CHECK}\nexport default check;\nTask.main(check);\n`,
+        ),
+      ),
+    ).toEqual([mainAndDefaultExport("scripts/ci.ts:3"), holdsOtherStatement("scripts/ci.ts:4")]);
+    for (const script of [
+      `${CHECK}\nexport { check };\n`,
+      `export { check } from "./internal/start-check.ts";\n`,
+      `export * from "./internal/start-check.ts";\n`,
+    ]) {
+      expect(taggedViolations(sourceViolations("scripts/ci.ts", script))).toEqual([
+        withoutMain("scripts/ci.ts"),
+      ]);
+    }
+    expect(
+      taggedViolations(
+        sourceViolations(
+          "scripts/shared/ci.ts",
+          `${CHECK}\nexport const CI = check;\nexport default check;\n`,
         ),
       ),
     ).toEqual([]);
