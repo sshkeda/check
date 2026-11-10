@@ -47,6 +47,7 @@ import * as declaredValues from "./internal/rejects-declared-values.ts";
 import * as droppedFailuresOutsideEffect from "./internal/rejects-dropped-failures-in-layers-streams-and-options.ts";
 import * as duplicateFunctions from "./internal/rejects-duplicate-functions.ts";
 import * as dynamicRuntimeCalls from "./internal/rejects-dynamic-runtime-calls.ts";
+import * as fixedFallbacks from "./internal/rejects-fixed-fallbacks.ts";
 import * as globalErrorFailureTypes from "./internal/rejects-global-error-failure-types.ts";
 import * as instantRetries from "./internal/rejects-instant-retries.ts";
 import * as letAndMutableRef from "./internal/rejects-let-and-mutable-ref.ts";
@@ -71,13 +72,16 @@ import * as vagueErrorClassNames from "./internal/rejects-vague-error-class-name
 import * as vagueFileNames from "./internal/rejects-vague-file-names.ts";
 import * as whileLoops from "./internal/rejects-while-loops.ts";
 import * as causesReportedOnce from "./internal/reports-each-cause-once.ts";
+import * as duplicatePackageOnce from "./internal/reports-each-duplicate-package-once.ts";
 import * as failureReports from "./internal/reports-each-failure-with-its-tag.ts";
 import * as restrictedImportsOnce from "./internal/reports-each-restricted-import-once.ts";
+import * as unusedCodeGrants from "./internal/reports-unused-code-grants.ts";
 import * as literalConstants from "./internal/requires-exact-literal-constants.ts";
 import * as inlineModuleUrls from "./internal/requires-inline-module-urls.ts";
 import * as serviceLayers from "./internal/requires-separate-service-layers.ts";
 import * as consumerChecks from "./internal/runs-every-check-in-a-consumer.ts";
 import * as sharedTypeScriptProject from "./internal/shares-one-typescript-project-per-run.ts";
+import * as nestedWorktrees from "./internal/skips-nested-git-worktrees.ts";
 import * as pickedLintRules from "./internal/turns-on-the-picked-lint-rules.ts";
 import { stageCheckUnderNodeModules } from "./shared/checked-project.ts";
 
@@ -136,6 +140,8 @@ export const ci = Task.make(
         uncalledCheckedMembers,
         unnamedFallbacks,
         recoveredExists,
+        fixedFallbacks,
+        unusedCodeGrants,
         unnamedRecovery,
         droppedFailuresOutsideEffect,
         bunModuleImports,
@@ -163,8 +169,10 @@ export const ci = Task.make(
         sharedTypeScriptProject,
         formatConfig,
         causesReportedOnce,
+        duplicatePackageOnce,
         typeOnlySchemas,
         pickedLintRules,
+        nestedWorktrees,
       ],
       { concurrency: 6 },
     ),

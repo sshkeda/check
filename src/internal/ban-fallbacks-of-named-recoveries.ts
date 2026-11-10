@@ -1,14 +1,13 @@
-import { defineRule } from "@oxlint/plugins";
-import type { ESTree, SourceCode } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree, SourceCode } from "@oxlint/plugins";
 
 import { constantValue, effectModuleOperation } from "./resolve-what-an-expression-imports.ts";
 
 const NAMED_RECOVERY_MODULES = ["Effect", "Stream", "Channel"] as const;
 
-const isTagText = (node: ESTree.Node) =>
+export const isTagText = (node: ESTree.Node) =>
   (node.type === "Literal" && typeof node.value === "string") || node.type === "TemplateLiteral";
 
-const isTagList = (node: ESTree.Node) => isTagText(node) || node.type === "ArrayExpression";
+export const isTagList = (node: ESTree.Node) => isTagText(node) || node.type === "ArrayExpression";
 
 const isHandlerObject = (node: ESTree.Node) => node.type === "ObjectExpression";
 
@@ -61,14 +60,14 @@ const hasFallback = (
   return isDataLastWithFallback || !isDataFirstWithoutFallback;
 };
 
-export const noUnnamedFallbacks = defineRule({
+export const noUnnamedFallbacks = {
   meta: {
     type: "problem",
     messages: {
       fallback: "{{member}} is given a fallback for failures it does not name",
     },
   },
-  create(context) {
+  create(context: Pick<Context, "report" | "sourceCode">) {
     return {
       CallExpression(node) {
         for (const moduleName of NAMED_RECOVERY_MODULES) {
@@ -87,4 +86,4 @@ export const noUnnamedFallbacks = defineRule({
       },
     };
   },
-});
+} satisfies CreateRule;

@@ -401,6 +401,9 @@ export const BANS_NO_GRANT_LIFTS = "onlyThoseNoGrantLifts";
 
 export const UNUSED_GRANT_REPORTED = "reported";
 
+export const unusedGrantMessage = (permission: string) =>
+  `this file is granted ${permission}, but uses nothing ${permission} allows`;
+
 export const bansNoGrantLifts = (permission: keyof typeof PERMISSION_BANS) => {
   const entry = PERMISSION_BANS[permission];
   return "bannedEvenWhenGranted" in entry ? entry.bannedEvenWhenGranted.bans : [];

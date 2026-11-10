@@ -4,6 +4,7 @@ import { FORMAT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
 import { printableError } from "../../../../../shared/format-reported-failures.ts";
 import { enclosingDirectoriesOf } from "../../../shared/classify-files-by-role.ts";
 import { encodeJson } from "../../../shared/encode-compact-json.ts";
+import { isSymbolicLink } from "../../../shared/find-symbolic-links.ts";
 import {
   failQuietly,
   quietViolations,
@@ -13,7 +14,6 @@ import {
   mergedExit,
   runTool,
 } from "../../../shared/run-tools-and-decode-their-reports.ts";
-import { isSymbolicLink } from "./find-symbolic-links.ts";
 import { UnformattedFile } from "./unformatted-file-errors.ts";
 
 export const FORMATTED_PACKAGE_DIRECTORY = ".";

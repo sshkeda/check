@@ -1,5 +1,4 @@
-import { defineRule } from "@oxlint/plugins";
-import type { ESTree } from "@oxlint/plugins";
+import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 
 import { EFFECT_OPERATION_RULES } from "../shared/lint-rule-messages-and-patterns.ts";
 import { effectModuleOperation, moduleExportName } from "./resolve-what-an-expression-imports.ts";
@@ -17,14 +16,14 @@ export const effectOperationRule = (ruleName: keyof typeof EFFECT_OPERATION_RULE
   const bannedModules: ReadonlySet<string> = new Set(
     bannedOperations.flatMap(([, operations]) => [...operations.keys()]),
   );
-  return defineRule({
+  return {
     meta: {
       type: "problem",
       messages: {
         operation: "{{moduleName}}.{{operation}} is banned",
       },
     },
-    create(context) {
+    create(context: Pick<Context, "report" | "sourceCode">) {
       const report = (node: ESTree.Node, moduleName: string, operation: string | undefined) => {
         if (operation === undefined) {
           return;
@@ -61,5 +60,5 @@ export const effectOperationRule = (ruleName: keyof typeof EFFECT_OPERATION_RULE
         },
       };
     },
-  });
+  } satisfies CreateRule;
 };
