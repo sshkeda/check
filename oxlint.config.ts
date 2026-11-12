@@ -19,6 +19,10 @@ export default lintConfig({
     services: ["TypeScriptProjectListings"],
   },
   "src/lib/tasks/shared/resolve-module-requests.ts": { services: ["ModuleResolutions"] },
+  "src/lib/tasks/shared/watch-the-typescript-api-process.ts": {
+    allow: ["handlesEveryFailure", "trustsUnverifiedTypes", "usesAbbreviations"],
+    services: ["TypeScriptApiLaunch"],
+  },
   "tests/shared/failure-as-value.ts": { allow: ["handlesEveryFailure"] },
   "tests/shared/run-task-files.ts": { allow: ["usesAbbreviations"] },
   ".github": { allow: ["isAnUnlistedDirectory"] },

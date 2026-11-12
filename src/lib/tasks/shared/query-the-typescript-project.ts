@@ -33,7 +33,7 @@ import {
   isTypeLiteralNode,
   isVariableDeclaration,
 } from "typescript/unstable/ast/is";
-import { API, SymbolFlags } from "typescript/unstable/async";
+import { SymbolFlags } from "typescript/unstable/async";
 import type { Checker, Program, Symbol as TypeScriptSymbol, Type } from "typescript/unstable/async";
 
 import { isDeclarationFile, isScript, packagePathOf } from "./classify-files-by-role.ts";
@@ -48,11 +48,13 @@ import {
   ProgramFilesOutsideProject,
   ProjectReferencesUndecodable,
   TypeScriptApiFailed,
+  TypeScriptApiProcessStopped,
   TypeScriptConfigUnparsable,
   TypeScriptProjectFileMissing,
   TypeScriptReturnedNothing,
 } from "./project-config-and-tool-errors.ts";
 import { absolutePathOf } from "./resolve-absolute-paths.ts";
+import { openedApi } from "./watch-the-typescript-api-process.ts";
 
 export const TYPESCRIPT_PROJECT_FILE = "tsconfig.json";
 
@@ -91,10 +93,16 @@ const PROJECT_REFERENCES = Schema.Struct({
   references: Schema.optionalKey(Schema.Array(Schema.Struct({ path: Schema.String }))),
 });
 
+const isProcessStopped = Schema.is(TypeScriptApiProcessStopped);
+
 export const typeScriptRequest = <Value>(operation: string, request: () => Promise<Value>) =>
   Effect.tryPromise({
     try: request,
-    catch: (cause) => new TypeScriptApiFailed({ operation, reason: String(cause) }),
+    catch: (cause) =>
+      new TypeScriptApiFailed({
+        operation,
+        reason: isProcessStopped(cause) ? cause.reason : String(cause),
+      }),
   });
 
 export const typeMembers = (type: Type) =>
@@ -203,19 +211,6 @@ export const projectConfigFiles = (projectFile: string) =>
     }
     return configFiles;
   });
-
-const openedApi = (sourceTextOverrides: ReadonlyMap<string, string>) =>
-  Effect.acquireRelease(
-    Effect.sync(
-      () =>
-        new API(
-          sourceTextOverrides.size === 0
-            ? {}
-            : { fs: { readFile: (fileName) => sourceTextOverrides.get(fileName) } },
-        ),
-    ),
-    (openApi) => Effect.promise(() => openApi.close()),
-  );
 
 const parseCompilerOptionsAndInputs = (configFile: string) =>
   Effect.gen(function* () {

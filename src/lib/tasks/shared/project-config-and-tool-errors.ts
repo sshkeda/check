@@ -13,6 +13,15 @@ export class TypeScriptApiFailed extends Schema.TaggedError<TypeScriptApiFailed>
   }
 }
 
+export class TypeScriptApiProcessStopped extends Schema.TaggedError<TypeScriptApiProcessStopped>()(
+  "TypeScriptApiProcessStopped",
+  { reason: Schema.String },
+) {
+  public override get message() {
+    return this.reason;
+  }
+}
+
 export class TypeScriptReturnedNothing extends Schema.TaggedError<TypeScriptReturnedNothing>()(
   "TypeScriptReturnedNothing",
   { operation: Schema.String },
