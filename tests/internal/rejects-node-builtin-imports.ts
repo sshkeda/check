@@ -29,9 +29,9 @@ const builtinTest = (rule: string, invalid: readonly string[]) =>
     invalid: invalid.map((code) => ({ code, errors: [{ messageId: "builtin" }] })),
   });
 
-export const rejectsNodeBuiltins = Task.make(
-  "each Node built-in with an Effect replacement has its own rule, which also owns a literal import() of it, while import = stays with no-require-imports and re-exports with no-re-exports",
-  Effect.all(
+export const rejectsNodeBuiltins = Task.make({
+  name: "each Node built-in with an Effect replacement has its own rule, which also owns a literal import() of it, while import = stays with no-require-imports and re-exports with no-re-exports",
+  run: Effect.all(
     [
       builtinTest("no-node-path", [
         'import * as path from "node:path";',
@@ -54,13 +54,13 @@ export const rejectsNodeBuiltins = Task.make(
     ],
     { discard: true },
   ),
-);
+});
 
 const GRANTED = [{ bans: "onlyThoseNoGrantLifts" }] as const;
 
-export const nodeFileSystemStaysInNodeFileSystemFiles = Task.make(
-  "no-node-file-system allows open from node:fs/promises and constants from node:fs only in files granted locksFiles, bans the rest of node:fs and node:fs/promises in every file, and leaves synchronous file access to no-sync-file-access",
-  ruleTest("no-node-file-system", {
+export const nodeFileSystemStaysInNodeFileSystemFiles = Task.make({
+  name: "no-node-file-system allows open from node:fs/promises and constants from node:fs only in files granted locksFiles, bans the rest of node:fs and node:fs/promises in every file, and leaves synchronous file access to no-sync-file-access",
+  run: ruleTest("no-node-file-system", {
     valid: [
       'import { Effect } from "effect";',
       'import type { Stats } from "node:fs";',
@@ -100,11 +100,11 @@ export const nodeFileSystemStaysInNodeFileSystemFiles = Task.make(
       ]),
     ],
   }),
-);
+});
 
-export const rejectsSyncFileAccessEverywhere = Task.make(
-  "no-sync-file-access rejects synchronous reads and writes imported from any module, read from a default or namespace import, or called on any receiver",
-  ruleTest("no-sync-file-access", {
+export const rejectsSyncFileAccessEverywhere = Task.make({
+  name: "no-sync-file-access rejects synchronous reads and writes imported from any module, read from a default or namespace import, or called on any receiver",
+  run: ruleTest("no-sync-file-access", {
     valid: [
       'import { readFile } from "node:fs/promises";',
       'import type { writeFileSync, readFileSync } from "node:fs";',
@@ -137,7 +137,7 @@ export const rejectsSyncFileAccessEverywhere = Task.make(
       'const { "existsSync": exists } = receiver;',
     ].map((code) => ({ code, errors: [{ messageId: "banned" }] })),
   }),
-);
+});
 
 const GRANTED_OPTIONS = [{ bans: "onlyThoseNoGrantLifts" }] as const;
 
@@ -158,9 +158,9 @@ const everyAlias = (
     ],
   });
 
-export const everyAliasOfANodeBuiltinIsBannedLikeIt = Task.make(
-  "every alias of a Node built-in a permission bans, node:X, bare X and Bun's bun:X, is banned exactly like node:X, and bun:sqlite stays Bun's own SQLite client",
-  Effect.all(
+export const everyAliasOfANodeBuiltinIsBannedLikeIt = Task.make({
+  name: "every alias of a Node built-in a permission bans, node:X, bare X and Bun's bun:X, is banned exactly like node:X, and bun:sqlite stays Bun's own SQLite client",
+  run: Effect.all(
     [
       everyAlias("no-node-file-system", {
         banned: [
@@ -215,4 +215,4 @@ export const everyAliasOfANodeBuiltinIsBannedLikeIt = Task.make(
     ],
     { discard: true },
   ),
-);
+});

@@ -36,9 +36,9 @@ export const generatedAsync = async () => 1;
 const READ =
   'import { Schema } from "effect";\nimport { VALUE } from "../generated/BadName.ts";\n\nexport const ENTRY = Schema.Struct({ id: Schema.String });\nexport const read = (environment: Cloudflare.Env, value: typeof ENTRY.Type) => environment.VALUE.toUpperCase() + VALUE.name + value.id;\n';
 
-export const generatedGrantsAreExactAndExclusive = Task.make(
-  "generated grants name exact files and cannot combine with other permissions or import rules",
-  Effect.sync(() => {
+export const generatedGrantsAreExactAndExclusive = Task.make({
+  name: "generated grants name exact files and cannot combine with other permissions or import rules",
+  run: Effect.sync(() => {
     expect(
       recordedGrantsOf({
         "docs/output.md": { allow: ["isGeneratedByATool"] },
@@ -62,11 +62,11 @@ export const generatedGrantsAreExactAndExclusive = Task.make(
       }).violations?.length,
     ).toBeGreaterThan(0);
   }),
-);
+});
 
-export const generatedGrantsRequireFiles = Task.make(
-  "generated grants reject directories and missing output files",
-  Effect.gen(function* () {
+export const generatedGrantsRequireFiles = Task.make({
+  name: "generated grants reject directories and missing output files",
+  run: Effect.gen(function* () {
     for (const file of ["src", "missing.d.ts"]) {
       const { directory } = yield* makeProject(
         { "src/index.ts": "export const VALUE = 1;\n" },
@@ -77,11 +77,11 @@ export const generatedGrantsRequireFiles = Task.make(
       expect(failure.message).toContain("grants isGeneratedByATool, but is not an existing file");
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
-  "Check type-checks generated source but not generated declarations, checks imports from and to generated files, and skips their lint, format and layout rules",
-  Effect.gen(function* () {
+export const generatedSourceIsTypeCheckedAndImportChecked = Task.make({
+  name: "Check type-checks generated source but not generated declarations, checks imports from and to generated files, and skips their lint, format and layout rules",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -99,7 +99,7 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
           'import { Schema } from "effect";\nimport { ENTRY } from "../src/index.ts";\nimport { test } from "../tests/index.ts";\nvoid Schema.decodeUnknownSync(ENTRY);\nvoid test;\n',
         "tests/index.ts": 'export { test } from "./internal/example.ts";\n',
         "tests/internal/example.ts":
-          'import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\n\nexport const test = Task.make("example", Effect.void);\n',
+          'import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\n\nexport const test = Task.make({ name: "example", run: Effect.void });\n',
         "src/internal/read.ts": READ,
       },
       `lintConfig({ "src/index.ts": { allow: ["isGeneratedByATool"] }, "scripts/generated.ts": { allow: ["isGeneratedByATool"] }, "${DECLARATION_PATH}": { allow: ["isGeneratedByATool"] }, "${RUNTIME_PATH}": { allow: ["isGeneratedByATool"] }, "${HIDDEN_PATH}": { allow: ["isGeneratedByATool"] }, "vendor/output.json": { allow: ["isGeneratedByATool"] } })`,
@@ -168,11 +168,11 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make(
     const missing = yield* runCheck().pipe(failureAsValue);
     expect(missing.message).toContain("grants isGeneratedByATool, but is not an existing file");
   }).pipe(Effect.scoped),
-);
+});
 
-export const plainPermissionsDecodeToTheirNames = Task.make(
-  "trustsUnverifiedTypes and isGeneratedByATool are granted by name, alone or beside other permissions",
-  Effect.sync(() => {
+export const plainPermissionsDecodeToTheirNames = Task.make({
+  name: "trustsUnverifiedTypes and isGeneratedByATool are granted by name, alone or beside other permissions",
+  run: Effect.sync(() => {
     expect(
       recordedGrantsOf({
         "port.ts": {
@@ -187,4 +187,4 @@ export const plainPermissionsDecodeToTheirNames = Task.make(
       ],
     });
   }),
-);
+});

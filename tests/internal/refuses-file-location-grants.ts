@@ -27,9 +27,9 @@ const MISPLACED_FILES = {
   "src/index.ts": "export const VALUE = 1;\n",
 } as const;
 
-export const filePlacementCannotBeGranted = Task.make(
-  "misplaced files are reported, and a file-location grant that would lift their placement is refused as an unknown permission",
-  Effect.gen(function* () {
+export const filePlacementCannotBeGranted = Task.make({
+  name: "misplaced files are reported, and a file-location grant that would lift their placement is refused as an unknown permission",
+  run: Effect.gen(function* () {
     const ungranted = yield* makeProject(MISPLACED_FILES);
     const violations = yield* findFileLayoutViolations(ungranted.directory).pipe(failureAsValue);
     expect(violations._tag).toBe("FileLayoutViolations");
@@ -45,4 +45,4 @@ export const filePlacementCannotBeGranted = Task.make(
     expect(refusal.message).toContain('"custom.config.ts".allow[0]: Expected "readsConfig"');
     expect(refusal.message).toContain('got "file-location"');
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

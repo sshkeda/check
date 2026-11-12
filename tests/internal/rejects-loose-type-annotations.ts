@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const unknownStaysOutOfSignatures = Task.make(
-  "no-unknown-boundaries rejects unknown parameters and exported unknown returns, and leaves type aliases to no-type-declarations",
-  ruleTest("no-unknown-boundaries", {
+export const unknownStaysOutOfSignatures = Task.make({
+  name: "no-unknown-boundaries rejects unknown parameters and exported unknown returns, and leaves type aliases to no-type-declarations",
+  run: ruleTest("no-unknown-boundaries", {
     valid: [
       "const run = (value: string) => value;",
       'import { Schema } from "effect"; const read = (input: unknown) => Schema.decodeUnknownSync(Payload)(input);',
@@ -42,11 +42,11 @@ export const unknownStaysOutOfSignatures = Task.make(
       { code: "declare function read(): unknown;", errors: [{ messageId: "returnType" }] },
     ],
   }),
-);
+});
 
-export const exportedMembersKeepUnknownOutOfTheirReturns = Task.make(
-  "no-unknown-boundaries rejects unknown returns of methods and function members of exported classes and objects, naming the member, while private members and members of unexported classes and objects pass",
-  ruleTest("no-unknown-boundaries", {
+export const exportedMembersKeepUnknownOutOfTheirReturns = Task.make({
+  name: "no-unknown-boundaries rejects unknown returns of methods and function members of exported classes and objects, naming the member, while private members and members of unexported classes and objects pass",
+  run: ruleTest("no-unknown-boundaries", {
     valid: [
       "class Store { read(): unknown { return 1; } }",
       "export class Store { private read(): unknown { return 1; } }",
@@ -67,4 +67,4 @@ export const exportedMembersKeepUnknownOutOfTheirReturns = Task.make(
       errors: [{ messageId: "returnType", data: { name } }],
     })),
   }),
-);
+});

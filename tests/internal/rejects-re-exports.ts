@@ -72,9 +72,9 @@ const reExportMember = (exported: string, member: string, binding: string, sourc
 const initializedToMember = (exported: string, member: string, binding: string, source: string) =>
   `export ${exported} is initialized to ${member}, a member of ${binding} imported from ${source}`;
 
-export const exportsAreDefinedWhereTheyAreWritten = Task.make(
-  "no-re-exports rejects export from outside an index, export * in any file, export * as outside an index, export { } or export default naming an imported binding, export default of a direct member of an imported binding by a static or computed key, export import x = require() and export =, and an exported variable declaration initialized to such a binding or member, while exports a file declares itself stay allowed",
-  ruleTest("no-re-exports", {
+export const exportsAreDefinedWhereTheyAreWritten = Task.make({
+  name: "no-re-exports rejects export from outside an index, export * in any file, export * as outside an index, export { } or export default naming an imported binding, export default of a direct member of an imported binding by a static or computed key, export import x = require() and export =, and an exported variable declaration initialized to such a binding or member, while exports a file declares itself stay allowed",
+  run: ruleTest("no-re-exports", {
     valid: [
       "export const VALUE = 1;",
       "const VALUE = 1; export { VALUE };",
@@ -195,13 +195,13 @@ export const exportsAreDefinedWhereTheyAreWritten = Task.make(
       },
     ],
   }),
-);
+});
 
 const DEFAULT_EXPORT_OF_AN_IMPORT_ALLOWED = [{ defaultExportOfAnImport: "allowed" }] as const;
 
-export const aScriptMayDefaultExportAnImport = Task.make(
-  "no-re-exports with defaultExportOfAnImport allowed, as files directly in scripts/ have it, accepts export default of an imported binding, a member of one or a local initialized to one, while it still rejects export { }, export from, export * and an exported variable initialized to an imported binding",
-  ruleTest("no-re-exports", {
+export const aScriptMayDefaultExportAnImport = Task.make({
+  name: "no-re-exports with defaultExportOfAnImport allowed, as files directly in scripts/ have it, accepts export default of an imported binding, a member of one or a local initialized to one, while it still rejects export { }, export from, export * and an exported variable initialized to an imported binding",
+  run: ruleTest("no-re-exports", {
     valid: [
       'import { check } from "./internal/start-check.ts"; export default check;',
       'import * as tasks from "./internal/start-check.ts"; export default tasks.check;',
@@ -230,11 +230,11 @@ export const aScriptMayDefaultExportAnImport = Task.make(
       },
     ],
   }),
-);
+});
 
-export const aStaticMemberOfAnImportIsReExported = Task.make(
-  "no-re-exports reports export default of a static member of an imported binding, a member of a member included, whether a namespace, named or default import, naming the export and the binding, while import x = require() bindings are not followed",
-  ruleTest("no-re-exports", {
+export const aStaticMemberOfAnImportIsReExported = Task.make({
+  name: "no-re-exports reports export default of a static member of an imported binding, a member of a member included, whether a namespace, named or default import, naming the export and the binding, while import x = require() bindings are not followed",
+  run: ruleTest("no-re-exports", {
     valid: [
       'import tools = require("./tools.ts"); export { tools };',
       'import { make } from "./make.ts"; export const run = (make: () => number) => make;',
@@ -268,7 +268,7 @@ export const aStaticMemberOfAnImportIsReExported = Task.make(
       },
     ],
   }),
-);
+});
 
 const INDEX_FIXTURE_FILES = [
   "src/a/index.ts",
@@ -308,9 +308,9 @@ const OUTSIDE_LAYOUT = "a file outside this index's own internal/ and shared/";
 
 const exportFrom = (source: string) => `export { run } from "${source}";`;
 
-export const anIndexReExportIsJudgedByTheFileItResolvesTo = Task.make(
-  'the re-exports check resolves an index\'s export from path with the import-boundary check\'s resolver setup and states the one fact that is wrong about the real file it resolves to: a package or built-in under any of its names, bun: included, a file outside the index\'s own internal/ and shared/, a file in a subdirectory of them, an index file, a declaration file, or a file without a .ts or .tsx extension, so a trailing slash, /.. above the root, file:// URLs and symlinks mean what the resolver makes of them, a symlinked index resolves from its target, a hoisted dependency, a workspace package behind a node_modules symlink and a directory whose package.json has a string name are packages, while a package.json without one, such as { "type": "module" }, makes no package, an unknown bun: or node: module and a path that resolves to no file are left to the import-boundary check and the type check, and a project inside a node_modules directory is judged like any other; a renaming is reported only when the file is allowed, so not for a path that resolves to no file',
-  Effect.gen(function* () {
+export const anIndexReExportIsJudgedByTheFileItResolvesTo = Task.make({
+  name: 'the re-exports check resolves an index\'s export from path with the import-boundary check\'s resolver setup and states the one fact that is wrong about the real file it resolves to: a package or built-in under any of its names, bun: included, a file outside the index\'s own internal/ and shared/, a file in a subdirectory of them, an index file, a declaration file, or a file without a .ts or .tsx extension, so a trailing slash, /.. above the root, file:// URLs and symlinks mean what the resolver makes of them, a symlinked index resolves from its target, a hoisted dependency, a workspace package behind a node_modules symlink and a directory whose package.json has a string name are packages, while a package.json without one, such as { "type": "module" }, makes no package, an unknown bun: or node: module and a path that resolves to no file are left to the import-boundary check and the type check, and a project inside a node_modules directory is judged like any other; a renaming is reported only when the file is allowed, so not for a path that resolves to no file',
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = path.join(
@@ -447,11 +447,11 @@ export const anIndexReExportIsJudgedByTheFileItResolvesTo = Task.make(
       ],
     });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aDirectoryNamedPackageJsonMakesNoPackage = Task.make(
-  "the re-exports check reads a directory named package.json as no package.json, like the import-boundary check and the resolver, so it makes no package and the rule still judges the index's export from",
-  Effect.gen(function* () {
+export const aDirectoryNamedPackageJsonMakesNoPackage = Task.make({
+  name: "the re-exports check reads a directory named package.json as no package.json, like the import-boundary check and the resolver, so it makes no package and the rule still judges the index's export from",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -488,7 +488,7 @@ export const aDirectoryNamedPackageJsonMakesNoPackage = Task.make(
       })),
     });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const RUN = "export const run = 1;\n";
 const GIT_HEAD = "ref: refs/heads/main\n";
@@ -496,9 +496,9 @@ const GIT_HEAD = "ref: refs/heads/main\n";
 const unjudged = (source: string, manifest: string, reason: string) =>
   `export from ${source} cannot be judged, since ${manifest} cannot be read as a package.json: ${reason}`;
 
-export const aBadPackageJsonIsReported = Task.make(
-  "the re-exports check reports an index's export from when a package.json it reads to find the index's package or the resolved file's cannot be read, is a symlink to itself, is no JSON, or has a name that is no string, such as { \"name\": 5 }, naming that package.json relative to the index's directory and why, in the same words as the import-boundary check and the file listing, instead of reading it as unnamed or crashing, while a package.json that starts with a UTF-8 byte order mark is read as Node and oxc read it",
-  Effect.gen(function* () {
+export const aBadPackageJsonIsReported = Task.make({
+  name: "the re-exports check reports an index's export from when a package.json it reads to find the index's package or the resolved file's cannot be read, is a symlink to itself, is no JSON, or has a name that is no string, such as { \"name\": 5 }, naming that package.json relative to the index's directory and why, in the same words as the import-boundary check and the file listing, instead of reading it as unnamed or crashing, while a package.json that starts with a UTF-8 byte order mark is read as Node and oxc read it",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -537,11 +537,11 @@ export const aBadPackageJsonIsReported = Task.make(
     });
     yield* fileSystem.chmod(unreadable, OWNER_WRITES_EVERYONE_READS);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
-  "when the resolver finds no file but fails, no-re-exports reads the package.json files around the index and, for a relative path, around its target, so a package.json that is no JSON is reported by its path even when the project's path holds a \" or a backslash, and a resolver failure that no package.json explains, such as an empty path or a package whose package.json is no JSON, is reported with the resolver's words instead of read as no file",
-  Effect.gen(function* () {
+export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make({
+  name: "when the resolver finds no file but fails, no-re-exports reads the package.json files around the index and, for a relative path, around its target, so a package.json that is no JSON is reported by its path even when the project's path holds a \" or a backslash, and a resolver failure that no package.json explains, such as an empty path or a package whose package.json is no JSON, is reported with the resolver's words instead of read as no file",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -601,11 +601,11 @@ export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
     );
     yield* reExportsCheckTest({ valid: [], invalid: invalid.flat() });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
-  "the re-exports check stops looking for the nearest package.json with a string name at the git repository's root, the nearest directory above the file that holds .git, so a package.json above a repository whose own package.json has no name is never read, even when it is no JSON",
-  Effect.gen(function* () {
+export const aPackageJsonAboveTheProjectIsNeverRead = Task.make({
+  name: "the re-exports check stops looking for the nearest package.json with a string name at the git repository's root, the nearest directory above the file that holds .git, so a package.json above a repository whose own package.json has no name is never read, even when it is no JSON",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -633,11 +633,11 @@ export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
       ],
     });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const theWorkingDirectoryNeverChangesAReport = Task.make(
-  "the re-exports check bounds the search for the index's package and its target's by the git repository's root above each, found from the file alone, so it reports the same whatever directory it runs from, and never reads a package.json above the repository",
-  Effect.gen(function* () {
+export const theWorkingDirectoryNeverChangesAReport = Task.make({
+  name: "the re-exports check bounds the search for the index's package and its target's by the git repository's root above each, found from the file alone, so it reports the same whatever directory it runs from, and never reads a package.json above the repository",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -665,11 +665,11 @@ export const theWorkingDirectoryNeverChangesAReport = Task.make(
       })),
     });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anUnnamedPackageJsonNeverEndsTheSearch = Task.make(
-  'the re-exports check judges an index and its target by the nearest package.json with a string name above each, so a package.json without a name between the index and the project\'s named one, such as src/package.json holding { "type": "module" }, leaves a target outside src/ in the index\'s package: it re-exports a file outside the layout, not a package',
-  Effect.gen(function* () {
+export const anUnnamedPackageJsonNeverEndsTheSearch = Task.make({
+  name: 'the re-exports check judges an index and its target by the nearest package.json with a string name above each, so a package.json without a name between the index and the project\'s named one, such as src/package.json holding { "type": "module" }, leaves a target outside src/ in the index\'s package: it re-exports a file outside the layout, not a package',
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const project = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -701,11 +701,11 @@ export const anUnnamedPackageJsonNeverEndsTheSearch = Task.make(
       ),
     });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anExportInitializedToAnImportIsReported = Task.make(
-  "no-re-exports reports an exported variable declaration, such as export const or export let, when the initializer is an imported binding or a static member of one, or the declaration destructures one, naming the export and the binding, while export import x = ns.sub is not followed, and export import x = require() re-exports another module",
-  ruleTest("no-re-exports", {
+export const anExportInitializedToAnImportIsReported = Task.make({
+  name: "no-re-exports reports an exported variable declaration, such as export const or export let, when the initializer is an imported binding or a static member of one, or the declaration destructures one, naming the export and the binding, while export import x = ns.sub is not followed, and export import x = require() re-exports another module",
+  run: ruleTest("no-re-exports", {
     valid: [
       'import * as ns from "./ns.ts"; export const { run = fallback } = ns;',
       'import * as ns from "./ns.ts"; export const { [key]: run, ...rest } = ns;',
@@ -797,11 +797,11 @@ export const anExportInitializedToAnImportIsReported = Task.make(
       },
     ],
   }),
-);
+});
 
-export const aMemberIsNamedByItsKeyAsWritten = Task.make(
-  "no-re-exports follows an identifier, a string key or a template literal key without substitutions, and names a non-identifier export name as the source writes it and the member as the source writes it, with each line break printed as a backslash and n, while a numeric or bigint key, a template literal key with substitutions and array destructuring stay unfollowed",
-  ruleTest("no-re-exports", {
+export const aMemberIsNamedByItsKeyAsWritten = Task.make({
+  name: "no-re-exports follows an identifier, a string key or a template literal key without substitutions, and names a non-identifier export name as the source writes it and the member as the source writes it, with each line break printed as a backslash and n, while a numeric or bigint key, a template literal key with substitutions and array destructuring stay unfollowed",
+  run: ruleTest("no-re-exports", {
     valid: [
       'import { LIST } from "./list.ts"; const index = 0; export const FIRST = LIST[index];',
       `import * as ns from "./ns.ts"; const key = "run"; export default ns[\`\${key}\`];`,
@@ -877,11 +877,11 @@ export const aMemberIsNamedByItsKeyAsWritten = Task.make(
       },
     ],
   }),
-);
+});
 
-export const theFormatConfigFileMayExportTheImportedFormatConfig = Task.make(
-  "no-re-exports lets oxfmt.config.ts export default the imported FORMAT_CONFIG, since the format-config check requires exactly that, while a default export there of any other import, even one renamed to FORMAT_CONFIG, and export default FORMAT_CONFIG in any other file, are still reported",
-  ruleTest("no-re-exports", {
+export const theFormatConfigFileMayExportTheImportedFormatConfig = Task.make({
+  name: "no-re-exports lets oxfmt.config.ts export default the imported FORMAT_CONFIG, since the format-config check requires exactly that, while a default export there of any other import, even one renamed to FORMAT_CONFIG, and export default FORMAT_CONFIG in any other file, are still reported",
+  run: ruleTest("no-re-exports", {
     valid: [
       {
         code: 'import { FORMAT_CONFIG } from "@sshkeda/check"; export default FORMAT_CONFIG;',
@@ -916,13 +916,13 @@ export const theFormatConfigFileMayExportTheImportedFormatConfig = Task.make(
       },
     ],
   }),
-);
+});
 
 const namespaceOf = (source: string) => `export * as Task from ${source} re-exports another module`;
 
-export const anIndexMayExportAChildModuleNamespace = Task.make(
-  "no-re-exports leaves export * as in an index to the re-exports check and rejects it in any other file, and the re-exports check lets any index namespace the index.ts or index.tsx of a module in its own lib/ exposing only its own unrenamed exports of files that resolve into its own internal/, while it refuses a namespace of a sibling index, a module nested deeper, an index that renames, uses export * or declares logic, or one whose internal/ path resolves into its shared/, by .. or by a symlink",
-  Effect.gen(function* () {
+export const anIndexMayExportAChildModuleNamespace = Task.make({
+  name: "no-re-exports leaves export * as in an index to the re-exports check and rejects it in any other file, and the re-exports check lets any index namespace the index.ts or index.tsx of a module in its own lib/ exposing only its own unrenamed exports of files that resolve into its own internal/, while it refuses a namespace of a sibling index, a module nested deeper, an index that renames, uses export * or declares logic, or one whose internal/ path resolves into its shared/, by .. or by a symlink",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -1006,7 +1006,7 @@ export const anIndexMayExportAChildModuleNamespace = Task.make(
       ],
     });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const NAMESPACED_CHILD_MODULE = {
   "src/lib/task/index.ts": 'export { run } from "./internal/task.ts";\n',
@@ -1031,9 +1031,9 @@ const refusedReExportsIn = (manifest: string) =>
     );
   });
 
-export const theReExportsCheckAllowsChildNamespacesInEveryIndex = Task.make(
-  "the re-exports check allows a child module namespace in every index, with an exports field, with a main field or with no package entry field",
-  Effect.gen(function* () {
+export const theReExportsCheckAllowsChildNamespacesInEveryIndex = Task.make({
+  name: "the re-exports check allows a child module namespace in every index, with an exports field, with a main field or with no package entry field",
+  run: Effect.gen(function* () {
     const byExports = yield* refusedReExportsIn(
       '{ "name": "checked", "type": "module", "exports": { ".": "./src/index.ts" } }\n',
     );
@@ -1045,11 +1045,11 @@ export const theReExportsCheckAllowsChildNamespacesInEveryIndex = Task.make(
     expect(byMain).toEqual([]);
     expect(withoutEntries).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const theReExportsCheckJudgesEveryIndexOfTheProject = Task.make(
-  "the re-exports check judges the export from and export * as of every index file the project checks, reads each file without blocking, and names each refused export by its file and line, while non-index files are left to no-re-exports",
-  Effect.gen(function* () {
+export const theReExportsCheckJudgesEveryIndexOfTheProject = Task.make({
+  name: "the re-exports check judges the export from and export * as of every index file the project checks, reads each file without blocking, and names each refused export by its file and line, while non-index files are left to no-re-exports",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, {
       "src/m/index.ts":
         'export { run } from "./internal/a.ts";\nexport { run as start } from "./a.ts";\n',
@@ -1072,11 +1072,11 @@ export const theReExportsCheckJudgesEveryIndexOfTheProject = Task.make(
       "src/n/index.ts:2 export * as M from ../m/index.ts re-exports another module",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const theReExportsCheckSkipsGeneratedIndexes = Task.make(
-  "the re-exports check skips an index file granted isGeneratedByATool, as the lint rules do, and still judges the other index files",
-  Effect.gen(function* () {
+export const theReExportsCheckSkipsGeneratedIndexes = Task.make({
+  name: "the re-exports check skips an index file granted isGeneratedByATool, as the lint rules do, and still judges the other index files",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
       {
@@ -1095,4 +1095,4 @@ export const theReExportsCheckSkipsGeneratedIndexes = Task.make(
     );
     expect(refused).toEqual([`src/m/index.ts:1 export from ./a.ts re-exports ${OUTSIDE_LAYOUT}`]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

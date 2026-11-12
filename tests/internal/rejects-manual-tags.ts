@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const rejectsHandwrittenTagObjects = Task.make(
-  "no-manual-tag flags hand-written _tag objects",
-  ruleTest("no-manual-tag", {
+export const rejectsHandwrittenTagObjects = Task.make({
+  name: "no-manual-tag flags hand-written _tag objects",
+  run: ruleTest("no-manual-tag", {
     valid: [
       "const ok = restored._tag === 'Success';",
       "switch (event._tag) { default: break; }",
@@ -54,11 +54,11 @@ export const rejectsHandwrittenTagObjects = Task.make(
       },
     ],
   }),
-);
+});
 
-export const rejectsTagComparisons = Task.make(
-  "no-tag-branching flags comparisons on _tag, read through optional chaining too",
-  ruleTest("no-tag-branching", {
+export const rejectsTagComparisons = Task.make({
+  name: "no-tag-branching flags comparisons on _tag, read through optional chaining too",
+  run: ruleTest("no-tag-branching", {
     valid: [
       "const ok = Exit.isSuccess(restored);",
       "const same = event.tag === 'Want';",
@@ -75,11 +75,11 @@ export const rejectsTagComparisons = Task.make(
       },
     ],
   }),
-);
+});
 
-export const rejectsTagSwitches = Task.make(
-  "no-tag-branching flags switches on _tag, read through optional chaining too",
-  ruleTest("no-tag-branching", {
+export const rejectsTagSwitches = Task.make({
+  name: "no-tag-branching flags switches on _tag, read through optional chaining too",
+  run: ruleTest("no-tag-branching", {
     valid: ["switch (event.kind) { case 'a': break; }"],
     invalid: [
       {
@@ -92,11 +92,11 @@ export const rejectsTagSwitches = Task.make(
       },
     ],
   }),
-);
+});
 
-export const recommendsCatchTagForTaggedErrors = Task.make(
-  "no-tag-branching points _tag branching inside Effect.catch at catchTag",
-  ruleTest("no-tag-branching", {
+export const recommendsCatchTagForTaggedErrors = Task.make({
+  name: "no-tag-branching points _tag branching inside Effect.catch at catchTag",
+  run: ruleTest("no-tag-branching", {
     valid: [
       "const handled = program.pipe(Effect.catchTag('Failed', () => Effect.void));",
       "const handled = program.pipe(Effect.catch(() => Effect.void));",
@@ -116,11 +116,11 @@ export const recommendsCatchTagForTaggedErrors = Task.make(
       },
     ],
   }),
-);
+});
 
-export const rejectsTagComparisonCalls = Task.make(
-  "no-tag-branching flags _tag compared with Object.is or looked up with includes",
-  ruleTest("no-tag-branching", {
+export const rejectsTagComparisonCalls = Task.make({
+  name: "no-tag-branching flags _tag compared with Object.is or looked up with includes",
+  run: ruleTest("no-tag-branching", {
     valid: [
       "const same = Object.is(left, right);",
       "const listed = KINDS.includes(event.kind);",
@@ -134,11 +134,11 @@ export const rejectsTagComparisonCalls = Task.make(
       "const listed = TAGS.includes(event._tag);",
     ].map((code) => ({ code, errors: [{ messageId: "comparison" }] })),
   }),
-);
+});
 
-export const rejectsBranchingOnDestructuredTags = Task.make(
-  "no-tag-branching flags comparisons and switches on a _tag destructured into a binding, while other destructured names and reassigned bindings pass",
-  ruleTest("no-tag-branching", {
+export const rejectsBranchingOnDestructuredTags = Task.make({
+  name: "no-tag-branching flags comparisons and switches on a _tag destructured into a binding, while other destructured names and reassigned bindings pass",
+  run: ruleTest("no-tag-branching", {
     valid: [
       "const { kind } = event; const ok = kind === 'Want';",
       "let { _tag } = event; _tag = other; const ok = _tag === 'Want';",
@@ -180,4 +180,4 @@ export const rejectsBranchingOnDestructuredTags = Task.make(
       },
     ],
   }),
-);
+});

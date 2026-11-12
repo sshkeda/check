@@ -13,9 +13,9 @@ const flagged = (name: string, fullWords: string, abbreviations = "an abbreviati
   data: { name, fullWords, abbreviations },
 });
 
-export const expandsAbbreviationsAcrossNamingStyles = Task.make(
-  "no-abbreviations names the full word in camelCase, PascalCase and snake_case",
-  ruleTest("no-abbreviations", {
+export const expandsAbbreviationsAcrossNamingStyles = Task.make({
+  name: "no-abbreviations names the full word in camelCase, PascalCase and snake_case",
+  run: ruleTest("no-abbreviations", {
     valid: [
       "const message = 'hi';",
       "const userId = 1;",
@@ -77,11 +77,11 @@ export const expandsAbbreviationsAcrossNamingStyles = Task.make(
       },
     ],
   }),
-);
+});
 
-export const checksOnlyDeclaredNames = Task.make(
-  "no-abbreviations flags every name a file declares and none it only uses",
-  ruleTest("no-abbreviations", {
+export const checksOnlyDeclaredNames = Task.make({
+  name: "no-abbreviations flags every name a file declares and none it only uses",
+  run: ruleTest("no-abbreviations", {
     valid: [
       "process.env.HOME;",
       "child.stdout.pipe(sink);",
@@ -160,11 +160,11 @@ export const checksOnlyDeclaredNames = Task.make(
       },
     ],
   }),
-);
+});
 
-export const namesTheFullWordOnce = Task.make(
-  "no-abbreviations names the full word without repeating the abbreviated name",
-  ruleTest("no-abbreviations", {
+export const namesTheFullWordOnce = Task.make({
+  name: "no-abbreviations names the full word without repeating the abbreviated name",
+  run: ruleTest("no-abbreviations", {
     valid: [],
     invalid: [
       {
@@ -193,11 +193,11 @@ export const namesTheFullWordOnce = Task.make(
       },
     ],
   }),
-);
+});
 
-export const respectsConfiguredAllowedWords = Task.make(
-  "no-abbreviations takes an allow list for a repo's own terms",
-  ruleTest("no-abbreviations", {
+export const respectsConfiguredAllowedWords = Task.make({
+  name: "no-abbreviations takes an allow list for a repo's own terms",
+  run: ruleTest("no-abbreviations", {
     valid: [{ code: "const rect = box();", options: [{ allow: ["rect"] }] }],
     invalid: [
       {
@@ -207,4 +207,4 @@ export const respectsConfiguredAllowedWords = Task.make(
       },
     ],
   }),
-);
+});

@@ -53,9 +53,9 @@ const failingWith = (location: string, fork: string, failures: readonly string[]
 
 const lost = (location: string, fork: string) => failingWith(location, fork, ["LineUnreadable"]);
 
-export const droppedForksAreRefused = Task.make(
-  "a fork thrown away where it is made, of an effect that can still fail, is refused for each fork operation, data-first, data-last, as a statement, after void, as the last step of a thrown-away pipe or before Effect.asVoid or Effect.as, through a runForkWith alias, curried and called at once, of a Data.TaggedError alone or in a union, or with the failures a catchTag leaves",
-  Effect.gen(function* () {
+export const droppedForksAreRefused = Task.make({
+  name: "a fork thrown away where it is made, of an effect that can still fail, is refused for each fork operation, data-first, data-last, as a statement, after void, as the last step of a thrown-away pipe or before Effect.asVoid or Effect.as, through a runForkWith alias, curried and called at once, of a Data.TaggedError alone or in a union, or with the failures a catchTag leaves",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": `${FAILING}Effect.runFork(failing);\n`,
@@ -111,11 +111,11 @@ export const droppedForksAreRefused = Task.make(
       failingWith("m.ts:8", "Effect.runFork", ["LineLate", "LineMissing"]),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const tappedFailuresAreRefused = Task.make(
-  "a dropped fork whose effect logs or taps its failure with tapCause, tapError, onExit or onError is refused because the effect can still fail, inside Effect.all or before a later step that fails included",
-  Effect.gen(function* () {
+export const tappedFailuresAreRefused = Task.make({
+  name: "a dropped fork whose effect logs or taps its failure with tapCause, tapError, onExit or onError is refused because the effect can still fail, inside Effect.all or before a later step that fails included",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": `${FAILING}Effect.runFork(failing.pipe(Effect.onExit(() => Effect.void)));\nEffect.runFork(failing.pipe(Effect.tapCause(Effect.logError)));\nEffect.runFork(failing.pipe(Effect.tapError(Effect.logError)));\nEffect.runFork(failing.pipe(Effect.onError(() => Effect.void)));\n`,
@@ -133,11 +133,11 @@ export const tappedFailuresAreRefused = Task.make(
       failingWith("c.ts:4", "Effect.runFork", ["LineUnreadable", "string"]),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const droppedExitsAreRefused = Task.make(
-  "a dropped fork of Effect.exit, Effect.result or Effect.option is refused with the failure it hides, and one that is kept or handled passes",
-  Effect.gen(function* () {
+export const droppedExitsAreRefused = Task.make({
+  name: "a dropped fork of Effect.exit, Effect.result or Effect.option is refused with the failure it hides, and one that is kept or handled passes",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": `${FAILING}Effect.runFork(Effect.exit(failing));\nEffect.runFork(Effect.result(failing));\n`,
@@ -157,11 +157,11 @@ export const droppedExitsAreRefused = Task.make(
       lost("b.ts:7", "Effect.forkChild"),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const keptForksPass = Task.make(
-  "a fork whose fiber is bound, joined, returned, passed on, given an observer or handed to a pipe step before it is discarded passes, as does any fork into a FiberSet, FiberMap or FiberHandle, a fork whose failure is handled to never, unknown, or at its top level a type parameter, this, a template literal or string mapping over one, a conditional, keyof or indexed access type, a tuple spreading one, or any intersection or mapped type, even a concrete one such as a Data.TaggedError used without a class, an unyielded fork effect, and any fork under tests",
-  Effect.gen(function* () {
+export const keptForksPass = Task.make({
+  name: "a fork whose fiber is bound, joined, returned, passed on, given an observer or handed to a pipe step before it is discarded passes, as does any fork into a FiberSet, FiberMap or FiberHandle, a fork whose failure is handled to never, unknown, or at its top level a type parameter, this, a template literal or string mapping over one, a conditional, keyof or indexed access type, a tuple spreading one, or any intersection or mapped type, even a concrete one such as a Data.TaggedError used without a class, an unyielded fork effect, and any fork under tests",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": inGenerator(
@@ -188,11 +188,11 @@ export const keptForksPass = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const failuresHoldingTypeParametersAreRefused = Task.make(
-  "a dropped fork whose failure only holds a type parameter inside it, in an array or a tuple beside this, is refused, as is an empty tuple, a Data.TaggedError class given its fields type,each concrete member of a union beside a type parameter or this, a template literal or string mapping over string, and a failure type that grows each time it is instantiated",
-  Effect.gen(function* () {
+export const failuresHoldingTypeParametersAreRefused = Task.make({
+  name: "a dropped fork whose failure only holds a type parameter inside it, in an array or a tuple beside this, is refused, as is an empty tuple, a Data.TaggedError class given its fields type,each concrete member of a union beside a type parameter or this, a template literal or string mapping over string, and a failure type that grows each time it is instantiated",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": `${FAILING}export const nested = <F>(work: Effect.Effect<void, LineUnreadable | ReadonlyArray<F>>) => {\n  Effect.runFork(work);\n};\nexport const deep = <F>(work: Effect.Effect<void, ReadonlyArray<ReadonlyArray<ReadonlyArray<ReadonlyArray<ReadonlyArray<F>>>>>>) => {\n  Effect.runFork(work);\n};\nexport const mixed = <F>(work: Effect.Effect<void, LineUnreadable | F>) => {\n  Effect.runFork(work);\n};\nexport const pattern = (work: Effect.Effect<void, \`x\${string}\`>) => {\n  Effect.runFork(work);\n};\nexport const upper = (work: Effect.Effect<void, Uppercase<string>>) => {\n  Effect.runFork(work);\n};\n`,
@@ -217,11 +217,11 @@ export const failuresHoldingTypeParametersAreRefused = Task.make(
       failingWith("d.ts:12", "Effect.runFork", ["Oops"]),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const remainingFailuresAreNamed = Task.make(
-  "the report names the fork and every failure type the forked effect can still fail with, with the fix",
-  Effect.gen(function* () {
+export const remainingFailuresAreNamed = Task.make({
+  name: "the report names the fork and every failure type the forked effect can still fail with, with the fix",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "a.ts": `${FAILING}class LineMissing extends Schema.TaggedError<LineMissing>()("LineMissing", {}) {}\nexport const read = () => {\n  Effect.runFork(Effect.fail(new LineMissing()).pipe(Effect.andThen(failing)));\n};\n`,
     });
@@ -238,4 +238,4 @@ export const remainingFailuresAreNamed = Task.make(
       "a.ts:6:3: Effect.runFork forks an effect that can still fail with LineMissing or LineUnreadable, and its fiber is dropped where it is made.",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

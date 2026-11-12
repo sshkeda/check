@@ -9,9 +9,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const testsBoundOnlyByTheirTask = Task.make(
-  "no-test-timeouts refuses every Effect timeout and timed Schedule however they are imported, and leaves count-bounded retries, TestClock and AbortSignal.timeout, which no-clock-reads-and-sleeps refuses in every file, alone",
-  ruleTest(TEST_TIMEOUTS_RULE, {
+export const testsBoundOnlyByTheirTask = Task.make({
+  name: "no-test-timeouts refuses every Effect timeout and timed Schedule however they are imported, and leaves count-bounded retries, TestClock and AbortSignal.timeout, which no-clock-reads-and-sleeps refuses in every file, alone",
+  run: ruleTest(TEST_TIMEOUTS_RULE, {
     valid: [
       'import { Effect } from "effect"; Effect.retry(work, { times: 3 });',
       'import { Effect, Schedule } from "effect"; Effect.retry(work, Schedule.recurs(3));',
@@ -37,4 +37,4 @@ export const testsBoundOnlyByTheirTask = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "polling" }] })),
     ],
   }),
-);
+});

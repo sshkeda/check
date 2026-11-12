@@ -15,7 +15,6 @@ import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
 import {
   makeProject as makeProjectWith,
-  RUNNER,
   writtenFiles,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
@@ -41,7 +40,7 @@ const lintOutputOf = (files: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* makeProject(files);
     yield* writtenFiles(directory, {
-      "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { oxlint } from ${yield* encodeJson(LINT_TASK)};\nTask.main(oxlint);\n`,
+      "run.ts": `import { oxlint } from ${yield* encodeJson(LINT_TASK)};\nexport default oxlint;\n`,
       ".gitignore": "node_modules\nrun.ts\n",
     });
     return yield* runTaskFile("bun run.ts", { cwd: directory, taskStateDirectory }).pipe(
@@ -65,9 +64,9 @@ const reportedErrorsOfAFakeTsgolint = (script: string) =>
     return failure.reportedErrors;
   });
 
-export const preservesEnumAssignmentsAndTypeSorting = Task.make(
-  "standalone lint preserves unsafe enum assignment and type sorting messages, and accepts enum members and sorted unions",
-  Effect.scoped(
+export const preservesEnumAssignmentsAndTypeSorting = Task.make({
+  name: "standalone lint preserves unsafe enum assignment and type sorting messages, and accepts enum members and sorted unions",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const output = yield* lintOutputOf({
         "src/unsafe.ts": [
@@ -105,11 +104,11 @@ export const preservesEnumAssignmentsAndTypeSorting = Task.make(
       );
     }),
   ),
-);
+});
 
-export const readsAnOxlintReportLargerThanAPipeBuffer = Task.make(
-  "an oxlint report larger than 64 KB decodes and reports every finding",
-  Effect.scoped(
+export const readsAnOxlintReportLargerThanAPipeBuffer = Task.make({
+  name: "an oxlint report larger than 64 KB decodes and reports every finding",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const output = yield* lintOutputOf({
         "src/unsorted.ts": Array.from(
@@ -125,7 +124,7 @@ export const readsAnOxlintReportLargerThanAPipeBuffer = Task.make(
       ).toHaveLength(UNSORTED_UNIONS);
     }),
   ),
-);
+});
 
 const spanTimesIn = (trace: string, name: string) => {
   const times = new RegExp(
@@ -135,9 +134,9 @@ const spanTimesIn = (trace: string, name: string) => {
   return { start: BigInt(times?.["start"] ?? "0"), end: BigInt(times?.["end"] ?? "0") };
 };
 
-export const runsOxlintAndTheEnumCheckTogether = Task.make(
-  "oxlint and the unsafe enum assignment check run at the same time, so the enum check doesn't wait for oxlint",
-  Effect.scoped(
+export const runsOxlintAndTheEnumCheckTogether = Task.make({
+  name: "oxlint and the unsafe enum assignment check run at the same time, so the enum check doesn't wait for oxlint",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const output = yield* lintOutputOf({
@@ -153,11 +152,11 @@ export const runsOxlintAndTheEnumCheckTogether = Task.make(
       expect(lintRules.start).toBeLessThan(enumCheck.end);
     }),
   ),
-);
+});
 
-export const namesTsgolintWithTheViolationsItReports = Task.make(
-  "unsafe enum assignments end with a line that names tsgolint and its real exit code, not an oxlint exit",
-  Effect.scoped(
+export const namesTsgolintWithTheViolationsItReports = Task.make({
+  name: "unsafe enum assignments end with a line that names tsgolint and its real exit code, not an oxlint exit",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -180,41 +179,41 @@ export const namesTsgolintWithTheViolationsItReports = Task.make(
       ]);
     }),
   ),
-);
+});
 
-export const namesTsgolintAndItsExitCode = Task.make(
-  "a tsgolint that exits with a nonzero code is reported with that code and its standard error",
-  Effect.scoped(
+export const namesTsgolintAndItsExitCode = Task.make({
+  name: "a tsgolint that exits with a nonzero code is reported with that code and its standard error",
+  run: Effect.scoped(
     Effect.gen(function* () {
       expect(yield* reportedErrorsOfAFakeTsgolint("echo broken >&2\nexit 3")).toEqual([
         { tag: "ToolExited", message: "tsgolint exited with code 3\nbroken" },
       ]);
     }),
   ),
-);
+});
 
-export const namesTheSignalThatStoppedTsgolint = Task.make(
-  "a tsgolint stopped by a signal is reported with that signal",
-  Effect.scoped(
+export const namesTheSignalThatStoppedTsgolint = Task.make({
+  name: "a tsgolint stopped by a signal is reported with that signal",
+  run: Effect.scoped(
     Effect.gen(function* () {
       expect(yield* reportedErrorsOfAFakeTsgolint("kill -9 $$")).toEqual([
         { tag: "ToolStoppedBySignal", message: "tsgolint was stopped by signal SIGKILL" },
       ]);
     }),
   ),
-);
+});
 
-export const refusesATruncatedEnumReport = Task.make(
-  "a truncated enum backend report fails instead of silently dropping its findings",
-  Effect.sync(() => {
+export const refusesATruncatedEnumReport = Task.make({
+  name: "a truncated enum backend report fails instead of silently dropping its findings",
+  run: Effect.sync(() => {
     const header = Buffer.from([1, 0, 0, 0, 1]);
     expect(() => tsgolintRuleMessages(header)).toThrow("truncated message body");
   }),
-);
+});
 
-export const namesMalformedEnumReports = Task.make(
-  "malformed enum backend errors and diagnostics fail with EnumLintFailed",
-  Effect.sync(() => {
+export const namesMalformedEnumReports = Task.make({
+  name: "malformed enum backend errors and diagnostics fail with EnumLintFailed",
+  run: Effect.sync(() => {
     const body = Buffer.from("{}");
     for (const kind of [0, 1]) {
       const header = Buffer.from([0, 0, 0, 0, kind]);
@@ -222,11 +221,11 @@ export const namesMalformedEnumReports = Task.make(
       expect(() => tsgolintRuleMessages(Buffer.concat([header, body]))).toThrow(EnumLintFailed);
     }
   }),
-);
+});
 
-export const preservesTypeSortingDefaults = Task.make(
-  "type sorting preserves numeric and case ordering, group ordering, intersections and named parenthesized unions",
-  ruleTest("no-unsorted-type-constituents", {
+export const preservesTypeSortingDefaults = Task.make({
+  name: "type sorting preserves numeric and case ordering, group ordering, intersections and named parenthesized unions",
+  run: ruleTest("no-unsorted-type-constituents", {
     valid: [
       "type Choice = number | string;",
       "type Choice = A2 | A10;",
@@ -261,4 +260,4 @@ export const preservesTypeSortingDefaults = Task.make(
       },
     ],
   }),
-);
+});

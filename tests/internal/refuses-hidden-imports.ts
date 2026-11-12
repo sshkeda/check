@@ -119,9 +119,9 @@ const internalDirectory = (location: string, importedPath: string, directory: st
 const crossed = (line: number, importedPath: string) =>
   `apps/web/index.ts:${line}: error CannotImportCrossed: imports ${importedPath}, and apps cannot import packages/conditional/src`;
 
-export const importsRespectModulesAndInternalDirectories = Task.make(
-  "outside a module only its index is importable, at every enclosing module; an internal directory is importable only from its parent's subtree; any file imports a visible index, a package by name and package.json; tests import anything outside tests/, and imports of tests/ follow the same rules",
-  Effect.gen(function* () {
+export const importsRespectModulesAndInternalDirectories = Task.make({
+  name: "outside a module only its index is importable, at every enclosing module; an internal directory is importable only from its parent's subtree; any file imports a visible index, a package by name and package.json; tests import anything outside tests/, and imports of tests/ follow the same rules",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -160,11 +160,11 @@ export const importsRespectModulesAndInternalDirectories = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const cannotImportAddsLimitsOnTopOfVisibility = Task.make(
-  "cannotImport refuses an import the module rules allow",
-  Effect.gen(function* () {
+export const cannotImportAddsLimitsOnTopOfVisibility = Task.make({
+  name: "cannotImport refuses an import the module rules allow",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "src/index.ts": importing("./store/store.ts"),
@@ -182,7 +182,7 @@ export const cannotImportAddsLimitsOnTopOfVisibility = Task.make(
       "src/index.ts:1: error CannotImportCrossed: imports src/store/store.ts, and src/index.ts cannot import src/store/store.ts",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const violationsOf = (tsconfigFile: string) =>
   findImportBoundaryViolations(tsconfigFile).pipe(
@@ -205,9 +205,9 @@ const REACH_VIOLATIONS = [
   moduleInternals("src/shared/required.ts:1", "src/feature/hidden.ts", "src/feature"),
 ];
 
-export const symlinkedCheckoutsKeepTheirBoundaries = Task.make(
-  "a project reached through a symlinked directory reports the same module violations, require() calls included, as its real path",
-  Effect.gen(function* () {
+export const symlinkedCheckoutsKeepTheirBoundaries = Task.make({
+  name: "a project reached through a symlinked directory reports the same module violations, require() calls included, as its real path",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(REACH_SOURCES);
@@ -219,11 +219,11 @@ export const symlinkedCheckoutsKeepTheirBoundaries = Task.make(
       REACH_VIOLATIONS,
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const relativeImportsLeavingThePackageAreRefused = Task.make(
-  "a relative or tsconfig-aliased import that resolves outside the package is ImportOutsidePackage, while installed packages and packages imported by name pass",
-  Effect.gen(function* () {
+export const relativeImportsLeavingThePackageAreRefused = Task.make({
+  name: "a relative or tsconfig-aliased import that resolves outside the package is ImportOutsidePackage, while installed packages and packages imported by name pass",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const outsideDirectory = yield* fileSystem.realPath(
@@ -259,11 +259,11 @@ export const relativeImportsLeavingThePackageAreRefused = Task.make(
       outside("src/index.ts:1", "@outside/outside.ts"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const packageImportsResolveThroughConditions = Task.make(
-  "package imports resolve through the bun condition and the tsconfig's customConditions",
-  Effect.gen(function* () {
+export const packageImportsResolveThroughConditions = Task.make({
+  name: "package imports resolve through the bun condition and the tsconfig's customConditions",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -294,11 +294,11 @@ export const packageImportsResolveThroughConditions = Task.make(
       crossed(IMPORTS_THROUGH_THE_DEVELOPMENT_CONDITION, "packages/conditional/src/development.ts"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const packageNamesReachOnlyPublicEntries = Task.make(
-  "a package imported by name passes only through its public entries: any subpath of a package with an exports map, and only the bare name of one without; template-literal imports are followed too",
-  Effect.gen(function* () {
+export const packageNamesReachOnlyPublicEntries = Task.make({
+  name: "a package imported by name passes only through its public entries: any subpath of a package with an exports map, and only the bare name of one without; template-literal imports are followed too",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -339,11 +339,11 @@ export const packageNamesReachOnlyPublicEntries = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const subpathImportsReachPackagesThroughTheirTargets = Task.make(
-  "a # subpath import whose target names another package passes through that package's public entries as the target would, so it may reach an exports entry but not a file of a package without an exports map",
-  Effect.gen(function* () {
+export const subpathImportsReachPackagesThroughTheirTargets = Task.make({
+  name: "a # subpath import whose target names another package passes through that package's public entries as the target would, so it may reach an exports entry but not a file of a package without an exports map",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -374,11 +374,11 @@ export const subpathImportsReachPackagesThroughTheirTargets = Task.make(
       packageInternals("apps/web/index.ts:2", "packages/loose/src/deep.ts", "packages/loose"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const filesOutsideTheProgramRespectBoundaries = Task.make(
-  "tracked .js and .d.ts files and files outside the tsconfig include are held to the same import boundaries",
-  Effect.gen(function* () {
+export const filesOutsideTheProgramRespectBoundaries = Task.make({
+  name: "tracked .js and .d.ts files and files outside the tsconfig include are held to the same import boundaries",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "visibility", "type": "module" }\n',
@@ -405,11 +405,11 @@ export const filesOutsideTheProgramRespectBoundaries = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const selfReferencesAreInternalImports = Task.make(
-  "importing your own package by name reaches the same files as a relative path, so module boundaries still apply",
-  Effect.gen(function* () {
+export const selfReferencesAreInternalImports = Task.make({
+  name: "importing your own package by name reaches the same files as a relative path, so module boundaries still apply",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json":
@@ -432,11 +432,11 @@ export const selfReferencesAreInternalImports = Task.make(
       moduleInternals("src/reader.ts:1", "src/feature/hidden.ts", "src/feature"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const everyLoaderRespectsBoundaries = Task.make(
-  "createRequire, import.meta.resolve and template literal imports are held to the same boundaries as import",
-  Effect.gen(function* () {
+export const everyLoaderRespectsBoundaries = Task.make({
+  name: "createRequire, import.meta.resolve and template literal imports are held to the same boundaries as import",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "visibility", "type": "module" }\n',
@@ -472,11 +472,11 @@ export const everyLoaderRespectsBoundaries = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const symlinkedDirectoriesAreCheckedOnce = Task.make(
-  "a directory reached through a symbolic link is checked at its real path, once",
-  Effect.gen(function* () {
+export const symlinkedDirectoriesAreCheckedOnce = Task.make({
+  name: "a directory reached through a symbolic link is checked at its real path, once",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -502,11 +502,11 @@ export const symlinkedDirectoriesAreCheckedOnce = Task.make(
       moduleInternals("src/reader.ts:1", "src/worker/hidden.ts", "src/worker"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const caseOnlyMismatchesAreNamed = Task.make(
-  "a module URL whose path differs from the file only in letter case is ImportCaseMismatch on a case-insensitive file system and resolves to no file on a case-sensitive one, while a static import of a file in the TS program is left to bun check, which reports it as TS1261 (wrong case of an included file), TS1149 (two casings) or TS2307 (missing)",
-  Effect.gen(function* () {
+export const caseOnlyMismatchesAreNamed = Task.make({
+  name: "a module URL whose path differs from the file only in letter case is ImportCaseMismatch on a case-insensitive file system and resolves to no file on a case-sensitive one, while a static import of a file in the TS program is left to bun check, which reports it as TS1261 (wrong case of an included file), TS1149 (two casings) or TS2307 (missing)",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -537,11 +537,11 @@ export const caseOnlyMismatchesAreNamed = Task.make(
         : "src/reader.ts:4: error ImportResolvesToNoFile: imports ./Feature/index.ts, which resolves to no file",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const missingIgnoredFilesAreNamed = Task.make(
-  "an import of a missing file that git ignores, such as build output, says so instead of only that it resolves to no file, a module URL to a missing file resolves to no file, and a static import of one is left to bun check, which reports it as TS2307",
-  Effect.gen(function* () {
+export const missingIgnoredFilesAreNamed = Task.make({
+  name: "an import of a missing file that git ignores, such as build output, says so instead of only that it resolves to no file, a module URL to a missing file resolves to no file, and a static import of one is left to bun check, which reports it as TS2307",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "visibility", "type": "module" }\n',
@@ -562,11 +562,11 @@ export const missingIgnoredFilesAreNamed = Task.make(
       "src/page.ts:1: error ImportOfMissingIgnoredFile: imports ../.generated/page.txt, but .generated/page.txt does not exist and is gitignored",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const filesOutsideTheProjectStillReportBrokenImports = Task.make(
-  "a static import, export from or literal import() of a missing or wrong-case file is still reported in a file outside tsconfig include, because bun check never type-checks that file, and an index's export from a missing file is reported here once, since no-re-exports leaves it alone, while a bare specifier that resolves to no file, such as a missing package, a type-only or try/catch-guarded import of one, a subpath a package's exports block or an unknown node: or bun: module, is left to the type check",
-  Effect.gen(function* () {
+export const filesOutsideTheProjectStillReportBrokenImports = Task.make({
+  name: "a static import, export from or literal import() of a missing or wrong-case file is still reported in a file outside tsconfig include, because bun check never type-checks that file, and an index's export from a missing file is reported here once, since no-re-exports leaves it alone, while a bare specifier that resolves to no file, such as a missing package, a type-only or try/catch-guarded import of one, a subpath a package's exports block or an unknown node: or bun: module, is left to the type check",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -625,11 +625,11 @@ export const filesOutsideTheProjectStillReportBrokenImports = Task.make(
       "tools/orphan.ts:3: error ImportResolvesToNoFile: imports ./missing.ts, which resolves to no file",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const programFilesImportingExcludedFilesInTheWrongCaseAreReported = Task.make(
-  "a file in the TS program that imports a file outside tsconfig include in the wrong letter case is ImportCaseMismatch on a case-insensitive file system, because bun check only reports case for targets in the program",
-  Effect.gen(function* () {
+export const programFilesImportingExcludedFilesInTheWrongCaseAreReported = Task.make({
+  name: "a file in the TS program that imports a file outside tsconfig include in the wrong letter case is ImportCaseMismatch on a case-insensitive file system, because bun check only reports case for targets in the program",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -660,11 +660,11 @@ export const programFilesImportingExcludedFilesInTheWrongCaseAreReported = Task.
         : [],
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const ignoredPathsAreListedVerbatim = Task.make(
-  "ignored paths with a space, a newline or unicode are listed exactly as written, and unignored paths are left out",
-  Effect.gen(function* () {
+export const ignoredPathsAreListedVerbatim = Task.make({
+  name: "ignored paths with a space, a newline or unicode are listed exactly as written, and unignored paths are left out",
+  run: Effect.gen(function* () {
     const awkwardNames = ["with space.txt", "line\nbreak.txt", "caf\u00E9-\u65E5\u672C.txt"];
     const { directory } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
@@ -674,11 +674,11 @@ export const ignoredPathsAreListedVerbatim = Task.make(
     const ignored = yield* ignoredPackagePathsAmong([...awkwardNames, "kept.ts"], directory);
     expect(ignored.toSorted()).toEqual(awkwardNames.toSorted());
   }).pipe(Effect.scoped),
-);
+});
 
-export const checkIgnoreFailuresOtherThanNothingIgnoredSurface = Task.make(
-  "a git failure other than the nothing-ignored exit, such as running outside a repository, is a CommandFailed with its exit code",
-  Effect.gen(function* () {
+export const checkIgnoreFailuresOtherThanNothingIgnoredSurface = Task.make({
+  name: "a git failure other than the nothing-ignored exit, such as running outside a repository, is a CommandFailed with its exit code",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const outsideRepository = yield* fileSystem.realPath(
       yield* fileSystem.makeTempDirectoryScoped(),
@@ -689,11 +689,11 @@ export const checkIgnoreFailuresOtherThanNothingIgnoredSurface = Task.make(
     );
     expect(exitCode).toBe(GIT_EXIT_CODE_OUTSIDE_A_REPOSITORY);
   }).pipe(Effect.scoped),
-);
+});
 
-export const ignoredDirectoriesNamedByUrlAreSkipped = Task.make(
-  "an ignored directory named by new URL is no imported file and is skipped, while an ignored file imported next to it is still listed",
-  Effect.gen(function* () {
+export const ignoredDirectoriesNamedByUrlAreSkipped = Task.make({
+  name: "an ignored directory named by new URL is no imported file and is skipped, while an ignored file imported next to it is still listed",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
       ".gitignore": "node_modules\ngenerated/\nbuilt.txt\n",
@@ -704,11 +704,11 @@ export const ignoredDirectoriesNamedByUrlAreSkipped = Task.make(
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt"]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const theNewUrlOfThePackageRootDoesNotBreakListing = Task.make(
-  "new URL('../') in src names the package root, which is no ignored path, and an ignored file imported next to it is still listed",
-  Effect.gen(function* () {
+export const theNewUrlOfThePackageRootDoesNotBreakListing = Task.make({
+  name: "new URL('../') in src names the package root, which is no ignored path, and an ignored file imported next to it is still listed",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
       ".gitignore": "node_modules\nbuilt.txt\n",
@@ -718,11 +718,11 @@ export const theNewUrlOfThePackageRootDoesNotBreakListing = Task.make(
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt"]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const noIgnoredImportedPathListsNothing = Task.make(
-  "when no imported path is ignored, git check-ignore exits 1 and no file is listed",
-  Effect.gen(function* () {
+export const noIgnoredImportedPathListsNothing = Task.make({
+  name: "when no imported path is ignored, git check-ignore exits 1 and no file is listed",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
       ".gitignore": "node_modules\n",
@@ -731,11 +731,11 @@ export const noIgnoredImportedPathListsNothing = Task.make(
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sourceFilesAreScannedForIgnoredImportsTogether = Task.make(
-  "listing the ignored files a package imports reads its source files at the same time instead of one after another",
-  Effect.gen(function* () {
+export const sourceFilesAreScannedForIgnoredImportsTogether = Task.make({
+  name: "listing the ignored files a package imports reads its source files at the same time instead of one after another",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
       ".gitignore": "node_modules\nbuilt.txt\n",
@@ -764,11 +764,11 @@ export const sourceFilesAreScannedForIgnoredImportsTogether = Task.make(
     ).toEqual(["built.txt"]);
     expect(sourceReads.mostReadingAtOnce).toBeGreaterThan(1);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const queriesAndFragmentsNameNoPartOfTheFile = Task.make(
-  "an import's ?query and a new URL's ?query or #fragment name no part of the file, so an ignored file reached that way is listed",
-  Effect.gen(function* () {
+export const queriesAndFragmentsNameNoPartOfTheFile = Task.make({
+  name: "an import's ?query and a new URL's ?query or #fragment name no part of the file, so an ignored file reached that way is listed",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
       ".gitignore": "node_modules\nbuilt.txt\ngenerated.txt\n",
@@ -787,11 +787,11 @@ export const queriesAndFragmentsNameNoPartOfTheFile = Task.make(
     });
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt", "generated.txt"]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const importsReadAQueryButNoFragment = Task.make(
-  "a ?raw import of a file inside a module from outside it is ModuleInternalsImported, naming the file without the query, and an import reads # as part of the file name, as Bun does",
-  Effect.gen(function* () {
+export const importsReadAQueryButNoFragment = Task.make({
+  name: "a ?raw import of a file inside a module from outside it is ModuleInternalsImported, naming the file without the query, and an import reads # as part of the file name, as Bun does",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "visibility", "type": "module" }\n',
       "src/ui/index.ts": VALUE,
@@ -808,11 +808,11 @@ export const importsReadAQueryButNoFragment = Task.make(
       "src/sharp-reader.ts:1: error ModuleInternalsImported: imports src/ui/c#.ts, inside module src/ui/, from outside it",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const queriedImportsAreCheckedAsTheirFiles = Task.make(
-  "an import with a ?query is checked as the file it names: a missing ignored file is ImportOfMissingIgnoredFile, import.meta.resolve of a module's internals is ModuleInternalsImported, a wrong-case file is ImportCaseMismatch where the file system allows it, and a package's bare name passes",
-  Effect.gen(function* () {
+export const queriedImportsAreCheckedAsTheirFiles = Task.make({
+  name: "an import with a ?query is checked as the file it names: a missing ignored file is ImportOfMissingIgnoredFile, import.meta.resolve of a module's internals is ModuleInternalsImported, a wrong-case file is ImportCaseMismatch where the file system allows it, and a package's bare name passes",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const outsideDirectory = yield* fileSystem.realPath(
@@ -865,11 +865,11 @@ export const queriedImportsAreCheckedAsTheirFiles = Task.make(
     );
     expect(yield* ignoredFilesImportedIn(tsconfigFile)).toEqual(["built.txt"]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const resolvedSpecifiersFollowTheRealFiles = Task.make(
-  "a resolved .js specifier whose .ts file differs in letter case is ImportCaseMismatch where the file system allows it",
-  Effect.gen(function* () {
+export const resolvedSpecifiersFollowTheRealFiles = Task.make({
+  name: "a resolved .js specifier whose .ts file differs in letter case is ImportCaseMismatch where the file system allows it",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(
@@ -900,11 +900,11 @@ export const resolvedSpecifiersFollowTheRealFiles = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const internalDirectoryImportsNameTheOutermostHiddenDirectory = Task.make(
-  "an internal directory import names the outermost directory around the imported file whose parent does not hold the importer, under src/, scripts/ and any other top-level directory",
-  Effect.gen(function* () {
+export const internalDirectoryImportsNameTheOutermostHiddenDirectory = Task.make({
+  name: "an internal directory import names the outermost directory around the imported file whose parent does not hold the importer, under src/, scripts/ and any other top-level directory",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "ancestors", "type": "module" }\n',
@@ -933,14 +933,14 @@ export const internalDirectoryImportsNameTheOutermostHiddenDirectory = Task.make
       internalDirectory("src/reader.ts:1", "parts/gamma/deep/three.ts", "parts/gamma"),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const privateCode = (location: string, importedPath: string, module: string) =>
   `${location}: error PrivateCodeImported: imports ${importedPath}, which is private to ${module}/: only its index and files in ${module}/internal/ may import it`;
 
-export const internalDirectoriesArePrivateToTheirModule = Task.make(
-  "a module's internal/ is importable only by that module's index.ts or index.tsx, by files in the same internal/ and by tests, so a submodule, a sibling shared/ file or a loose file in the module is PrivateCodeImported, nested modules included, whether or not a program or test reaches the importer",
-  Effect.gen(function* () {
+export const internalDirectoriesArePrivateToTheirModule = Task.make({
+  name: "a module's internal/ is importable only by that module's index.ts or index.tsx, by files in the same internal/ and by tests, so a submodule, a sibling shared/ file or a loose file in the module is PrivateCodeImported, nested modules included, whether or not a program or test reaches the importer",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "privacy", "type": "module", "main": "./src/index.ts" }\n',
@@ -973,11 +973,11 @@ export const internalDirectoriesArePrivateToTheirModule = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const hiddenImportsStateOnlyWhatHidesThem = Task.make(
-  "a hidden import states only the import and the module or internal/ that hides it, never where a file belongs: a script importing a file deep in a source module, and a Worker started loose in a module or a loose file importing that module's internal/",
-  Effect.gen(function* () {
+export const hiddenImportsStateOnlyWhatHidesThem = Task.make({
+  name: "a hidden import states only the import and the module or internal/ that hides it, never where a file belongs: a script importing a file deep in a source module, and a Worker started loose in a module or a loose file importing that module's internal/",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "destinations", "type": "module", "main": "./src/index.ts" }\n',
@@ -1018,11 +1018,11 @@ export const hiddenImportsStateOnlyWhatHidesThem = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const scriptsImportEverySourceModuleIndex = Task.make(
-  "a file in scripts/, at any depth, imports the index.ts or index.tsx of any module in src/, child modules in lib/ included, while a loose or internal/ file of a module and an index in a shared/ stay hidden from it, and a file outside scripts/ and tests/ still imports only src/index.ts",
-  Effect.gen(function* () {
+export const scriptsImportEverySourceModuleIndex = Task.make({
+  name: "a file in scripts/, at any depth, imports the index.ts or index.tsx of any module in src/, child modules in lib/ included, while a loose or internal/ file of a module and an index in a shared/ stay hidden from it, and a file outside scripts/ and tests/ still imports only src/index.ts",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "scripted", "type": "module", "main": "./src/index.ts" }\n',
@@ -1061,11 +1061,11 @@ export const scriptsImportEverySourceModuleIndex = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const directoriesTheLayoutCheckReportsAddNoImportErrors = Task.make(
-  "an import from the parent into a directory nested in an internal/ or shared/, which the layout check reports as DirectoryInInternalOrShared, and an import of a file beside an index.ts in shared/, which is no module, add no import error, while importing another module's internals still does, and the package root is no module, so a root internal/ is not PrivateCodeImported and is open to every file",
-  Effect.gen(function* () {
+export const directoriesTheLayoutCheckReportsAddNoImportErrors = Task.make({
+  name: "an import from the parent into a directory nested in an internal/ or shared/, which the layout check reports as DirectoryInInternalOrShared, and an import of a file beside an index.ts in shared/, which is no module, add no import error, while importing another module's internals still does, and the package root is no module, so a root internal/ is not PrivateCodeImported and is open to every file",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "once", "type": "module", "main": "./src/index.ts" }\n',
@@ -1087,11 +1087,11 @@ export const directoriesTheLayoutCheckReportsAddNoImportErrors = Task.make(
       moduleInternals("src/b/index.ts:2", "src/a/internal/sub/deep.ts", "src/a"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anInternalOfNoModuleIsPrivateToNothing = Task.make(
-  "an internal/ whose parent is no module is not PrivateCodeImported, so in a directory with no index.ts, a loose file importing the internal/ beside it is checked like an import of any other directory and passes",
-  Effect.gen(function* () {
+export const anInternalOfNoModuleIsPrivateToNothing = Task.make({
+  name: "an internal/ whose parent is no module is not PrivateCodeImported, so in a directory with no index.ts, a loose file importing the internal/ beside it is checked like an import of any other directory and passes",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "loose", "type": "module", "bin": "./src/cli.ts" }\n',
@@ -1103,11 +1103,11 @@ export const anInternalOfNoModuleIsPrivateToNothing = Task.make(
     );
     expect(yield* violationsOf(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
-  "an index.ts in a directory nested in an internal/ or shared/ makes no module, so the files beside it are not module internals, and importing it is PrivateCodeImported or ModuleInternalsImported like importing any other file of that internal/ or shared/",
-  Effect.gen(function* () {
+export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make({
+  name: "an index.ts in a directory nested in an internal/ or shared/ makes no module, so the files beside it are not module internals, and importing it is PrivateCodeImported or ModuleInternalsImported like importing any other file of that internal/ or shared/",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "nested", "type": "module", "main": "./src/index.ts" }\n',
@@ -1134,11 +1134,11 @@ export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyANamedPackageJsonMakesAPackage = Task.make(
-  'only a package.json with a string name makes a package, so a nested package.json with no name, such as { "type": "module" } or { "sideEffects": false }, leaves its directory in the enclosing package and module: its module\'s index imports its internal/ and an outsider importing it is ModuleInternalsImported, just as when the internal/ has no package.json, while a nested package.json with a name still makes the files below it another package whose internals no outsider imports',
-  Effect.gen(function* () {
+export const onlyANamedPackageJsonMakesAPackage = Task.make({
+  name: 'only a package.json with a string name makes a package, so a nested package.json with no name, such as { "type": "module" } or { "sideEffects": false }, leaves its directory in the enclosing package and module: its module\'s index imports its internal/ and an outsider importing it is ModuleInternalsImported, just as when the internal/ has no package.json, while a nested package.json with a name still makes the files below it another package whose internals no outsider imports',
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "unnamed", "type": "module", "main": "./src/index.ts" }\n',
@@ -1171,11 +1171,11 @@ export const onlyANamedPackageJsonMakesAPackage = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aMalformedPackageJsonFailsTheCheck = Task.make(
-  'a nested package.json whose name is no string, such as { "name": 1 }, or that is no JSON, fails the import-boundary check with PackageManifestUnreadable at that package.json, from the listing of the package\'s files, instead of counting as unnamed',
-  Effect.gen(function* () {
+export const aMalformedPackageJsonFailsTheCheck = Task.make({
+  name: 'a nested package.json whose name is no string, such as { "name": 1 }, or that is no JSON, fails the import-boundary check with PackageManifestUnreadable at that package.json, from the listing of the package\'s files, instead of counting as unnamed',
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     for (const manifest of ['{ "name": 1, "sideEffects": false }\n', "{ name: shared }\n"]) {
       const { directory, tsconfigFile } = yield* makeProject(
@@ -1199,11 +1199,11 @@ export const aMalformedPackageJsonFailsTheCheck = Task.make(
       ]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const modulesInLibraryDirectoriesKeepTheirBoundaries = Task.make(
-  "a module in a lib/ is importable from outside only through its index, so its internal/ and its own lib/ modules are ModuleInternalsImported from outside it and its internal/ is PrivateCodeImported from its child modules, while it reaches its child modules' indexes, child modules reach their siblings' indexes and their ancestors' shared/, and lib/ itself hides nothing from its module",
-  Effect.gen(function* () {
+export const modulesInLibraryDirectoriesKeepTheirBoundaries = Task.make({
+  name: "a module in a lib/ is importable from outside only through its index, so its internal/ and its own lib/ modules are ModuleInternalsImported from outside it and its internal/ is PrivateCodeImported from its child modules, while it reaches its child modules' indexes, child modules reach their siblings' indexes and their ancestors' shared/, and lib/ itself hides nothing from its module",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "src/index.ts": imports([
@@ -1246,11 +1246,11 @@ export const modulesInLibraryDirectoriesKeepTheirBoundaries = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const testsAreAModuleLikeSource = Task.make(
-  "tests/ is a module, so scripts reach only tests/index.ts, its child modules cannot import its internal/, and a test file still imports any file outside tests/",
-  Effect.gen(function* () {
+export const testsAreAModuleLikeSource = Task.make({
+  name: "tests/ is a module, so scripts reach only tests/index.ts, its child modules cannot import its internal/, and a test file still imports any file outside tests/",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "src/index.ts": importing("./internal/value.ts"),
@@ -1284,4 +1284,4 @@ export const testsAreAModuleLikeSource = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

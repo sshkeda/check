@@ -120,9 +120,9 @@ const violations = (
     );
   }).pipe(Effect.scoped);
 
-export const aProjectInsideTheTaskPackageDirectoryKeepsItsOwnRunOutsideTheRunners = Task.make(
-  "a project that lives at node_modules/@sshkeda/task does not make its own run function the task runner",
-  Effect.gen(function* () {
+export const aProjectInsideTheTaskPackageDirectoryKeepsItsOwnRunOutsideTheRunners = Task.make({
+  name: "a project that lives at node_modules/@sshkeda/task does not make its own run function the task runner",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(
         {
@@ -137,11 +137,11 @@ run(work.pipe(Effect.provide(clockServices)));
       ),
     ).toEqual([`src/main.ts:4:15: ${LAYER_OUTSIDE_START}`]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const programStarts = Task.make(
-  "layers provided inside runMain, runFork, other runners or a const only a runner runs pass",
-  Effect.gen(function* () {
+export const programStarts = Task.make({
+  name: "layers provided inside runMain, runFork, other runners or a const only a runner runs pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/main.ts": `import { runMain as start } from "@effect/platform-bun/BunRuntime";
@@ -165,11 +165,11 @@ Effect.runPromise((wrapped satisfies typeof work));
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const relaidEffectStarts = Task.make(
-  "runners and provides keep their meaning when Effect declares them at other paths inside its package",
-  Effect.gen(function* () {
+export const relaidEffectStarts = Task.make({
+  name: "runners and provides keep their meaning when Effect declares them at other paths inside its package",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(
         {
@@ -197,11 +197,11 @@ export const built = Effect.gen(function* () {
       `src/main.ts:12:17: ${BUILT_PROVIDED_OUTSIDE_START}`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const providesOutsideStarts = Task.make(
-  "layers provided in a helper, an exported const, a const run twice or an array are reported",
-  Effect.gen(function* () {
+export const providesOutsideStarts = Task.make({
+  name: "layers provided in a helper, an exported const, a const run twice or an array are reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/helpers.ts": `import { BunRuntime } from "@effect/platform-bun";
@@ -226,11 +226,11 @@ export const later = () => Effect.runPromise(work.pipe(Effect.provide(clockServi
       `src/helpers.ts:12:109: ${LAYER_OUTSIDE_START}`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const streamProvidesOutsideStarts = Task.make(
-  "layers provided to a Stream outside the call that starts the program are reported like Effect.provide, and one provided inside a runner's argument is not",
-  Effect.gen(function* () {
+export const streamProvidesOutsideStarts = Task.make({
+  name: "layers provided to a Stream outside the call that starts the program are reported like Effect.provide, and one provided inside a runner's argument is not",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/streams.ts": `import { Effect, Stream } from "effect";
@@ -246,11 +246,11 @@ export const started = () => Effect.runPromise(Stream.runCollect(Stream.fromEffe
       "src/streams.ts:5:54: error LayerProvidedOutsideProgramStart: Stream.provide with a layer outside the call that starts the program",
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const layersFromOtherFiles = Task.make(
-  "a layer under a name with no layer suffix and a layer returned by a helper from another file are reported",
-  Effect.gen(function* () {
+export const layersFromOtherFiles = Task.make({
+  name: "a layer under a name with no layer suffix and a layer returned by a helper from another file are reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/imported.ts": `import { Effect } from "effect";
@@ -264,11 +264,11 @@ export const made = Effect.provide(work, clockServicesFor(3));
       `src/imported.ts:4:21: ${LAYER_OUTSIDE_START}`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const handBuiltContexts = Task.make(
-  "contexts built from a layer by hand and provided outside the start are reported",
-  Effect.gen(function* () {
+export const handBuiltContexts = Task.make({
+  name: "contexts built from a layer by hand and provided outside the start are reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/built.ts": `import { Effect, Layer } from "effect";
@@ -326,11 +326,11 @@ export const fromSecond = Effect.gen(function* () {
       `src/cycle.ts:14:17: ${BUILT_CONTEXT_OUTSIDE_START}`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const contextsAndSingleServices = Task.make(
-  "single services, contexts not built from a layer and layers composed with layers pass",
-  Effect.gen(function* () {
+export const contextsAndSingleServices = Task.make({
+  name: "single services, contexts not built from a layer and layers composed with layers pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/contexts.ts": `import { Context, Effect, Layer } from "effect";
@@ -351,55 +351,51 @@ export const recovery = Layer.build(Layer.effectContext(Effect.fail(plain))).pip
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const TASK_SCRIPT = `import { Task } from "@sshkeda/task";
 import { Task as Tasks } from "@sshkeda/task";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { clockServices, work } from "../src/services.ts";
-const main = Task.make("main", work);
-Task.main(main.pipe(Effect.provide(clockServices)));
-const provided = Task.make("provided", work.pipe(Effect.provide(clockServices)));
-Tasks.main(provided);
+export const main = Task.make({ name: "main", output: Schema.Finite, run: work.pipe(Effect.provide(clockServices)) });
+const provided = work.pipe(Effect.provide(clockServices));
+export default Tasks.make({ name: "provided", output: Schema.Finite, run: provided });
 export const helper = work.pipe(Effect.provide(clockServices));
 `;
 
-export const taskRuns = Task.make(
-  "layers provided inside the argument of @sshkeda/task's Task.main, or a const only Task.main runs, pass, and a helper is still reported, whether task resolves to its declarations or its source",
-  Effect.gen(function* () {
+export const taskRuns = Task.make({
+  name: "layers provided inside the run of @sshkeda/task's Task.make, or in a const only that run reads, pass, and a helper is still reported, whether task resolves to its declarations or its source",
+  run: Effect.gen(function* () {
     for (const customConditions of [[], ["@sshkeda/task-source"]]) {
       expect(yield* violations({ "scripts/main.ts": TASK_SCRIPT }, customConditions)).toEqual([
-        `scripts/main.ts:9:33: ${LAYER_OUTSIDE_START}`,
+        `scripts/main.ts:8:33: ${LAYER_OUTSIDE_START}`,
       ]);
     }
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const taskBodiesStartPrograms = Task.make(
-  "a layer provided in the body of a task made in src, which a script directly in scripts/ runs with Task.main, passes, since Task runs each task body as its own program, and a helper beside the task is still reported",
-  Effect.gen(function* () {
+export const taskBodiesStartPrograms = Task.make({
+  name: "a layer provided in the body of a task made in src, which a script directly in scripts/ runs as its default export, passes, since Task runs each task body as its own program, and a helper beside the task is still reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "src/tasks.ts": `import { Task } from "@sshkeda/task";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { clockServices, work } from "./services.ts";
-export const measure = Task.make("measure", work.pipe(Effect.provide(clockServices)));
+export const measure = Task.make({ name: "measure", output: Schema.Finite, run: work.pipe(Effect.provide(clockServices)) });
 export const helper = work.pipe(Effect.provide(clockServices));
 `,
-        "scripts/measure.ts": `import { Task } from "@sshkeda/task";
-import { measure } from "../src/tasks.ts";
-if (import.meta.main) {
-  Task.main(measure);
-}
+        "scripts/measure.ts": `import { measure } from "../src/tasks.ts";
+export default measure;
 `,
       }),
     ).toEqual([`src/tasks.ts:5:33: ${LAYER_OUTSIDE_START}`]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const testFilesStartPrograms = Task.make(
-  "test files under tests count as program starts, since each test runs its own program",
-  Effect.gen(function* () {
+export const testFilesStartPrograms = Task.make({
+  name: "test files under tests count as program starts, since each test runs its own program",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "tests/clock.ts": `import { Effect } from "effect";
@@ -417,25 +413,25 @@ export const measured = work.pipe(Effect.provide(clockServices));
       }),
     ).toEqual([`scripts/measure.ts:3:35: ${LAYER_OUTSIDE_START}`]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const taskNamespaceRunsStartPrograms = Task.make(
-  "Task.main starts programs through named imports and aliases from package source, declarations and a namespace re-export",
-  Effect.gen(function* () {
+export const taskNamespaceRunsStartPrograms = Task.make({
+  name: "Task.make starts programs through named imports and aliases from package source, declarations and a namespace re-export",
+  run: Effect.gen(function* () {
     const shapes = {
       ts: {
         "index.ts":
-          'import { Effect } from "effect"; export const Task = { main: (program: Effect.Effect<number>) => program };',
+          'import { Effect } from "effect"; export const Task = { make: (definition: { readonly run: Effect.Effect<number> }) => definition };',
       },
       "d.ts": {
         "index.d.ts":
-          'import { Effect } from "effect"; export declare const Task: { main: (program: Effect.Effect<number>) => void };',
+          'import { Effect } from "effect"; export declare const Task: { make: (definition: { readonly run: Effect.Effect<number> }) => void };',
       },
       namespace: {
         "index.ts": 'export * as Task from "./task/index.ts";',
-        "task/index.ts": 'export { main } from "./internal/main.ts";',
-        "task/internal/main.ts":
-          'import { Effect } from "effect"; export const main = (program: Effect.Effect<number>) => program;',
+        "task/index.ts": 'export { make } from "./internal/make.ts";',
+        "task/internal/make.ts":
+          'import { Effect } from "effect"; export const make = (definition: { readonly run: Effect.Effect<number> }) => definition;',
       },
     };
     for (const [shape, files] of Object.entries(shapes)) {
@@ -449,17 +445,9 @@ export const taskNamespaceRunsStartPrograms = Task.make(
               text,
             ]),
           ),
-          "scripts/main.ts": `import { Task } from "@sshkeda/task";
-import { Task as T } from "@sshkeda/task";
-import { Effect } from "effect";
-import { work, clockServices } from "../src/services.ts";
-Task.main(work.pipe(Effect.provide(clockServices)));
-const provided = work.pipe(Effect.provide(clockServices));
-T.main(provided);
-export const helper = work.pipe(Effect.provide(clockServices));
-`,
+          "scripts/main.ts": TASK_SCRIPT,
         }),
       ).toEqual([`scripts/main.ts:8:33: ${LAYER_OUTSIDE_START}`]);
     }
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

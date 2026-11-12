@@ -18,9 +18,9 @@ const missingAsConst = (name: string) => ({
 
 const annotated = (name: string) => ({ message: `const ${name} has a type annotation` });
 
-export const fixedModuleValuesUseConstantCase = Task.make(
-  "no-loose-literal-constants rejects module constants bound to fixed literals that are not CAPITAL_SNAKE_CASE",
-  ruleTest("no-loose-literal-constants", {
+export const fixedModuleValuesUseConstantCase = Task.make({
+  name: "no-loose-literal-constants rejects module constants bound to fixed literals that are not CAPITAL_SNAKE_CASE",
+  run: ruleTest("no-loose-literal-constants", {
     valid: [
       "const WORKER_STOP_TIMEOUT = 5000;",
       'export const PACKAGE_NAME = "@sshkeda/check";',
@@ -67,11 +67,11 @@ export const fixedModuleValuesUseConstantCase = Task.make(
       { code: "const worker_stop_timeout = 1;", errors: [notConstantCase("worker_stop_timeout")] },
     ],
   }),
-);
+});
 
-export const dataConstantsEndInAsConst = Task.make(
-  "no-loose-literal-constants requires as const on module constants that hold only fixed array or object data, and leaves computed values, scalars and local constants alone",
-  ruleTest("no-loose-literal-constants", {
+export const dataConstantsEndInAsConst = Task.make({
+  name: "no-loose-literal-constants requires as const on module constants that hold only fixed array or object data, and leaves computed values, scalars and local constants alone",
+  run: ruleTest("no-loose-literal-constants", {
     valid: [
       'const NAMES = ["a", "b"] as const;',
       "export const LIMITS = { retries: 3, offsets: [-1, 1] } as const;",
@@ -107,11 +107,11 @@ export const dataConstantsEndInAsConst = Task.make(
       { code: 'const NESTED = { inner: { names: ["a"] } };', errors: [missingAsConst("NESTED")] },
     ],
   }),
-);
+});
 
-export const literalConstantsUseSatisfies = Task.make(
-  "no-loose-literal-constants reports a type annotation on an object or array literal constant at any scope, except an empty mutable accumulator annotated Array, T[], Record or an object type literal",
-  ruleTest("no-loose-literal-constants", {
+export const literalConstantsUseSatisfies = Task.make({
+  name: "no-loose-literal-constants reports a type annotation on an object or array literal constant at any scope, except an empty mutable accumulator annotated Array, T[], Record or an object type literal",
+  run: ruleTest("no-loose-literal-constants", {
     valid: [
       "const LIMITS = { retries: 3 } as const satisfies Readonly<Record<string, number>>;",
       "const items: Array<string> = [];",
@@ -150,11 +150,11 @@ export const literalConstantsUseSatisfies = Task.make(
       },
     ],
   }),
-);
+});
 
-export const eachLooseConstantIsReportedOnce = Task.make(
-  "a constant that breaks several literal rules gets one report naming every fix",
-  ruleTest("no-loose-literal-constants", {
+export const eachLooseConstantIsReportedOnce = Task.make({
+  name: "a constant that breaks several literal rules gets one report naming every fix",
+  run: ruleTest("no-loose-literal-constants", {
     valid: [],
     invalid: [
       {
@@ -178,4 +178,4 @@ export const eachLooseConstantIsReportedOnce = Task.make(
       },
     ],
   }),
-);
+});

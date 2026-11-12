@@ -7,9 +7,9 @@ import { layout } from "../lib/enforce-file-layout/index.ts";
 import { fileTypes } from "../lib/enforce-file-types/index.ts";
 import { formatting } from "../lib/format-with-bun-fmt/index.ts";
 import { lintConfigFile } from "../shared/declare-lint-config-task.ts";
+import { startDirectory } from "../shared/declare-start-directory-task.ts";
 import { typeScriptConfig } from "../shared/declare-typescript-config-task.ts";
 import { typedChecks } from "./declare-the-typed-checks-task.ts";
-import { verifyWhereCheckWasStarted } from "./verify-where-check-was-started.ts";
 
 const GUIDE_FILE = new URL("../../../../docs/how-to-make-check-pass.md", import.meta.url);
 
@@ -22,10 +22,10 @@ const pointAtTheGuide = Effect.gen(function* () {
   yield* Effect.logError(`read ${guide} before you change the code`);
 });
 
-export const check: Task.Task<void> = Task.make(
-  "check",
-  Effect.andThen(
-    verifyWhereCheckWasStarted,
+export const check: Task.Task<void> = Task.make({
+  name: "check",
+  run: Effect.andThen(
+    startDirectory,
     Task.allSettled([
       typeScriptConfig,
       lintConfigFile,
@@ -36,4 +36,4 @@ export const check: Task.Task<void> = Task.make(
       duplicateFunctions,
     ]).pipe(Effect.tapError(() => pointAtTheGuide)),
   ),
-);
+});

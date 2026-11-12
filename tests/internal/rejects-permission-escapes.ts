@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const configReadsStayInConfigFiles = Task.make(
-  "no-config-reads rejects environment, raw command-line argument and Effect Config reads",
-  ruleTest("no-config-reads", {
+export const configReadsStayInConfigFiles = Task.make({
+  name: "no-config-reads rejects environment, raw command-line argument and Effect Config reads",
+  run: ruleTest("no-config-reads", {
     valid: [
       "process.exit(1);",
       "const process = { env: {} }; process.env;",
@@ -49,11 +49,11 @@ export const configReadsStayInConfigFiles = Task.make(
       })),
     ],
   }),
-);
+});
 
-export const rawArgumentsAreBanned = Task.make(
-  "no-config-reads rejects process.argv, process.argv0, Bun.argv and parseArgs from node:util however they are reached, through a constant alias of process or Bun or a constant key included",
-  ruleTest("no-config-reads", {
+export const rawArgumentsAreBanned = Task.make({
+  name: "no-config-reads rejects process.argv, process.argv0, Bun.argv and parseArgs from node:util however they are reached, through a constant alias of process or Bun or a constant key included",
+  run: ruleTest("no-config-reads", {
     valid: [
       "const process = { argv: [] }; process.argv;",
       "const Bun = { argv: [] }; Bun.argv;",
@@ -108,11 +108,11 @@ export const rawArgumentsAreBanned = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "bannedEvenWhenGranted" }] })),
     ],
   }),
-);
+});
 
-export const commandSpawnStaysInOneFile = Task.make(
-  "no-command-spawn rejects Bun spawning, child_process imports and Effect ChildProcess",
-  ruleTest("no-command-spawn", {
+export const commandSpawnStaysInOneFile = Task.make({
+  name: "no-command-spawn rejects Bun spawning, child_process imports and Effect ChildProcess",
+  run: ruleTest("no-command-spawn", {
     valid: [
       "const Bun = { spawn: () => 1 }; Bun.spawn();",
       'import type { ChildProcess } from "node:child_process";',
@@ -130,11 +130,11 @@ export const commandSpawnStaysInOneFile = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "bannedEvenWhenGranted" }] })),
     ],
   }),
-);
+});
 
-export const serviceDeclarationsStayInApprovedFiles = Task.make(
-  "no-service-declarations rejects Context.Service and Context.Reference from effect, naming the declared service when it has a class name",
-  ruleTest("no-service-declarations", {
+export const serviceDeclarationsStayInApprovedFiles = Task.make({
+  name: "no-service-declarations rejects Context.Service and Context.Reference from effect, naming the declared service when it has a class name",
+  run: ruleTest("no-service-declarations", {
     valid: [
       'import { Context } from "other"; Context.Service;',
       'import { Context } from "effect"; Context.get;',
@@ -157,13 +157,13 @@ export const serviceDeclarationsStayInApprovedFiles = Task.make(
       },
     ],
   }),
-);
+});
 
 const GRANTED_STORE = [{ services: ["Store"] }] as const;
 
-export const grantedFilesDeclareOnlyListedNamedServices = Task.make(
-  "no-service-declarations in a file granted services reports an unlisted or unnamed service once each",
-  ruleTest("no-service-declarations", {
+export const grantedFilesDeclareOnlyListedNamedServices = Task.make({
+  name: "no-service-declarations in a file granted services reports an unlisted or unnamed service once each",
+  run: ruleTest("no-service-declarations", {
     valid: [
       {
         code: 'import { Context } from "effect"; class Store extends Context.Service<Store>()("Store") {}',
@@ -183,11 +183,11 @@ export const grantedFilesDeclareOnlyListedNamedServices = Task.make(
       },
     ],
   }),
-);
+});
 
-export const grantedServicesAreDeclared = Task.make(
-  "no-unused-service-grants reports each granted service the file does not declare",
-  ruleTest("no-unused-service-grants", {
+export const grantedServicesAreDeclared = Task.make({
+  name: "no-unused-service-grants reports each granted service the file does not declare",
+  run: ruleTest("no-unused-service-grants", {
     valid: [
       "export const VALUE = 1;",
       {
@@ -221,4 +221,4 @@ export const grantedServicesAreDeclared = Task.make(
       },
     ],
   }),
-);
+});

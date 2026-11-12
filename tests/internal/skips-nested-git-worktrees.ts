@@ -87,9 +87,9 @@ const printedCheckAt = (directory: string, taskStateDirectory: string) =>
     ),
   );
 
-export const nestedGitWorktreeIsNeitherAFileNorAPackage = Task.make(
-  "check run from the root of a checkout that holds a git worktree of itself under .claude/worktrees neither lists that worktree as a file nor checks it as a nested package, so a violation only the worktree holds is not reported and the root passes",
-  Effect.gen(function* () {
+export const nestedGitWorktreeIsNeitherAFileNorAPackage = Task.make({
+  name: "check run from the root of a checkout that holds a git worktree of itself under .claude/worktrees neither lists that worktree as a file nor checks it as a nested package, so a violation only the worktree holds is not reported and the root passes",
+  run: Effect.gen(function* () {
     const { root, taskStateDirectory } = yield* committedProject;
     const printed = yield* printedCheckAt(root, taskStateDirectory);
     expect(printed).not.toContain("worktrees");
@@ -97,11 +97,11 @@ export const nestedGitWorktreeIsNeitherAFileNorAPackage = Task.make(
     expect(printed).not.toContain(" error ");
     expect(printed).toContain("passed: ");
   }).pipe(Effect.scoped),
-);
+});
 
-export const trackedSymbolicLinksStayListedWhateverTheyPointAt = Task.make(
-  "the listed files of a package drop a nested git worktree's directory but keep a tracked symbolic link that points at a directory, so a grant on it is accepted, and drop one whose target is gone",
-  Effect.gen(function* () {
+export const trackedSymbolicLinksStayListedWhateverTheyPointAt = Task.make({
+  name: "the listed files of a package drop a nested git worktree's directory but keep a tracked symbolic link that points at a directory, so a grant on it is accepted, and drop one whose target is gone",
+  run: Effect.gen(function* () {
     const { root } = yield* committedProject;
     const { packageFiles, nestedPackageDirectories } = yield* listedPackageFiles(root, []);
     expect(packageFiles).toContain("src/images.bin");
@@ -109,13 +109,13 @@ export const trackedSymbolicLinksStayListedWhateverTheyPointAt = Task.make(
     expect(packageFiles.some((file) => file.startsWith(".claude"))).toBe(false);
     expect(nestedPackageDirectories).toEqual([]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const gitWorktreeIsCheckedWhenCheckRunsInsideIt = Task.make(
-  "check run from inside a git worktree checks that worktree as its own project and reports its violation with a path from the worktree",
-  Effect.gen(function* () {
+export const gitWorktreeIsCheckedWhenCheckRunsInsideIt = Task.make({
+  name: "check run from inside a git worktree checks that worktree as its own project and reports its violation with a path from the worktree",
+  run: Effect.gen(function* () {
     const { worktree, taskStateDirectory } = yield* committedProject;
     const printed = yield* printedCheckAt(worktree, taskStateDirectory);
     expect(printed).toContain(PRINTED_VIOLATION);
   }).pipe(Effect.scoped),
-);
+});

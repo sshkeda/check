@@ -53,9 +53,9 @@ const typeReadSchema = (name: string) =>
   `export const ${name} = Schema.Struct({ id: Schema.String });
 export const show${name} = (value: typeof ${name}.Type) => value.id;`;
 
-export const typeOnlyUseIsReported = Task.make(
-  "a schema read only through typeof X.Type, typeof X.Encoded, typeof X or typeof import(...).X, in its own file or through an import, is reported",
-  Effect.gen(function* () {
+export const typeOnlyUseIsReported = Task.make({
+  name: "a schema read only through typeof X.Type, typeof X.Encoded, typeof X or typeof import(...).X, in its own file or through an import, is reported",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/entry.ts": `export const ENTRY = Schema.Struct({ log: Schema.String });
@@ -76,11 +76,11 @@ export const keep = (whole: typeof WHOLE, entry: typeof ENTRY.Type) => [whole, e
       typeOnly("src/whole.ts:4", "WHOLE"),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const runtimeUsePasses = Task.make(
-  "a schema that is decoded, encoded, passed to a function or put in an object passes, even when it is also read as a type",
-  Effect.gen(function* () {
+export const runtimeUsePasses = Task.make({
+  name: "a schema that is decoded, encoded, passed to a function or put in an object passes, even when it is also read as a type",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/decoded.ts": `const ENTRY = Schema.Struct({ log: Schema.String });
@@ -96,11 +96,11 @@ export const show = (tag: typeof TAG.Type) => tag;`,
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const effectApisThatTakeTheSchemaPass = Task.make(
-  "a schema handed to a decoder, encoder, guard, assertion, error or class field, HttpApi endpoint, Rpc or Config.schema passes, even when also read as a type",
-  Effect.gen(function* () {
+export const effectApisThatTakeTheSchemaPass = Task.make({
+  name: "a schema handed to a decoder, encoder, guard, assertion, error or class field, HttpApi endpoint, Rpc or Config.schema passes, even when also read as a type",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/codecs.ts": `const DECODED = Schema.Struct({ a: Schema.String });
@@ -145,11 +145,11 @@ export const listen = (value: typeof PORT.Type) => value;`,
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const compositionFollowsTheOuterSchema = Task.make(
-  "a type-read schema composed into a decoded schema passes, and one composed only into type-only schemas is reported with them, recursion through Schema.suspend included",
-  Effect.gen(function* () {
+export const compositionFollowsTheOuterSchema = Task.make({
+  name: "a type-read schema composed into a decoded schema passes, and one composed only into type-only schemas is reported with them, recursion through Schema.suspend included",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/decoded.ts": `const LOG = Schema.Struct({ line: Schema.String });
@@ -176,11 +176,11 @@ export const show = (tree: typeof TREE.Type) => tree.forest;`,
       typeOnly("src/typed.ts:4", "LOGGED_ENTRY"),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const schemaClassesFollowTheSameRule = Task.make(
-  "a Schema.Class, Schema.TaggedClass or Schema.TaggedError referenced only as a type is reported, and one that is decoded, constructed, failed with or extended passes, as does one nothing outside its own declaration references",
-  Effect.gen(function* () {
+export const schemaClassesFollowTheSameRule = Task.make({
+  name: "a Schema.Class, Schema.TaggedClass or Schema.TaggedError referenced only as a type is reported, and one that is decoded, constructed, failed with or extended passes, as does one nothing outside its own declaration references",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/entry.ts": `export class Entry extends Schema.Class<Entry>("Entry")({ log: Schema.String }) {}
@@ -209,11 +209,11 @@ export const show = (base: Base) => base.id;`,
       typeOnly("src/typed-error.ts:3", "TypedError"),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyTypeReadSchemasAreCandidates = Task.make(
-  "values built from the Schema module that are not schemas, such as decoders, and schemas no typeof reads pass, so an unused schema is left to UnusedExport",
-  Effect.gen(function* () {
+export const onlyTypeReadSchemasAreCandidates = Task.make({
+  name: "values built from the Schema module that are not schemas, such as decoders, and schemas no typeof reads pass, so an unused schema is left to UnusedExport",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/decoder.ts": `const ENTRY = Schema.Struct({ log: Schema.String });
@@ -226,11 +226,11 @@ export const keep = (branded: typeof BRANDED.Type) => branded;`,
       }),
     ).toEqual([typeOnly("src/based.ts:4", "BRANDED")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const renamedReferencesResolveToTheirSchema = Task.make(
-  "a schema decoded under another name, through import { X as Y }, a chain of renaming barrels, export { X as default }, import { default as Y } or import Y = ns.X passes, and one read as a type under another name is reported",
-  Effect.gen(function* () {
+export const renamedReferencesResolveToTheirSchema = Task.make({
+  name: "a schema decoded under another name, through import { X as Y }, a chain of renaming barrels, export { X as default }, import { default as Y } or import Y = ns.X passes, and one read as a type under another name is reported",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/renamed.ts": typeReadSchema("RENAMED"),
@@ -262,11 +262,11 @@ export const showTyped = (value: typeof Typed.Type) => value.log;`,
       }),
     ).toEqual([typeOnly("src/typed.ts:3", "TYPED")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const defaultExportsCountAsUses = Task.make(
-  "a schema a file default-exports, by name or inside an expression, passes, since a default export is read as a value",
-  Effect.gen(function* () {
+export const defaultExportsCountAsUses = Task.make({
+  name: "a schema a file default-exports, by name or inside an expression, passes, since a default export is read as a value",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/named.ts": `const NAMED = Schema.Struct({ id: Schema.String });
@@ -284,11 +284,11 @@ export default Schema.Union([LEFT, RIGHT]);`,
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namespaceMemberReadsAreFollowed = Task.make(
-  "a schema read as ns.X through a namespace import, of its module or of a renaming barrel, passes when decoded and is reported when read only as typeof ns.X",
-  Effect.gen(function* () {
+export const namespaceMemberReadsAreFollowed = Task.make({
+  name: "a schema read as ns.X through a namespace import, of its module or of a renaming barrel, passes when decoded and is reported when read only as typeof ns.X",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/decoded.ts": typeReadSchema("DECODED"),
@@ -303,7 +303,7 @@ export const show = (value: typeof typed.TYPED.Type) => value.id;`,
       }),
     ).toEqual([typeOnly("src/typed.ts:3", "TYPED")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const WHOLE_MODULE_READS = [
   ["passed", "PASSED", 'import * as ns from "./passed.ts";\ninspect(ns);'],
@@ -328,9 +328,9 @@ const exportingModule = (name: string) => `${typeReadSchema(name)}
 const HIDDEN_${name} = Schema.Struct({ id: Schema.String });
 export const hide${name} = (value: typeof HIDDEN_${name}.Type) => value.id;`;
 
-export const modulesReadWholeKeepEveryExport = Task.make(
-  "every export of a module passes when a file reads its namespace as a value: passed on, default-exported, re-exported, indexed, destructured, export * as, or loaded with import(), through an export * barrel too, while the module's unexported schemas are still reported",
-  Effect.gen(function* () {
+export const modulesReadWholeKeepEveryExport = Task.make({
+  name: "every export of a module passes when a file reads its namespace as a value: passed on, default-exported, re-exported, indexed, destructured, export * as, or loaded with import(), through an export * barrel too, while the module's unexported schemas are still reported",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/barrel.ts": 'export * from "./barreled.ts";',
@@ -347,11 +347,11 @@ export const modulesReadWholeKeepEveryExport = Task.make(
       ).toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anImportOfATemplatePathWithoutExpressionsIsNamed = Task.make(
-  "import() on a template literal with no expressions names its module like a string does: that module's exports pass, and other exported schemas are still reported",
-  Effect.gen(function* () {
+export const anImportOfATemplatePathWithoutExpressionsIsNamed = Task.make({
+  name: "import() on a template literal with no expressions names its module like a string does: that module's exports pass, and other exported schemas are still reported",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "src/loaded.ts": typeReadSchema("LOADED"),
@@ -360,11 +360,11 @@ export const anImportOfATemplatePathWithoutExpressionsIsNamed = Task.make(
       }),
     ).toEqual([typeOnly("src/other.ts:3", "OTHER")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const exportedSchemasAreReportedWhateverLoadsThePackage = Task.make(
-  "a type-only schema is reported whether or not it is exported, in a package with main, module and exports entries pointing at its file, and when a file calls import() on a computed path; a local that shadows an export is reported on its own",
-  Effect.gen(function* () {
+export const exportedSchemasAreReportedWhateverLoadsThePackage = Task.make({
+  name: "a type-only schema is reported whether or not it is exported, in a package with main, module and exports entries pointing at its file, and when a file calls import() on a computed path; a local that shadows an export is reported on its own",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas({
         "package.json": yield* encodeJson({
@@ -394,11 +394,11 @@ export const local = () => {
       typeOnly("src/index.ts:8", "PRIVATE"),
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const filesOutsideTheProjectDoNotKeepExports = Task.make(
-  "a schema decoded only by a script outside the TypeScript project is still reported, because reads from files outside the TypeScript project do not count as uses",
-  Effect.gen(function* () {
+export const filesOutsideTheProjectDoNotKeepExports = Task.make({
+  name: "a schema decoded only by a script outside the TypeScript project is still reported, because reads from files outside the TypeScript project do not count as uses",
+  run: Effect.gen(function* () {
     expect(
       yield* typeOnlySchemas(
         {
@@ -412,4 +412,4 @@ export const decodeEntry = Schema.decodeUnknownSync(ENTRY);`,
       ),
     ).toEqual([typeOnly("src/entry.ts:3", "ENTRY"), typeOnly("src/typed.ts:3", "TYPED")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

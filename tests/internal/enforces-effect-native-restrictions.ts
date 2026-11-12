@@ -44,9 +44,9 @@ export default { jsPlugins: config.jsPlugins, rules: Object.fromEntries(restrict
     );
   }).pipe(Effect.scoped);
 
-export const rejectsNativeReplacementsOutsideEffect = Task.make(
-  "JSON and timers are rejected",
-  Effect.gen(function* () {
+export const rejectsNativeReplacementsOutsideEffect = Task.make({
+  name: "JSON and timers are rejected",
+  run: Effect.gen(function* () {
     const failure = yield* lintRestrictions(`export const decoded = JSON.parse("1");
 export const encoded = JSON.stringify(1);
 export const timer = setTimeout(() => undefined, 1);
@@ -57,11 +57,11 @@ export const timer = setTimeout(() => undefined, 1);
       "main.ts:3:22: error sshkeda(no-timer-globals): global setTimeout is used",
     );
   }),
-);
+});
 
-export const rejectsDateNowLikeOtherClockReads = Task.make(
-  "Date.now is rejected like the performance global, process.hrtime, process.uptime, Bun.nanoseconds, AbortSignal.timeout and Bun.sleepSync, including when passed as a value",
-  Effect.gen(function* () {
+export const rejectsDateNowLikeOtherClockReads = Task.make({
+  name: "Date.now is rejected like the performance global, process.hrtime, process.uptime, Bun.nanoseconds, AbortSignal.timeout and Bun.sleepSync, including when passed as a value",
+  run: Effect.gen(function* () {
     const failure = yield* lintRestrictions(`import { Effect } from "effect";
 export const startedAt = Date.now();
 export const readClock = Effect.sync(Date.now);
@@ -85,20 +85,20 @@ export const paused = Bun.sleepSync(1);
       expect(failure.message).toContain(`sshkeda(no-clock-reads-and-sleeps): ${member} is banned`);
     }
   }),
-);
+});
 
-export const allowsLocalObjectsWithClockPropertyNames = Task.make(
-  "local process and Bun objects with clock method names pass the preset's clock restrictions",
-  lintRestrictions(`const process = { uptime: () => 7, hrtime: () => 9 };
+export const allowsLocalObjectsWithClockPropertyNames = Task.make({
+  name: "local process and Bun objects with clock method names pass the preset's clock restrictions",
+  run: lintRestrictions(`const process = { uptime: () => 7, hrtime: () => 9 };
 const Bun = { nanoseconds: () => 11, sleepSync: () => 13 };
 const AbortSignal = { timeout: () => 17 };
 export const values = [process.uptime(), process.hrtime(), Bun.nanoseconds(), Bun.sleepSync(), AbortSignal.timeout()];
 `).pipe(Effect.asVoid),
-);
+});
 
-export const rejectsBunImportsOfRestrictedMembers = Task.make(
-  "bun imports of restricted Bun and process members are rejected by no-restricted-imports, and their re-exports by no-re-exports",
-  Effect.gen(function* () {
+export const rejectsBunImportsOfRestrictedMembers = Task.make({
+  name: "bun imports of restricted Bun and process members are rejected by no-restricted-imports, and their re-exports by no-re-exports",
+  run: Effect.gen(function* () {
     const failure = yield* lintRestrictions(`import { file } from "bun";
 import { exitCode } from "node:process";
 export { write } from "bun";
@@ -115,21 +115,21 @@ export const code = exitCode;
       "eslint(no-restricted-imports): 'exitCode' import from 'node:process' is restricted.",
     );
   }),
-);
+});
 
-export const rejectsGetBuiltinModule = Task.make(
-  "process.getBuiltinModule is rejected outright so it cannot load banned built-ins",
-  Effect.gen(function* () {
+export const rejectsGetBuiltinModule = Task.make({
+  name: "process.getBuiltinModule is rejected outright so it cannot load banned built-ins",
+  run: Effect.gen(function* () {
     const failure =
       yield* lintRestrictions(`export const childProcess = process.getBuiltinModule("node:child_process");
 `).pipe(failureAsValue);
     expect(failure.message).toContain("'process.getBuiltinModule' is restricted");
   }),
-);
+});
 
-export const rejectsParsingWithoutASchema = Task.make(
-  "json() bodies, parseInt, parseFloat and Schema.Any are rejected however they are reached, while json with arguments, Effect's own parsers and lookalikes pass",
-  ruleTest("no-unchecked-parsing", {
+export const rejectsParsingWithoutASchema = Task.make({
+  name: "json() bodies, parseInt, parseFloat and Schema.Any are rejected however they are reached, while json with arguments, Effect's own parsers and lookalikes pass",
+  run: ruleTest("no-unchecked-parsing", {
     valid: [
       'import { Schema } from "effect"; Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Number))(text);',
       'import { Schema } from "other"; Schema.Any;',
@@ -155,11 +155,11 @@ export const rejectsParsingWithoutASchema = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "uncheckedSchema" }] })),
     ],
   }),
-);
+});
 
-export const allowsLocallyImplementedJsonMethods = Task.make(
-  "locally implemented json methods pass, while unchecked parsing inside them is rejected",
-  ruleTest("no-unchecked-parsing", {
+export const allowsLocallyImplementedJsonMethods = Task.make({
+  name: "locally implemented json methods pass, while unchecked parsing inside them is rejected",
+  run: ruleTest("no-unchecked-parsing", {
     valid: [
       "const encoder = { json() { return { count: 1 }; } }; encoder.json();",
       "const encoder = { json: () => ({ count: 1 }) }; encoder.json();",
@@ -173,11 +173,11 @@ export const allowsLocallyImplementedJsonMethods = Task.make(
       },
     ],
   }),
-);
+});
 
-export const allowsJsonPromisesDecodedWithThen = Task.make(
-  "json promises passed straight to a Schema decoder through then pass, while transforms and lookalike decoders are rejected",
-  ruleTest("no-unchecked-parsing", {
+export const allowsJsonPromisesDecodedWithThen = Task.make({
+  name: "json promises passed straight to a Schema decoder through then pass, while transforms and lookalike decoders are rejected",
+  run: ruleTest("no-unchecked-parsing", {
     valid: [
       'import { Schema } from "effect"; response.json().then(Schema.decodeUnknownSync(Body));',
       'import { decodeUnknownPromise } from "effect/Schema"; response.json().then(decodeUnknownPromise(Body));',
@@ -190,11 +190,11 @@ export const allowsJsonPromisesDecodedWithThen = Task.make(
       'import { Schema } from "effect"; other(Schema.decodeUnknownSync(Body), response.json().then);',
     ].map((code) => ({ code, errors: [{ messageId: "jsonBody" }] })),
   }),
-);
+});
 
-export const allowsParsingNoSchemaReplaces = Task.make(
-  "parseInt with a radix no Schema decodes, and a json() body that goes straight into a Schema decoder or an unknown binding, pass, while decimal parses and other json() uses are rejected",
-  ruleTest("no-unchecked-parsing", {
+export const allowsParsingNoSchemaReplaces = Task.make({
+  name: "parseInt with a radix no Schema decodes, and a json() body that goes straight into a Schema decoder or an unknown binding, pass, while decimal parses and other json() uses are rejected",
+  run: ruleTest("no-unchecked-parsing", {
     valid: [
       "Number.parseInt(digits, 16);",
       "parseInt(octet, 0x10);",
@@ -239,4 +239,4 @@ export const allowsParsingNoSchemaReplaces = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "jsonBody" }] })),
     ],
   }),
-);
+});

@@ -1,13 +1,9 @@
 import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Option, Path, Predicate, References, Result, Schema } from "effect";
-import { parseSync, Visitor } from "oxc-parser";
-import type { CallExpression, Expression, ParseResult, Statement } from "oxc-parser";
+import { parseSync } from "oxc-parser";
+import type { ParseResult, Statement } from "oxc-parser";
 
-import {
-  TASK_PACKAGE,
-  TASK_NAMESPACE_EXPORT,
-  TASK_MAIN_MEMBER,
-} from "../../../../../shared/bans-each-permission-lifts.ts";
+import { TASK_PACKAGE } from "../../../../../shared/bans-each-permission-lifts.ts";
 import { retiredWordIn } from "../../../../../shared/find-retired-words.ts";
 import {
   isEntryFileName,
@@ -65,7 +61,6 @@ import {
   JSON_OBJECT,
   packageManifestObject,
 } from "../../../shared/read-package-manifest-object.ts";
-import { absolutePathOf } from "../../../shared/resolve-absolute-paths.ts";
 import { toolFileOf, toolFileIsPlaced } from "../../../shared/tool-file-locations.ts";
 import {
   BunTestFileName,
@@ -93,8 +88,7 @@ import {
   MisplacedToolFile,
   TopLevelNonScript,
   TopLevelScriptHoldsOtherStatement,
-  TopLevelScriptWithMainAndDefaultExport,
-  TopLevelScriptWithoutMain,
+  TopLevelScriptWithoutDefaultExport,
   UngrantedDocument,
   UngrantedDirectory,
   UnlistedPatchGranted,
@@ -111,7 +105,6 @@ import {
   modulesWithLayoutDirectoryNamesAmong,
   moduleWithLayoutDirectoryNameViolations,
 } from "./find-module-layout-violations.ts";
-import { taskImportsIn, isTaskLayoutFile } from "./resolve-task-imports.ts";
 
 const KEBAB_CASE_PART = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const BUN_TEST_FILE_EXTENSION = /\.(?:test|spec)(?<extension>\.[^.]+)$/u;
@@ -163,146 +156,12 @@ export const pathViolations = (path: string, isNamedByBunPatch = false) => {
   return violations;
 };
 
-const directTaskImports = (parsed: ParseResult) =>
-  new Map(
-    parsed.module.staticImports
-      .filter((declaration) => declaration.moduleRequest.value === TASK_PACKAGE)
-      .flatMap((declaration) =>
-        declaration.entries
-          .filter((entry) => !entry.isType)
-          .map(
-            (entry) =>
-              [
-                entry.localName.value,
-                entry.importName.kind === "NamespaceObject" ? [] : [entry.importName.name ?? ""],
-              ] as const,
-          ),
-      ),
-  );
-
-const callsTaskMember = (
-  parsed: ParseResult,
-  member: string,
-  imports: ReadonlyMap<string, readonly string[]>,
-) => {
-  const calls: CallExpression[] = [];
-  const aliases = new Map<string, Expression>();
-  new Visitor({
-    CallExpression(node) {
-      calls.push(node);
-    },
-    VariableDeclarator({ id, init: initializer }) {
-      const isNamedInitializer = id.type === "Identifier" && initializer !== null;
-      if (isNamedInitializer) {
-        aliases.set(id.name, initializer);
-      }
-    },
-  }).visit(parsed.program);
-  const taskReference = (
-    expression: Expression,
-    seen: ReadonlySet<string> = new Set(),
-  ): readonly string[] | undefined => {
-    if (expression.type === "Identifier") {
-      const imported = imports.get(expression.name);
-      if (imported !== undefined) {
-        return imported;
-      }
-      const alias = aliases.get(expression.name);
-      const isUnfollowedAlias = alias !== undefined && !seen.has(expression.name);
-      return isUnfollowedAlias
-        ? taskReference(alias, new Set([...seen, expression.name]))
-        : undefined;
-    }
-    const isStaticMember =
-      expression.type === "MemberExpression" &&
-      !expression.computed &&
-      expression.property.type === "Identifier";
-    if (!isStaticMember) {
-      return;
-    }
-    const object = taskReference(expression.object, seen);
-    return object === undefined ? undefined : [...object, expression.property.name];
-  };
-  return calls.some(
-    ({ callee }) => taskReference(callee)?.join(".") === `${TASK_NAMESPACE_EXPORT}.${member}`,
-  );
-};
-
-const importedMemberPath = (
-  expression: Expression,
-  imports: ReadonlyMap<string, readonly string[]>,
-): readonly string[] | undefined => {
-  if (expression.type === "Identifier") {
-    return imports.get(expression.name);
-  }
-  const isStaticMember =
-    expression.type === "MemberExpression" &&
-    !expression.computed &&
-    expression.property.type === "Identifier";
-  if (!isStaticMember) {
-    return;
-  }
-  const object = importedMemberPath(expression.object, imports);
-  return object === undefined ? undefined : [...object, expression.property.name];
-};
-
-const isMainGuard = (statement: Statement, imports: ReadonlyMap<string, readonly string[]>) => {
-  if (statement.type !== "IfStatement") {
-    return false;
-  }
-  const { test, consequent, alternate } = statement;
-  const testsImportMetaMain =
-    test.type === "MemberExpression" &&
-    !test.computed &&
-    test.object.type === "MetaProperty" &&
-    test.object.meta.name === "import" &&
-    test.object.property.name === "meta" &&
-    test.property.type === "Identifier" &&
-    test.property.name === "main";
-  const [only, ...others] = consequent.type === "BlockStatement" ? consequent.body : [];
-  const expression = only?.type === "ExpressionStatement" ? only.expression : undefined;
-  const call = expression?.type === "CallExpression" ? expression : undefined;
-  const [task, ...otherArguments] = call?.arguments ?? [];
-  const runsOneNamedTask =
-    call !== undefined &&
-    others.length === 0 &&
-    otherArguments.length === 0 &&
-    task?.type === "Identifier" &&
-    importedMemberPath(call.callee, imports)?.join(".") ===
-      `${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER}`;
-  return testsImportMetaMain && alternate === null && runsOneNamedTask;
-};
-
 const isDefaultExport = (statement: Statement) =>
   statement.type === "ExportDefaultDeclaration" &&
   statement.declaration.type !== "TSInterfaceDeclaration";
 
 const statementsOtherThanImports = (parsed: ParseResult) =>
   parsed.program.body.filter((statement) => statement.type !== "ImportDeclaration");
-
-const statementsOtherThanImportsAndMain = (
-  parsed: ParseResult,
-  imports: ReadonlyMap<string, readonly string[]>,
-) => {
-  const nonImports = statementsOtherThanImports(parsed);
-  const firstGuard = nonImports.findIndex((statement) => isMainGuard(statement, imports));
-  return nonImports.filter((_statement, index) => index !== firstGuard);
-};
-
-const mainScriptViolations = (
-  path: string,
-  text: string,
-  parsed: ParseResult,
-  imports: ReadonlyMap<string, readonly string[]>,
-) => {
-  const lineAt = lineNumbersIn(text);
-  return statementsOtherThanImportsAndMain(parsed, imports).map((statement) => {
-    const location = `${path}:${lineAt(statement.start)}`;
-    return isDefaultExport(statement)
-      ? new TopLevelScriptWithMainAndDefaultExport({ location })
-      : new TopLevelScriptHoldsOtherStatement({ location, entryPoint: "main-guard" });
-  });
-};
 
 const defaultExportScriptViolations = (path: string, text: string, parsed: ParseResult) => {
   const lineAt = lineNumbersIn(text);
@@ -312,23 +171,16 @@ const defaultExportScriptViolations = (path: string, text: string, parsed: Parse
       (statement) =>
         new TopLevelScriptHoldsOtherStatement({
           location: `${path}:${lineAt(statement.start)}`,
-          entryPoint: "default-export",
         }),
     );
 };
 
-export const sourceViolations = (
-  path: string,
-  text: string,
-  resolvedImports?: ReadonlyMap<string, readonly string[]>,
-  isListedUnderBin = false,
-) => {
+export const sourceViolations = (path: string, text: string, isListedUnderBin = false) => {
   const violations: (
     | MisplacedAtPackageRoot
     | SourceOutsideInternalOrShared
     | TopLevelScriptHoldsOtherStatement
-    | TopLevelScriptWithMainAndDefaultExport
-    | TopLevelScriptWithoutMain
+    | TopLevelScriptWithoutDefaultExport
   )[] = [];
   const isMisplacedTool = toolFileOf(path) !== undefined && !toolFileIsPlaced(path);
   if (isMisplacedTool) {
@@ -348,32 +200,21 @@ export const sourceViolations = (
     violations.push(new SourceOutsideInternalOrShared({ location: path }));
   }
 
-  const parsed = parseSync(path, text);
-  const imports = resolvedImports ?? directTaskImports(parsed);
   const isRootCodeFile = !path.includes("/") && !isRootSupportFile(path);
   if (isRootCodeFile) {
-    violations.push(
-      new MisplacedAtPackageRoot({
-        location: path,
-        place: callsTaskMember(parsed, TASK_MAIN_MEMBER, imports)
-          ? "root-task-script"
-          : "root-code-file",
-      }),
-    );
+    violations.push(new MisplacedAtPackageRoot({ location: path, place: "root-code-file" }));
   }
   const isTaskScript = isTopLevelScript(path) && !isListedUnderBin;
   if (!isTaskScript) {
     return violations;
   }
-  const callsMain = callsTaskMember(parsed, TASK_MAIN_MEMBER, imports);
+  const parsed = parseSync(path, text);
   const hasDefaultExport = parsed.program.body.some((statement) => isDefaultExport(statement));
-  if (callsMain) {
-    violations.push(...mainScriptViolations(path, text, parsed, imports));
-  } else if (hasDefaultExport) {
-    violations.push(...defaultExportScriptViolations(path, text, parsed));
-  } else {
-    violations.push(new TopLevelScriptWithoutMain({ location: path }));
-  }
+  violations.push(
+    ...(hasDefaultExport
+      ? defaultExportScriptViolations(path, text, parsed)
+      : [new TopLevelScriptWithoutDefaultExport({ location: path })]),
+  );
   return violations;
 };
 
@@ -852,18 +693,10 @@ export const findFileLayoutViolations = (directory: string) =>
             return found;
           }
           const text = yield* fileSystem.readFileString(pathModule.join(directory, path));
-          const absoluteDirectory = yield* absolutePathOf(directory);
-          const imports = isTaskLayoutFile(path)
-            ? yield* taskImportsIn(
-                pathModule.join(absoluteDirectory, path),
-                text,
-                absoluteDirectory,
-              )
-            : undefined;
           return [
             ...found,
             ...(isScriptFile
-              ? sourceViolations(path, text, imports, binaryFiles.has(path))
+              ? sourceViolations(path, text, binaryFiles.has(path))
               : yield* manifestViolations(path, text, repository)),
           ];
         }),

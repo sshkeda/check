@@ -24,9 +24,9 @@ const inModule = (...declarations: readonly string[]) => [IMPORTS, ...declaratio
 
 const NOTHING_GRANTED = inModule("export const VALUE = 1;");
 
-export const codeGrantsNothingUsesAreReported = Task.make(
-  "no-unused-code-grants reports each granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes once when no rule it lifts or relaxes would report anything in the file, counting only rules that run where the file sits",
-  ruleTest("no-unused-code-grants", {
+export const codeGrantsNothingUsesAreReported = Task.make({
+  name: "no-unused-code-grants reports each granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes once when no rule it lifts or relaxes would report anything in the file, counting only rules that run where the file sits",
+  run: ruleTest("no-unused-code-grants", {
     valid: [
       NOTHING_GRANTED,
       {
@@ -122,4 +122,4 @@ export const codeGrantsNothingUsesAreReported = Task.make(
       },
     ],
   }),
-);
+});

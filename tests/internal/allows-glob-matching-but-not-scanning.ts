@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const allowsGlobMatchingButNotScanning = Task.make(
-  "no-glob-scan allows Bun.Glob string matching and rejects directory scanning, and finishes on a variable initialized from itself",
-  ruleTest("no-glob-scan", {
+export const allowsGlobMatchingButNotScanning = Task.make({
+  name: "no-glob-scan allows Bun.Glob string matching and rejects directory scanning, and finishes on a variable initialized from itself",
+  run: ruleTest("no-glob-scan", {
     valid: [
       'new Bun.Glob("**/*.ts").match("src/index.ts");',
       'const pattern = new Bun.Glob("**/*.ts"); pattern.match("src/index.ts");',
@@ -34,4 +34,4 @@ export const allowsGlobMatchingButNotScanning = Task.make(
       'new Bun.Glob("*.ts")["scan"](".");',
     ].map((code) => ({ code, errors: [{ messageId: "scan" }] })),
   }),
-);
+});

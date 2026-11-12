@@ -53,9 +53,9 @@ const violations = (source: string, otherFiles: Readonly<Record<string, string>>
     );
   }).pipe(Effect.scoped);
 
-export const annotationsMatchingTheInferredTypeAreReported = Task.make(
-  "annotations on constants and callback returns that TypeScript infers identically without an error are reported",
-  Effect.gen(function* () {
+export const annotationsMatchingTheInferredTypeAreReported = Task.make({
+  name: "annotations on constants and callback returns that TypeScript infers identically without an error are reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`const total: number = [1, 2].length;
 export const entries: Map<string, number> = new Map([["a", 1]]);
@@ -79,11 +79,11 @@ export const levels: Set<Level> = new Set([Level.Low]);
       `source.ts:10:22: error InferrableTypeAnnotation: levels has a type annotation TypeScript can infer`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const valuesEndingInAnEmptyArrayAreJudgedWithoutTheirAnnotation = Task.make(
-  "an annotated value that can end in an empty array literal, through a conditional, a comma, parentheses, ! or satisfies, gets the verdict of the stripped program",
-  Effect.gen(function* () {
+export const valuesEndingInAnEmptyArrayAreJudgedWithoutTheirAnnotation = Task.make({
+  name: "an annotated value that can end in an empty array literal, through a conditional, a comma, parentheses, ! or satisfies, gets the verdict of the stripped program",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`declare const b: boolean;
 export const pick: [] = b ? [] : [];
@@ -101,11 +101,11 @@ export const viaComma = [1].map((): [] => (0, []));
       `source.ts:8:23: error InferrableTypeAnnotation: checked has a type annotation TypeScript can infer`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const callbacksReturningAnEmptyArrayBranchAreReported = Task.make(
-  "a callback whose returned value can be an empty array literal is reported when removing its never[] | [string, ...string[]] annotation keeps that type",
-  Effect.gen(function* () {
+export const callbacksReturningAnEmptyArrayBranchAreReported = Task.make({
+  name: "a callback whose returned value can be an empty array literal is reported when removing its never[] | [string, ...string[]] annotation keeps that type",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`declare const results: ReadonlyArray<{ readonly failed: boolean; readonly failure: [string, ...string[]] }>;
 export const failures = results.flatMap((result): never[] | [string, ...string[]] =>
@@ -116,11 +116,11 @@ export const failures = results.flatMap((result): never[] | [string, ...string[]
       `source.ts:2:51: error InferrableTypeAnnotation: the callback passed to flatMap has a return type annotation TypeScript can infer`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const neighboursOfACallbackReturningAnyAreReported = Task.make(
-  "a callback that returns any keeps its annotation, and a callback in the same declaration whose annotation can be removed is still reported",
-  Effect.gen(function* () {
+export const neighboursOfACallbackReturningAnyAreReported = Task.make({
+  name: "a callback that returns any keeps its annotation, and a callback in the same declaration whose annotation can be removed is still reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`declare function g<T>(f: () => T): T;
 declare const text: string;
@@ -137,11 +137,11 @@ export const Holder = class { parsed = [text].map((value): number => JSON.parse(
       `source.ts:7:114: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const annotationsTypeScriptNeedsPass = Task.make(
-  "widening annotations and annotations whose removal adds an error or an any pass",
-  Effect.gen(function* () {
+export const annotationsTypeScriptNeedsPass = Task.make({
+  name: "widening annotations and annotations whose removal adds an error or an any pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`import { makeBox, type Box } from "./box.ts";
 export const measured: number = [1].map(() => measured).length;
@@ -169,11 +169,11 @@ export const none: [] = [];
 `),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const annotationsOutsideTheRulePass = Task.make(
-  "let, declare, parameters, type predicates, filled literals left to no-loose-literal-constants and primitive literals left to no-inferrable-types pass",
-  Effect.gen(function* () {
+export const annotationsOutsideTheRulePass = Task.make({
+  name: "let, declare, parameters, type predicates, filled literals left to no-loose-literal-constants and primitive literals left to no-inferrable-types pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`let count: number = [1].length;
 declare const VERSION: string;
@@ -186,11 +186,11 @@ count += numbers.length + read(greeting).length + Number(ready);
 `),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyARealAnyKeepsAnAnnotation = Task.make(
-  "a property named any and the string literal any do not keep an annotation, a real any does",
-  Effect.gen(function* () {
+export const onlyARealAnyKeepsAnAnnotation = Task.make({
+  name: "a property named any and the string literal any do not keep an annotation, a real any does",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(`export const counters = [1].map((value): { any: number } => ({ any: value }));
 const pickMode = (loose: boolean) => (loose ? "any" : "none");
@@ -203,11 +203,11 @@ export const loose = [1].map((value): Array<number> => JSON.parse(String(value))
       `source.ts:3:42: error InferrableTypeAnnotation: the callback passed to map has a return type annotation TypeScript can infer`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const annotationsThatChangeTypeKeepOnlyThemselves = Task.make(
-  "an annotation whose removal changes its type and adds errors in a file without annotations keeps only itself, and the other annotations are still reported",
-  Effect.gen(function* () {
+export const annotationsThatChangeTypeKeepOnlyThemselves = Task.make({
+  name: "an annotation whose removal changes its type and adds errors in a file without annotations keeps only itself, and the other annotations are still reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations(
         `export const ids: string[] = [];
@@ -219,4 +219,4 @@ export const total: number = [1, 2].length;
       `source.ts:2:21: error InferrableTypeAnnotation: total has a type annotation TypeScript can infer`,
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

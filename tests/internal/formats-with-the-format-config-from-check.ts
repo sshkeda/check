@@ -11,7 +11,6 @@ import {
   linkNodeModulesWithCheck,
   makeProject as makeProjectWith,
   PLUGIN,
-  RUNNER,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { runTaskFile } from "../shared/run-task-files.ts";
@@ -46,7 +45,7 @@ const repositoryWith = (
     const directory = path.join(parent, "repository");
     yield* linkNodeModulesWithCheck(directory);
     const files = {
-      "run.ts": `import { formatting } from ${yield* encodeJson(FORMATTING_TASK)};\nimport { Task } from ${yield* encodeJson(RUNNER)};\nTask.main(formatting);\n`,
+      "run.ts": `import { formatting } from ${yield* encodeJson(FORMATTING_TASK)};\nexport default formatting;\n`,
       ...filesByPath,
     };
     for (const [file, text] of Object.entries(files)) {
@@ -110,9 +109,9 @@ const unformattedFilesBy = (directory: string, taskStateDirectory: string) =>
     };
   });
 
-export const plainBunFormatFixesWhatCheckReports = Task.make(
-  "check reports the files that bun fmt --config=oxfmt.config.ts --disable-nested-config --list-different lists, and plain bun fmt --write from the root fixes them",
-  Effect.gen(function* () {
+export const plainBunFormatFixesWhatCheckReports = Task.make({
+  name: "check reports the files that bun fmt --config=oxfmt.config.ts --disable-nested-config --list-different lists, and plain bun fmt --write from the root fixes them",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository(UNSORTED_IMPORTS);
     const unformatted = yield* unformattedFilesBy(directory, taskStateDirectory);
     expect(unformatted.bunFormat).toEqual(["src/index.ts"]);
@@ -122,11 +121,11 @@ export const plainBunFormatFixesWhatCheckReports = Task.make(
     );
     expect(yield* outputIn(directory, taskStateDirectory, "bun run.ts")).toBe("passed");
   }).pipe(Effect.scoped),
-);
+});
 
-export const ignoresAnEditorConfigAboveTheRepository = Task.make(
-  "an .editorconfig above the repository that sets every option it can changes neither the bun fmt task nor plain bun fmt",
-  Effect.gen(function* () {
+export const ignoresAnEditorConfigAboveTheRepository = Task.make({
+  name: "an .editorconfig above the repository that sets every option it can changes neither the bun fmt task nor plain bun fmt",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository(
       { "src/index.ts": 'export const GREETING = "hello";\n' },
       {
@@ -139,15 +138,15 @@ export const ignoresAnEditorConfigAboveTheRepository = Task.make(
       "passed",
     );
   }).pipe(Effect.scoped),
-);
+});
 
 const UNFORMATTED_VALUE = "export   const VALUE=1\n";
 
 const FORMATTED_VALUE = "export const VALUE = 1;\n";
 
-export const formatsTheOnlyVisibleConfigFile = Task.make(
-  "formatting reports an unformatted oxfmt.config.ts when it is the only file git lists",
-  Effect.gen(function* () {
+export const formatsTheOnlyVisibleConfigFile = Task.make({
+  name: "formatting reports an unformatted oxfmt.config.ts when it is the only file git lists",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       ".gitignore": "*\n!oxfmt.config.ts\n",
       "oxfmt.config.ts":
@@ -161,11 +160,11 @@ export const formatsTheOnlyVisibleConfigFile = Task.make(
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
     expect(output).toContain("[bun-fmt] oxfmt.config.ts: error UnformattedFile: is not formatted");
   }).pipe(Effect.scoped),
-);
+});
 
-export const formatsWithTheRootConfigOnly = Task.make(
-  "a gitignored nested .oxfmtrc.json or oxfmt.config.ts does not change what check lists, because bun fmt formats every file with the root oxfmt.config.ts",
-  Effect.gen(function* () {
+export const formatsWithTheRootConfigOnly = Task.make({
+  name: "a gitignored nested .oxfmtrc.json or oxfmt.config.ts does not change what check lists, because bun fmt formats every file with the root oxfmt.config.ts",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       ".gitignore": "node_modules\nrun.ts\n.oxfmtrc.json\nsrc/nested/oxfmt.config.ts\n",
       "src/.oxfmtrc.json": '{ "semi": false }\n',
@@ -178,11 +177,11 @@ export const formatsWithTheRootConfigOnly = Task.make(
     expect(unformatted.bunFormat).toEqual(["src/nested/semicolonless.ts", "src/semicolonless.ts"]);
     expect(unformatted.check).toEqual(unformatted.bunFormat);
   }).pipe(Effect.scoped),
-);
+});
 
-export const reportsUnformattedFilesNextToAParseFailure = Task.make(
-  "a file bun fmt cannot parse is reported with the parse error, and the unformatted files bun fmt lists next to it are reported too",
-  Effect.gen(function* () {
+export const reportsUnformattedFilesNextToAParseFailure = Task.make({
+  name: "a file bun fmt cannot parse is reported with the parse error, and the unformatted files bun fmt lists next to it are reported too",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       "src/broken.ts": "export const VALUE = (;\n",
       "src/index.ts": UNFORMATTED_VALUE,
@@ -196,17 +195,17 @@ export const reportsUnformattedFilesNextToAParseFailure = Task.make(
     );
     expect(unformatted.checkOutput).toContain("src/broken.ts");
   }).pipe(Effect.scoped),
-);
+});
 
-export const formatsNestedPackagesToo = Task.make(
-  "check run at the root lists the files of a nested package too, so its list equals what plain bun fmt lists from the root, the nested package's own check lists them from that package, and both name a competing config in the nested package",
-  Effect.gen(function* () {
+export const formatsNestedPackagesToo = Task.make({
+  name: "check run at the root lists the files of a nested package too, so its list equals what plain bun fmt lists from the root, the nested package's own check lists them from that package, and both name a competing config in the nested package",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
       "nested/package.json": '{\n  "name": "nested"\n}\n',
       "nested/oxfmt.config.ts": FORMAT_CONFIG_TEXT,
-      "nested/run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { formatting } from ${yield* encodeJson(FORMATTING_TASK)};\nTask.main(formatting);\n`,
+      "nested/run.ts": `import { formatting } from ${yield* encodeJson(FORMATTING_TASK)};\nexport default formatting;\n`,
       ...Object.fromEntries(
         Object.entries(UNSORTED_IMPORTS).map(([file, text]) => [`nested/${file}`, text]),
       ),
@@ -237,11 +236,11 @@ export const formatsNestedPackagesToo = Task.make(
       ".oxfmtrc.json: error CompetingFormatterConfig: competes with oxfmt.config.ts",
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const neverPassesFromAnEarlierRun = Task.make(
-  "check runs bun fmt on every run, so after each edit it lists what bun fmt lists",
-  Effect.gen(function* () {
+export const neverPassesFromAnEarlierRun = Task.make({
+  name: "check runs bun fmt on every run, so after each edit it lists what bun fmt lists",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
@@ -261,7 +260,7 @@ export const neverPassesFromAnEarlierRun = Task.make(
       expect(afterEdit.check).toEqual(afterEdit.bunFormat);
     }
   }).pipe(Effect.scoped),
-);
+});
 
 const FORMAT_CONFIG_ERROR =
   /^(?:\[format-inputs\] |\[bun-fmt\] (?=oxfmt\.config\.ts))(?<violation>.*\berror \w+: .*)$/u;
@@ -288,9 +287,9 @@ const HOLDS_SOMETHING_ELSE =
 const RETIRED_FORMAT_CONFIG_CALL =
   'import { formatConfig } from "@sshkeda/check";\n\nexport default formatConfig();\n';
 
-export const acceptsOnlyTheFormatConfigOfCheck = Task.make(
-  "oxfmt.config.ts must hold only the FORMAT_CONFIG import and its default export, and anything else is one violation that names that text",
-  Effect.gen(function* () {
+export const acceptsOnlyTheFormatConfigOfCheck = Task.make({
+  name: "oxfmt.config.ts must hold only the FORMAT_CONFIG import and its default export, and anything else is one violation that names that text",
+  run: Effect.gen(function* () {
     expect(yield* formatConfigViolations(FORMAT_CONFIG_TEXT)).toEqual([]);
     expect(
       yield* formatConfigViolations(
@@ -321,11 +320,11 @@ export const acceptsOnlyTheFormatConfigOfCheck = Task.make(
       "oxfmt.config.ts: error ConfigFileUnparsable: does not parse: ",
     );
   }),
-);
+});
 
-export const acceptsFormatConfigOnlyFromCheck = Task.make(
-  "FORMAT_CONFIG imported from a file outside @sshkeda/check is refused",
-  Effect.gen(function* () {
+export const acceptsFormatConfigOnlyFromCheck = Task.make({
+  name: "FORMAT_CONFIG imported from a file outside @sshkeda/check is refused",
+  run: Effect.gen(function* () {
     expect(
       yield* formatConfigViolationsIn({
         "loose-format-config.ts": "export const FORMAT_CONFIG = { semi: false };\n",
@@ -343,7 +342,7 @@ export const acceptsFormatConfigOnlyFromCheck = Task.make(
       }),
     ).toEqual([HOLDS_SOMETHING_ELSE]);
   }),
-);
+});
 
 const TYPED_CHECK_SHIM =
   '{ "name": "@sshkeda/check", "type": "module", "exports": { "types": "./index.d.ts", "default": "./index.js" } }\n';
@@ -371,9 +370,9 @@ const wholeCheckOutputWithFormatConfig = (formatConfig: string) =>
     return yield* outputIn(directory, taskStateDirectory, yield* theCheckCommand);
   });
 
-export const reportsTheRetiredFormatConfigCallOnce = Task.make(
-  "a whole check run over a format config that still calls the retired formatConfig() prints one error, which names the text to write, while type-check, oxlint and bun fmt add none",
-  Effect.gen(function* () {
+export const reportsTheRetiredFormatConfigCallOnce = Task.make({
+  name: "a whole check run over a format config that still calls the retired formatConfig() prints one error, which names the text to write, while type-check, oxlint and bun fmt add none",
+  run: Effect.gen(function* () {
     const output = yield* wholeCheckOutputWithFormatConfig(RETIRED_FORMAT_CONFIG_CALL);
     const errors = output
       .split("\n")
@@ -385,11 +384,11 @@ export const reportsTheRetiredFormatConfigCallOnce = Task.make(
       HOLDS_SOMETHING_ELSE.replace("oxfmt.config.ts: error ", ""),
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const reportsAFormatConfigSyntaxErrorOnce = Task.make(
-  "a format config syntax error is reported only by bun-fmt, while directives and export placement leave that refused config to formatting",
-  Effect.gen(function* () {
+export const reportsAFormatConfigSyntaxErrorOnce = Task.make({
+  name: "a format config syntax error is reported only by bun-fmt, while directives and export placement leave that refused config to formatting",
+  run: Effect.gen(function* () {
     const output = yield* wholeCheckOutputWithFormatConfig("export default {\n");
     const errors = output
       .split("\n")
@@ -398,11 +397,11 @@ export const reportsAFormatConfigSyntaxErrorOnce = Task.make(
       "[bun-fmt] oxfmt.config.ts: error ConfigFileUnparsable: does not parse: Expected `}` but found `EOF`",
     ]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const reportsTypeErrorsInAFormatConfigCheckAccepts = Task.make(
-  "a format config that holds the FORMAT_CONFIG import and export but also a reference to a missing file still fails type-check and oxlint, since only a config the format check refuses has its type and lint errors left to that check",
-  Effect.gen(function* () {
+export const reportsTypeErrorsInAFormatConfigCheckAccepts = Task.make({
+  name: "a format config that holds the FORMAT_CONFIG import and export but also a reference to a missing file still fails type-check and oxlint, since only a config the format check refuses has its type and lint errors left to that check",
+  run: Effect.gen(function* () {
     const output = yield* wholeCheckOutputWithFormatConfig(
       `/// <reference path="./missing.d.ts" />\n${FORMAT_CONFIG_TEXT}`,
     );
@@ -414,7 +413,7 @@ export const reportsTypeErrorsInAFormatConfigCheckAccepts = Task.make(
     );
     expect(output).not.toContain("ConfigFileHoldsSomethingElse");
   }).pipe(Effect.scoped),
-);
+});
 
 const COMPETING_FORMATTER_CONFIGS = [
   ".oxfmtrc.json",
@@ -430,9 +429,9 @@ const COMPETING_FORMATTER_CONFIGS = [
   "docs/.prettierignore",
 ] as const;
 
-export const reportsEveryOtherFormatterConfigInThePackage = Task.make(
-  "every oxfmt or Prettier config and .prettierignore that git lists in the package other than the root oxfmt.config.ts is reported, and so are a gitignored .prettierignore at the root and a prettier field in a package.json, while files in gitignored directories and node_modules and an .editorconfig pass, and a nested package's competing configs are reported at their path in that package",
-  Effect.gen(function* () {
+export const reportsEveryOtherFormatterConfigInThePackage = Task.make({
+  name: "every oxfmt or Prettier config and .prettierignore that git lists in the package other than the root oxfmt.config.ts is reported, and so are a gitignored .prettierignore at the root and a prettier field in a package.json, while files in gitignored directories and node_modules and an .editorconfig pass, and a nested package's competing configs are reported at their path in that package",
+  run: Effect.gen(function* () {
     expect(
       yield* formatConfigViolationsIn({
         ".gitignore": "node_modules\nrun.ts\nignored\n.claude/worktrees\n/.prettierignore\n",
@@ -456,7 +455,7 @@ export const reportsEveryOtherFormatterConfigInThePackage = Task.make(
       'nested/package.json: error PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
     ]);
   }),
-);
+});
 
 const gitIn = (directory: string, gitArguments: readonly string[]) =>
   Task.exec("git", gitArguments, { cwd: directory });
@@ -470,9 +469,9 @@ const unformattedLinesIn = (output: string) =>
 const ROOT_PRETTIER_IGNORE_REPORT =
   "[format-inputs] .prettierignore: error CompetingFormatterConfig: competes with oxfmt.config.ts";
 
-export const formatsExactlyTheFilesGitLists = Task.make(
-  "check formats every file git lists and no other: a tracked file that .gitignore, a nested .gitignore or .git/info/exclude matches is listed, a file .prettierignore names is left to bun fmt, which skips it, while the .prettierignore is reported, an untracked file that core.excludesFile matches is not, and a tracked file of a nested package that its .gitignore matches is listed too",
-  Effect.gen(function* () {
+export const formatsExactlyTheFilesGitLists = Task.make({
+  name: "check formats every file git lists and no other: a tracked file that .gitignore, a nested .gitignore or .git/info/exclude matches is listed, a file .prettierignore names is left to bun fmt, which skips it, while the .prettierignore is reported, an untracked file that core.excludesFile matches is not, and a tracked file of a nested package that its .gitignore matches is listed too",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository(
@@ -519,11 +518,11 @@ export const formatsExactlyTheFilesGitLists = Task.make(
     ]);
     expect(linesOfTag(output, "CompetingFormatterConfig")).toEqual([ROOT_PRETTIER_IGNORE_REPORT]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const refusesIgnoredCompetingConfigsAtTheRoot = Task.make(
-  "a gitignored competing config at the root is reported, because bun fmt and editors find it on disk, and plain bun fmt refuses a root .oxfmtrc.json next to oxfmt.config.ts",
-  Effect.gen(function* () {
+export const refusesIgnoredCompetingConfigsAtTheRoot = Task.make({
+  name: "a gitignored competing config at the root is reported, because bun fmt and editors find it on disk, and plain bun fmt refuses a root .oxfmtrc.json next to oxfmt.config.ts",
+  run: Effect.gen(function* () {
     const ignoredAtTheRoot = [".oxfmtrc.json", ".oxfmtrc.jsonc", ".prettierrc", "oxfmt.config.mts"];
     const { directory, taskStateDirectory } = yield* formattedRepository({
       ".gitignore": `node_modules\nrun.ts\n${ignoredAtTheRoot.map((file) => `/${file}`).join("\n")}\n`,
@@ -543,11 +542,11 @@ export const refusesIgnoredCompetingConfigsAtTheRoot = Task.make(
         ),
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const leavesSymbolicLinksToTheFilesBehindThem = Task.make(
-  "a tracked, untracked or unstaged symbolic link is neither refused nor passed to bun fmt, so a file outside the package is not formatted and a file in the package is listed once under its own path",
-  Effect.gen(function* () {
+export const leavesSymbolicLinksToTheFilesBehindThem = Task.make({
+  name: "a tracked, untracked or unstaged symbolic link is neither refused nor passed to bun fmt, so a file outside the package is not formatted and a file in the package is listed once under its own path",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository(
@@ -564,11 +563,11 @@ export const leavesSymbolicLinksToTheFilesBehindThem = Task.make(
     expect(output).not.toContain("SymbolicLink");
     expect(unformattedLinesIn(output)).toEqual(["src/index.ts"]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const runsBunFormatNextToACompetingConfig = Task.make(
-  "a competing config does not stop bun fmt, so one run reports both the competing config and the unformatted files",
-  Effect.gen(function* () {
+export const runsBunFormatNextToACompetingConfig = Task.make({
+  name: "a competing config does not stop bun fmt, so one run reports both the competing config and the unformatted files",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       ".prettierrc": "{}\n",
       "package.json": '{\n  "name": "formatted",\n  "prettier": {}\n}\n',
@@ -583,11 +582,11 @@ export const runsBunFormatNextToACompetingConfig = Task.make(
     );
     expect(output).toContain("[bun-fmt] src/index.ts: error UnformattedFile: is not formatted");
   }).pipe(Effect.scoped),
-);
+});
 
-export const checksFormatInputsWhenTheFormatConfigIsRefused = Task.make(
-  "a refused format config stops only bun fmt, which says why, while the competing configs are still reported",
-  Effect.gen(function* () {
+export const checksFormatInputsWhenTheFormatConfigIsRefused = Task.make({
+  name: "a refused format config stops only bun fmt, which says why, while the competing configs are still reported",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       ".prettierrc": "{}\n",
       "oxfmt.config.ts": `${IMPORT}export default { semi: false };\n`,
@@ -601,11 +600,11 @@ export const checksFormatInputsWhenTheFormatConfigIsRefused = Task.make(
     expect(output).not.toContain("AwaitedTaskFailed");
     expect(output).not.toContain("UnformattedFile");
   }).pipe(Effect.scoped),
-);
+});
 
-export const reportsTheRootPrettierIgnoreBunFormatOpens = Task.make(
-  "a root .prettierignore that bun fmt opens under another case, tracked as .PRETTIERIGNORE or gitignored as .Prettierignore, is reported whenever bun fmt reads it",
-  Effect.gen(function* () {
+export const reportsTheRootPrettierIgnoreBunFormatOpens = Task.make({
+  name: "a root .prettierignore that bun fmt opens under another case, tracked as .PRETTIERIGNORE or gitignored as .Prettierignore, is reported whenever bun fmt reads it",
+  run: Effect.gen(function* () {
     for (const { file, tracked } of [
       { file: ".PRETTIERIGNORE", tracked: true },
       { file: ".Prettierignore", tracked: false },
@@ -629,11 +628,11 @@ export const reportsTheRootPrettierIgnoreBunFormatOpens = Task.make(
       ).toEqual(bunFormatReadsIt ? [ROOT_PRETTIER_IGNORE_REPORT] : []);
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const formatsTrackedFilesThatACaseVariantGitignoreMatches = Task.make(
-  "a tracked file that a case-variant .GITIGNORE matches is formatted and listed, because check passes bun fmt every file git lists instead of predicting which ones bun fmt's ignore rules skip",
-  Effect.gen(function* () {
+export const formatsTrackedFilesThatACaseVariantGitignoreMatches = Task.make({
+  name: "a tracked file that a case-variant .GITIGNORE matches is formatted and listed, because check passes bun fmt every file git lists instead of predicting which ones bun fmt's ignore rules skip",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* repositoryWith({
       ".GITIGNORE": "node_modules\nrun.ts\nsrc/ignored.ts\n",
       "package.json": '{\n  "name": "formatted"\n}\n',
@@ -645,11 +644,11 @@ export const formatsTrackedFilesThatACaseVariantGitignoreMatches = Task.make(
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
     expect(unformattedLinesIn(output)).toEqual(["src/ignored.ts"]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const leavesInstalledPackagesOutOfThePackagesItChecks = Task.make(
-  "a package installed in a node_modules directory that git does not ignore is not checked as a nested package, so check asks it for no oxfmt.config.ts and formats the files of the package that runs it",
-  Effect.gen(function* () {
+export const leavesInstalledPackagesOutOfThePackagesItChecks = Task.make({
+  name: "a package installed in a node_modules directory that git does not ignore is not checked as a nested package, so check asks it for no oxfmt.config.ts and formats the files of the package that runs it",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* repositoryWith({
       ".gitignore": "run.ts\n",
       "package.json": '{\n  "name": "formatted"\n}\n',
@@ -660,11 +659,11 @@ export const leavesInstalledPackagesOutOfThePackagesItChecks = Task.make(
     expect(output).not.toContain("ConfigFileMissing");
     expect(unformattedLinesIn(output)).toEqual(["src/index.ts"]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const reportsPathsBunFormatCannotPrintExactlyNextToTheOthers = Task.make(
-  "a file whose path has a line break, a carriage return, a tab, a backslash or a leading ! is formatted and reported next to the other files, because check passes bun fmt each path instead of reading paths back from a walk, and a path with a control character is reported JSON-encoded",
-  Effect.gen(function* () {
+export const reportsPathsBunFormatCannotPrintExactlyNextToTheOthers = Task.make({
+  name: "a file whose path has a line break, a carriage return, a tab, a backslash or a leading ! is formatted and reported next to the other files, because check passes bun fmt each path instead of reading paths back from a walk, and a path with a control character is reported JSON-encoded",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       "src/line\nbreak.ts": UNFORMATTED_VALUE,
       "src/carriage\rreturn.ts": UNFORMATTED_VALUE,
@@ -687,11 +686,11 @@ export const reportsPathsBunFormatCannotPrintExactlyNextToTheOthers = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const formatsAFileThatTheIndexStillCallsALink = Task.make(
-  "a regular file that the index records as a symbolic link and that --assume-unchanged hides is formatted and listed, not refused as a link, because check looks at the file on disk",
-  Effect.gen(function* () {
+export const formatsAFileThatTheIndexStillCallsALink = Task.make({
+  name: "a regular file that the index records as a symbolic link and that --assume-unchanged hides is formatted and listed, not refused as a link, because check looks at the file on disk",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
@@ -706,13 +705,13 @@ export const formatsAFileThatTheIndexStillCallsALink = Task.make(
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
     expect(unformattedLinesIn(output)).toEqual(["src/was-link.ts"]);
   }).pipe(Effect.scoped),
-);
+});
 
 const LONG_DIRECTORY = "src/a-directory-whose-name-is-long-enough-to-make-the-argument-list-long";
 
-export const splitsAFileListLongerThanOneCommandTakes = Task.make(
-  "a package whose file list is longer than one command line can take is checked in several bun fmt runs, and each unformatted file is listed once",
-  Effect.gen(function* () {
+export const splitsAFileListLongerThanOneCommandTakes = Task.make({
+  name: "a package whose file list is longer than one command line can take is checked in several bun fmt runs, and each unformatted file is listed once",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
@@ -742,11 +741,11 @@ export const splitsAFileListLongerThanOneCommandTakes = Task.make(
       unformattedLinesIn(yield* outputIn(directory, taskStateDirectory, "bun run.ts")),
     ).toEqual(unformatted.toSorted());
   }).pipe(Effect.scoped),
-);
+});
 
-export const skipsAFileBelowALinkToADirectoryOutsideThePackage = Task.make(
-  "a tracked file whose parent directory is now a symbolic link to a directory outside the package is skipped like a symbolic link, because check passes bun fmt no file with a symbolic link at or above it inside the package",
-  Effect.gen(function* () {
+export const skipsAFileBelowALinkToADirectoryOutsideThePackage = Task.make({
+  name: "a tracked file whose parent directory is now a symbolic link to a directory outside the package is skipped like a symbolic link, because check passes bun fmt no file with a symbolic link at or above it inside the package",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
@@ -762,7 +761,7 @@ export const skipsAFileBelowALinkToADirectoryOutsideThePackage = Task.make(
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
     expect(unformattedLinesIn(output)).toEqual(["src/index.ts"]);
   }).pipe(Effect.scoped),
-);
+});
 
 const linkedDirectoriesIn = (
   directory: string,
@@ -780,9 +779,9 @@ const linkedDirectoriesIn = (
     return yield* unformattedFilesBy(directory, taskStateDirectory);
   });
 
-export const listsAFileBehindALinkToADirectoryInThePackageOnce = Task.make(
-  "a tracked file whose parent directory is now a relative or absolute symbolic link to a directory in the package is skipped, so check lists the file behind it once, under its own path, as plain bun fmt does",
-  Effect.gen(function* () {
+export const listsAFileBehindALinkToADirectoryInThePackageOnce = Task.make({
+  name: "a tracked file whose parent directory is now a relative or absolute symbolic link to a directory in the package is skipped, so check lists the file behind it once, under its own path, as plain bun fmt does",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
       "src/real/x.ts": UNFORMATTED_VALUE,
@@ -796,11 +795,11 @@ export const listsAFileBehindALinkToADirectoryInThePackageOnce = Task.make(
     expect(unformatted.bunFormat).toEqual(["src/real/x.ts"]);
     expect(unformatted.check).toEqual(unformatted.bunFormat);
   }).pipe(Effect.scoped),
-);
+});
 
-export const listsAFileBehindALinkSpelledInAnotherCaseOnce = Task.make(
-  "a tracked file whose parent directory is now a symbolic link spelled in another case than the directory it reaches is skipped, so check lists what plain bun fmt lists on a case-insensitive file system",
-  Effect.gen(function* () {
+export const listsAFileBehindALinkSpelledInAnotherCaseOnce = Task.make({
+  name: "a tracked file whose parent directory is now a symbolic link spelled in another case than the directory it reaches is skipped, so check lists what plain bun fmt lists on a case-insensitive file system",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       "src/real/x.ts": UNFORMATTED_VALUE,
       "upper/x.ts": UNFORMATTED_VALUE,
@@ -813,7 +812,7 @@ export const listsAFileBehindALinkSpelledInAnotherCaseOnce = Task.make(
     expect(unformatted.check).toEqual(["src/real/x.ts"]);
     expect(unformatted.check).toEqual(unformatted.bunFormat);
   }).pipe(Effect.scoped),
-);
+});
 
 const shimThatRuns = (directory: string, statements: string) =>
   Effect.gen(function* () {
@@ -836,9 +835,9 @@ const commandInTraceOf = (output: string) =>
     )?.[1];
   });
 
-export const namesTheCommandOfTheRunWithTheReportedCode = Task.make(
-  "when bun fmt runs more than once, the reported exit code is the highest, and the trace names the command of the run that exited with it",
-  Effect.gen(function* () {
+export const namesTheCommandOfTheRunWithTheReportedCode = Task.make({
+  name: "when bun fmt runs more than once, the reported exit code is the highest, and the trace names the command of the run that exited with it",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* formattedRepository({
       "src/index.ts": UNFORMATTED_VALUE,
       "src/broken\nline.ts": "export const VALUE = (;\n",
@@ -850,11 +849,11 @@ export const namesTheCommandOfTheRunWithTheReportedCode = Task.make(
       String.raw` ./oxfmt.config.ts ./src/broken\nline.ts"`,
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const printsEachStandardErrorOnce = Task.make(
-  "a config that fails to load in every bun fmt run prints its error once",
-  Effect.gen(function* () {
+export const printsEachStandardErrorOnce = Task.make({
+  name: "a config that fails to load in every bun fmt run prints its error once",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* formattedRepository({
@@ -877,11 +876,11 @@ export const printsEachStandardErrorOnce = Task.make(
         ),
     ).toHaveLength(1);
   }).pipe(Effect.scoped),
-);
+});
 
-export const passesFilesInTheOrderOfTheListing = Task.make(
-  "bun fmt gets ./oxfmt.config.ts once and then the listed files in the order of the listing, the same on every run",
-  Effect.gen(function* () {
+export const passesFilesInTheOrderOfTheListing = Task.make({
+  name: "bun fmt gets ./oxfmt.config.ts once and then the listed files in the order of the listing, the same on every run",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const files = Array.from(
@@ -909,4 +908,4 @@ export const passesFilesInTheOrderOfTheListing = Task.make(
     expect(runs.length).toBeGreaterThanOrEqual(RUN_COUNT);
     expect([...new Set(runs)]).toEqual([expected]);
   }).pipe(Effect.scoped),
-);
+});

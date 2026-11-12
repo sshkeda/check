@@ -9,9 +9,9 @@ import { typeCheck } from "../lib/type-check-with-bun-check/index.ts";
 import { typeScriptConfig } from "../shared/declare-typescript-config-task.ts";
 import { checkerQueries } from "./declare-the-checker-queries-task.ts";
 
-export const typedChecks: Task.Task<void> = Task.make(
-  "typed-checks",
-  Effect.andThen(
+export const typedChecks: Task.Task<void> = Task.make({
+  name: "typed-checks",
+  run: Effect.andThen(
     typeScriptConfig,
     Task.allSettled([
       typeCheck,
@@ -22,4 +22,4 @@ export const typedChecks: Task.Task<void> = Task.make(
       lintedFilesTypeChecked,
     ]),
   ),
-);
+});

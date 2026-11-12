@@ -13,6 +13,7 @@ import {
   isIdentifier,
   isObjectLiteralExpression,
   isParameterDeclaration,
+  isPropertyAssignment,
   isReturnStatement,
   isSpreadElement,
   isVariableDeclaration,
@@ -409,6 +410,12 @@ const isRunnerArgument = (
   return isArgument ? startsTheProgram(checker, apis, parent) : Effect.succeed(false);
 };
 
+const objectHoldingAPropertyValue = (node: Node) => {
+  const { parent } = node;
+  const isPropertyValue = isPropertyAssignment(parent) && isObjectLiteralExpression(parent.parent);
+  return isPropertyValue ? parent.parent : node;
+};
+
 const isExported = (declaration: Node) => {
   const statement = declaration.parent.parent;
   return (
@@ -448,7 +455,14 @@ const isConstOnlyRunByARunner = (
       (read) => read !== undefined && read.pos !== declaration.name.pos,
     );
     const isReadOnce = onlyRead !== undefined && otherReads.length === 0;
-    return isReadOnce && (yield* isRunnerArgument(checker, apis, outermostWrapperOf(onlyRead)));
+    return (
+      isReadOnce &&
+      (yield* isRunnerArgument(
+        checker,
+        apis,
+        objectHoldingAPropertyValue(outermostWrapperOf(onlyRead)),
+      ))
+    );
   });
 
 const isWhereTheProgramStarts = (

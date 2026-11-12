@@ -28,9 +28,9 @@ import { failureAsValue, outcomeOf } from "../shared/failure-as-value.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
-export const checksQueryOneSharedProject = Task.make(
-  "the checks that query TypeScript take the project set opened once for the run, so none opens its own",
-  Effect.gen(function* () {
+export const checksQueryOneSharedProject = Task.make({
+  name: "the checks that query TypeScript take the project set opened once for the run, so none opens its own",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "a.ts": 'import { Effect } from "effect";\nexport const RUN = Effect.void;\n',
     });
@@ -48,11 +48,11 @@ export const checksQueryOneSharedProject = Task.make(
     ]);
     expect(yield* Ref.get(reads)).toBe(results.length);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const checksShareEachCallsSignature = Task.make(
-  "the checks that read each call's declaration resolve every call's signature once between them",
-  Effect.gen(function* () {
+export const checksShareEachCallsSignature = Task.make({
+  name: "the checks that read each call's declaration resolve every call's signature once between them",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "a.ts":
         'import { Effect } from "effect";\nexport const RUN = Effect.void.pipe(Effect.as(1), Effect.map((value) => value + 1));\n',
@@ -73,11 +73,11 @@ export const checksShareEachCallsSignature = Task.make(
     expect(resolvedByOneCheck).toBeGreaterThan(0);
     expect(resolvedCalls.length).toBe(resolvedByOneCheck);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const checksShareEachModuleResolution = Task.make(
-  "the import-boundary and export-placement checks resolve each module request of a file once between them",
-  Effect.gen(function* () {
+export const checksShareEachModuleResolution = Task.make({
+  name: "the import-boundary and export-placement checks resolve each module request of a file once between them",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "a.ts": 'import { B } from "./b.ts";\nexport const A = B;\n',
       "b.ts": "export const B = 1;\n",
@@ -98,7 +98,7 @@ export const checksShareEachModuleResolution = Task.make(
     expect(resolvedByOneCheck).toContain("./b.ts");
     expect(resolvedRequests).toEqual(resolvedByOneCheck);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const UNREADABLE_MANIFEST = "cannot be read as a package.json whose name, if any, is a string";
 
@@ -114,9 +114,9 @@ const resolutionOf = (request: string, importingFile: string, projectDirectory: 
     ),
   );
 
-export const unreadableManifestsFailResolution = Task.make(
-  "resolving a module whose package.json does not decode, a symlink to itself included, fails with ModuleRequestUnresolvable naming that package.json once, relative to the project, and why on one line, instead of treating the package as unnamed, and a package's root is its manifest's directory",
-  Effect.gen(function* () {
+export const unreadableManifestsFailResolution = Task.make({
+  name: "resolving a module whose package.json does not decode, a symlink to itself included, fails with ModuleRequestUnresolvable naming that package.json once, relative to the project, and why on one line, instead of treating the package as unnamed, and a package's root is its manifest's directory",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -174,11 +174,11 @@ export const unreadableManifestsFailResolution = Task.make(
       ],
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
-  "when the resolver finds no file but fails, resolution reads the package.json files around the importer and, for a relative path, around its target, so a package.json that is no JSON fails it by its path even when the project's path holds a \", while a resolver failure that no package.json explains, such as an empty path or a package whose package.json is no JSON, fails it with the resolver's words, and a missing file, a missing package or a built-in module is still no file",
-  Effect.gen(function* () {
+export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make({
+  name: "when the resolver finds no file but fails, resolution reads the package.json files around the importer and, for a relative path, around its target, so a package.json that is no JSON fails it by its path even when the project's path holds a \", while a resolver failure that no package.json explains, such as an empty path or a package whose package.json is no JSON, fails it with the resolver's words, and a missing file, a missing package or a built-in module is still no file",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -216,11 +216,11 @@ export const aResolutionErrorIsExplainedByThePackageJsonsAround = Task.make(
       ...Array.from({ length: 4 }, () => [undefined, undefined]),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyANamedManifestMakesAPackage = Task.make(
-  "resolving a module takes its package from the nearest package.json with a string name, so a package.json with no name, and a directory named package.json, make no package and leave the module in the enclosing named package, a package.json that starts with a UTF-8 byte order mark is read as Node and oxc read it, and a package's root is its named manifest's directory",
-  Effect.gen(function* () {
+export const onlyANamedManifestMakesAPackage = Task.make({
+  name: "resolving a module takes its package from the nearest package.json with a string name, so a package.json with no name, and a directory named package.json, make no package and leave the module in the enclosing named package, a package.json that starts with a UTF-8 byte order mark is read as Node and oxc read it, and a package's root is its named manifest's directory",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -256,11 +256,11 @@ export const onlyANamedManifestMakesAPackage = Task.make(
       expect(yield* packageOf(name)).toEqual(["outer", directory]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
-  "resolution stops looking for the nearest package.json with a string name at the project's root, so a package.json above a project whose own package.json has no name is never read, even when it is no JSON, and the project's files belong to no named package",
-  Effect.gen(function* () {
+export const aPackageJsonAboveTheProjectIsNeverRead = Task.make({
+  name: "resolution stops looking for the nearest package.json with a string name at the project's root, so a package.json above a project whose own package.json has no name is never read, even when it is no JSON, and the project's files belong to no named package",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -276,11 +276,11 @@ export const aPackageJsonAboveTheProjectIsNeverRead = Task.make(
       null,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const oneCrashingCheckLeavesTheOthersReporting = Task.make(
-  "a checker query that dies is reported as that check's CheckCrashed while every other check over the same project still reports its violations, each named by its check",
-  Effect.gen(function* () {
+export const oneCrashingCheckLeavesTheOthersReporting = Task.make({
+  name: "a checker query that dies is reported as that check's CheckCrashed while every other check over the same project still reports its violations, each named by its check",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "a.ts": `import { Context, Effect } from "effect";
 export class WorkerPool extends Context.Service<WorkerPool, { readonly run: Effect.Effect<void> }>()("WorkerPool") {}
@@ -300,4 +300,4 @@ export const program = Effect.gen(function* () {
       "service-yields RepeatedServiceYield",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

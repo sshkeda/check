@@ -118,26 +118,25 @@ const expectOnlyUnpermittedViolations = (output: string) => {
   expect(output).not.toContain("declares an error class");
   expect(output).not.toContain("reaches the file system directly");
   expect(output).not.toContain("in a way no file may");
-  expect(output).not.toContain("runs tasks outside a script");
   expect(output).not.toContain("writes to the terminal");
   expect(output).not.toContain("handles failures it does not name");
   expect(output).not.toContain("turns each failure into a result");
 };
 
-export const permissionsComposeInOneEntry = Task.make(
-  "every permission granted to a file re-allows only its own restriction",
-  Effect.gen(function* () {
+export const permissionsComposeInOneEntry = Task.make({
+  name: "every permission granted to a file re-allows only its own restriction",
+  run: Effect.gen(function* () {
     const permissionsByFile = `{ "permitted.ts": ${ALL_PERMISSIONS} }`;
     expect(yield* lintWithPermissions(permissionsByFile, { "permitted.ts": PERMITTED })).toBe("");
     expectOnlyUnpermittedViolations(
       yield* lintWithPermissions(permissionsByFile, { "permitted.ts": STILL_BANNED }),
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const directoryGrantsLeaveDescendantCodeBansEnabled = Task.make(
-  "a directory grant leaves code bans enabled in its descendants, and a file grant lifts only that file's ban",
-  Effect.gen(function* () {
+export const directoryGrantsLeaveDescendantCodeBansEnabled = Task.make({
+  name: "a directory grant leaves code bans enabled in its descendants, and a file grant lifts only that file's ban",
+  run: Effect.gen(function* () {
     const files = {
       ".github/actions/run.ts": "export const STOP = () => process.exit(1);\n",
       ".github/actions/other.ts": "export const STOP = () => process.exit(1);\n",
@@ -157,11 +156,11 @@ export const directoryGrantsLeaveDescendantCodeBansEnabled = Task.make(
     expect(oneFile).toContain("other.ts");
     expect(oneFile).toContain("exits the process directly");
   }).pipe(Effect.scoped),
-);
+});
 
-export const grantsThatLiftNothingAreReported = Task.make(
-  "a file granted a permission whose ban it no longer reaches is reported at its first line, while a grant the file uses and a readsConfig grant are not",
-  Effect.gen(function* () {
+export const grantsThatLiftNothingAreReported = Task.make({
+  name: "a file granted a permission whose ban it no longer reaches is reported at its first line, while a grant the file uses and a readsConfig grant are not",
+  run: Effect.gen(function* () {
     const output = yield* lintWithPermissions(
       '{ "stop.ts": { allow: ["exitsTheProcess", "spawnsCommands", "usesSqlDatabases", "readsConfig"] } }',
       { "stop.ts": "export const STOP = () => process.exit(1);\n" },
@@ -176,7 +175,7 @@ export const grantsThatLiftNothingAreReported = Task.make(
     expect(output).not.toContain("granted readsConfig");
     expect(output).not.toContain("exits the process directly");
   }).pipe(Effect.scoped),
-);
+});
 
 const CODE_GRANTS = [
   "handlesEveryFailure",
@@ -186,9 +185,9 @@ const CODE_GRANTS = [
   "trustsUnverifiedTypes",
 ] as const;
 
-export const codeGrantsThatLiftNothingAreReported = Task.make(
-  "a file granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes that uses nothing the grant allows is reported once per permission at its first line, and a grant the file uses is not, in the test home as elsewhere",
-  Effect.gen(function* () {
+export const codeGrantsThatLiftNothingAreReported = Task.make({
+  name: "a file granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes that uses nothing the grant allows is reported once per permission at its first line, and a grant the file uses is not, in the test home as elsewhere",
+  run: Effect.gen(function* () {
     const output = yield* lintWithPermissions(
       `{ "src/idle.ts": { allow: ${yield* encodeJson(CODE_GRANTS)} }, "src/catches.ts": { allow: ["handlesEveryFailure"] }, "tests/bounded.ts": { allow: ["pollsWithADeadline"] }, "tests/idle.ts": { allow: ["pollsWithADeadline"] } }`,
       {
@@ -211,16 +210,16 @@ export const codeGrantsThatLiftNothingAreReported = Task.make(
     expect(output).not.toContain("src/catches.ts:1:1");
     expect(output).not.toContain("tests/bounded.ts:1:1");
   }).pipe(Effect.scoped),
-);
+});
 
 const RUNTIME_NAMES = `export const env = new Map([["HOME", "/"]]);
 export const cwd = (directory: string) => directory;
 export const stdin = (input: ReadableStream) => input;
 `;
 
-export const onlyAFileGrantedShortNamesMayDeclareAbbreviatedNames = Task.make(
-  "a file granted usesAbbreviations may declare env, cwd and stdin, while the same names still fail in its neighbour and in a file without a grant",
-  Effect.gen(function* () {
+export const onlyAFileGrantedShortNamesMayDeclareAbbreviatedNames = Task.make({
+  name: "a file granted usesAbbreviations may declare env, cwd and stdin, while the same names still fail in its neighbour and in a file without a grant",
+  run: Effect.gen(function* () {
     const files = { "src/runtime.ts": RUNTIME_NAMES, "src/neighbour.ts": RUNTIME_NAMES };
     const ungranted = yield* lintWithPermissions("{}", files, [COMMENT_RULE]);
     expect(ungranted).toContain("runtime.ts");
@@ -247,7 +246,7 @@ export const onlyAFileGrantedShortNamesMayDeclareAbbreviatedNames = Task.make(
       ),
     ).toBe("");
   }).pipe(Effect.scoped),
-);
+});
 
 const READS_RAW_ARGUMENTS = `import { parseArgs } from "node:util";
 
@@ -259,9 +258,9 @@ export const commandLine = () => [
 ];
 `;
 
-export const theConfigGrantLiftsTheRawArgumentsBan = Task.make(
-  "a file without a grant may not read raw command-line arguments, a file granted readsConfig may read process.argv, and no file may read Bun.argv or parseArgs",
-  Effect.gen(function* () {
+export const theConfigGrantLiftsTheRawArgumentsBan = Task.make({
+  name: "a file without a grant may not read raw command-line arguments, a file granted readsConfig may read process.argv, and no file may read Bun.argv or parseArgs",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", { "reads.ts": READS_RAW_ARGUMENTS });
     expect(ungranted).toContain("process.argv reads configuration");
     expect(ungranted).toContain("Bun.argv reads configuration, which no file may do");
@@ -275,7 +274,7 @@ export const theConfigGrantLiftsTheRawArgumentsBan = Task.make(
     expect(granted).toContain("Bun.argv reads configuration, which no file may do");
     expect(granted).toContain("parseArgs from node:util reads configuration, which no file may do");
   }).pipe(Effect.scoped),
-);
+});
 
 const POLLS_WITH_A_DEADLINE = `import { Effect, Schedule } from "effect";
 
@@ -342,9 +341,9 @@ export const repeated = (work: Effect.Effect<void>) =>
   work.pipe(Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.repeat(work, Schedule.exponential("1 second")) }));
 `;
 
-export const testsPollOutsideSystemsOnlyWhenGrantedSchedules = Task.make(
-  "a test without a grant may not time out or poll on a timer, a test granted pollsWithADeadline may repeat or retry with Schedule.spaced bounded by a timeout but not without one, and tests may move TestClock and retry a counted Schedule.recurs",
-  Effect.gen(function* () {
+export const testsPollOutsideSystemsOnlyWhenGrantedSchedules = Task.make({
+  name: "a test without a grant may not time out or poll on a timer, a test granted pollsWithADeadline may repeat or retry with Schedule.spaced bounded by a timeout but not without one, and tests may move TestClock and retry a counted Schedule.recurs",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", {
       "tests/polls.ts": POLLS_WITH_A_DEADLINE,
       "tests/virtual-time.ts": MOVES_VIRTUAL_TIME,
@@ -371,11 +370,11 @@ export const testsPollOutsideSystemsOnlyWhenGrantedSchedules = Task.make(
     ).toBe("");
     expect(unbounded).not.toContain("no-test-timeouts");
   }).pipe(Effect.scoped),
-);
+});
 
-export const retriesOnATimerOnlyWhenGrantedSchedulesUnderADeadline = Task.make(
-  "a file granted pollsWithADeadline may retry with Schedule.spaced bounded by a timeout but not without one nor at once with Schedule.recurs, and a file without the grant may not retry on a timer",
-  Effect.gen(function* () {
+export const retriesOnATimerOnlyWhenGrantedSchedulesUnderADeadline = Task.make({
+  name: "a file granted pollsWithADeadline may retry with Schedule.spaced bounded by a timeout but not without one nor at once with Schedule.recurs, and a file without the grant may not retry on a timer",
+  run: Effect.gen(function* () {
     const granted = '{ "retries.ts": { allow: ["pollsWithADeadline"] } }';
     expect(yield* lintWithPermissions(granted, { "retries.ts": RETRIES_WITH_A_DEADLINE })).toBe("");
     expect(
@@ -388,11 +387,11 @@ export const retriesOnATimerOnlyWhenGrantedSchedulesUnderADeadline = Task.make(
       "Schedule.spaced retries on a timer",
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const exponentialSchedulesNeedAGrantAndADeadline = Task.make(
-  "a file granted pollsWithADeadline may repeat or retry with an exponential schedule, optionally jittered, under a deadline but not without one or in its uncovered fallback, and ungranted files may not use exponential schedules",
-  Effect.gen(function* () {
+export const exponentialSchedulesNeedAGrantAndADeadline = Task.make({
+  name: "a file granted pollsWithADeadline may repeat or retry with an exponential schedule, optionally jittered, under a deadline but not without one or in its uncovered fallback, and ungranted files may not use exponential schedules",
+  run: Effect.gen(function* () {
     const granted = '{ "exponential.ts": { allow: ["pollsWithADeadline"] } }';
     expect(
       yield* lintWithPermissions(granted, { "exponential.ts": EXPONENTIAL_WITH_A_DEADLINE }),
@@ -413,7 +412,7 @@ export const exponentialSchedulesNeedAGrantAndADeadline = Task.make(
     expect(ungranted).toContain("Schedule.jittered retries on a timer");
     expect(ungranted).toContain("Schedule.jittered polls on a timer");
   }).pipe(Effect.scoped),
-);
+});
 
 const WAITS_ON_TIMERS = `import { Clock, Effect, Stream } from "effect";
 
@@ -443,9 +442,9 @@ const TIMER_OPERATIONS = [
   "Clock.sleep",
 ] as const;
 
-export const timersWaitOnlyInFilesGrantedTimers = Task.make(
-  "a file granted waitsOnTimers may sleep, delay, sleep through the Clock service and use the Stream operations that wait on a timer, a file without the grant may not, and the grant lifts neither clock reads nor timed schedules",
-  Effect.gen(function* () {
+export const timersWaitOnlyInFilesGrantedTimers = Task.make({
+  name: "a file granted waitsOnTimers may sleep, delay, sleep through the Clock service and use the Stream operations that wait on a timer, a file without the grant may not, and the grant lifts neither clock reads nor timed schedules",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", { "src/timers.ts": WAITS_ON_TIMERS });
     for (const operation of TIMER_OPERATIONS) {
       expect(ungranted).toContain(`${operation} is banned`);
@@ -470,11 +469,11 @@ export const polled = Effect.void.pipe(Effect.repeat(Schedule.spaced("1 second")
       expect(stillBanned).not.toContain(`${operation} is banned`);
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const malformedGrantsAreRefusedAtRuntime = Task.make(
-  "check decodes the grants with one Schema and names every malformed path, unknown permission or key, empty or repeated list, empty grant and Markdown grant beyond its file type together when the config loads",
-  Effect.gen(function* () {
+export const malformedGrantsAreRefusedAtRuntime = Task.make({
+  name: "check decodes the grants with one Schema and names every malformed path, unknown permission or key, empty or repeated list, empty grant and Markdown grant beyond its file type together when the config loads",
+  run: Effect.gen(function* () {
     const refusals = [
       {
         permissionsByFile: '{ "src/*.ts": { allow: ["usesSqlDatabases"] } }',
@@ -692,11 +691,11 @@ export const malformedGrantsAreRefusedAtRuntime = Task.make(
       }
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const rootGrantsDoNotReachNestedFilesOfTheSameName = Task.make(
-  "a grant for a root file leaves a nested file of the same name restricted",
-  Effect.gen(function* () {
+export const rootGrantsDoNotReachNestedFilesOfTheSameName = Task.make({
+  name: "a grant for a root file leaves a nested file of the same name restricted",
+  run: Effect.gen(function* () {
     const database =
       'import { Effect } from "effect";\nimport { SqlClient } from "effect/sql/SqlClient";\n\nexport const DATABASE = Effect.map(SqlClient, (client) => client);\n';
     const output = yield* lintWithPermissions('{ "db.ts": { allow: ["usesSqlDatabases"] } }', {
@@ -706,11 +705,11 @@ export const rootGrantsDoNotReachNestedFilesOfTheSameName = Task.make(
     expect(output).toContain("src/db.ts:2:27: error sshkeda(no-sql-clients)");
     expect(output).not.toContain("\ndb.ts:2:27: error sshkeda(no-sql-clients)");
   }).pipe(Effect.scoped),
-);
+});
 
-export const routeGrantsMatchOnlyTheLiteralFile = Task.make(
-  "a grant for a route parameter path lifts its ban only on that literal file and leaves a file matching its glob characters banned",
-  Effect.gen(function* () {
+export const routeGrantsMatchOnlyTheLiteralFile = Task.make({
+  name: "a grant for a route parameter path lifts its ban only on that literal file and leaves a file matching its glob characters banned",
+  run: Effect.gen(function* () {
     const source = "export const stop = () => process.exit(1);\n";
     const output = yield* lintWithPermissions(
       '{ "src/[slug]/output.ts": { allow: ["exitsTheProcess"] } }',
@@ -722,11 +721,11 @@ export const routeGrantsMatchOnlyTheLiteralFile = Task.make(
       "src/s/output.ts:1:27: error sshkeda(no-process-exit): process.exit exits the process directly",
     ]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const unpermittedFilesKeepEveryRestriction = Task.make(
-  "files without a permission keep every restriction",
-  Effect.gen(function* () {
+export const unpermittedFilesKeepEveryRestriction = Task.make({
+  name: "files without a permission keep every restriction",
+  run: Effect.gen(function* () {
     const output = yield* lintWithPermissions(`{ "permitted.ts": ${ALL_PERMISSIONS} }`, {
       "unpermitted.ts": PERMITTED,
     });
@@ -751,18 +750,18 @@ export const unpermittedFilesKeepEveryRestriction = Task.make(
     expect(output).toContain("constants from node:fs reaches the file system directly");
     expect(output).toContain("open from node:fs/promises reaches the file system directly");
   }).pipe(Effect.scoped),
-);
+});
 
-export const errorClassesMayLiveInAnyFile = Task.make(
-  "a tagged error class may be declared in a file of any name",
-  Effect.gen(function* () {
+export const errorClassesMayLiveInAnyFile = Task.make({
+  name: "a tagged error class may be declared in a file of any name",
+  run: Effect.gen(function* () {
     const output = yield* lintWithPermissions("{}", {
       "src/store.ts":
         'import { Schema } from "effect";\n\nexport class Missing extends Schema.TaggedError<Missing>()("Missing", {}) {}\n',
     });
     expect(output).not.toContain("src/store.ts");
   }).pipe(Effect.scoped),
-);
+});
 
 const LOCKS_A_FILE = `import { constants, readFileSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
@@ -787,9 +786,9 @@ export const changedAt = async () => (await stat("trace.log", { bigint: true }))
 export const watched = () => [watch("trace.log"), open, readFile, promises, mkdir];
 `;
 
-export const lockingFilesAllowsOnlyOpenAndConstants = Task.make(
-  "locksFiles allows only open from node:fs/promises and constants from node:fs, under any of their names, while the rest of node:fs and node:fs/promises under any of their names, other built-ins and synchronous file access stay banned",
-  Effect.gen(function* () {
+export const lockingFilesAllowsOnlyOpenAndConstants = Task.make({
+  name: "locksFiles allows only open from node:fs/promises and constants from node:fs, under any of their names, while the rest of node:fs and node:fs/promises under any of their names, other built-ins and synchronous file access stay banned",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", { "lock.ts": LOCKS_A_FILE });
     for (const usage of [
       "open from node:fs/promises",
@@ -825,7 +824,7 @@ export const lockingFilesAllowsOnlyOpenAndConstants = Task.make(
       );
     }
   }).pipe(Effect.scoped),
-);
+});
 
 const LOADS_THROUGH_A_CREATED_REQUIRE = `import type * as ChildProcesses from "node:child_process";
 import { createRequire } from "node:module";
@@ -843,9 +842,9 @@ terminal.error("x");
 new bunTerminal.Console(stream).log("x");
 `;
 
-export const createdRequiresAndNodeConsoleStayBanned = Task.make(
-  "a file granted every permission may not load a module through the require createRequire returns, and no file may write through node:console under any of its names",
-  Effect.gen(function* () {
+export const createdRequiresAndNodeConsoleStayBanned = Task.make({
+  name: "a file granted every permission may not load a module through the require createRequire returns, and no file may write through node:console under any of its names",
+  run: Effect.gen(function* () {
     const loads = yield* lintWithPermissions(`{ "load.ts": ${ALL_PERMISSIONS} }`, {
       "load.ts": LOADS_THROUGH_A_CREATED_REQUIRE,
     });
@@ -859,7 +858,7 @@ export const createdRequiresAndNodeConsoleStayBanned = Task.make(
       }
     }
   }).pipe(Effect.scoped),
-);
+});
 
 const BEYOND_EVERY_ALLOW_LIST = `import { Console, Effect, Schedule } from "effect";
 import { Database } from "bun:sqlite";
@@ -877,9 +876,9 @@ export const polled = (work: Effect.Effect<void>) =>
   work.pipe(Effect.repeat(Schedule.fibonacci("1 second")), Effect.timeout("30 seconds"));
 `;
 
-export const noGrantLiftsWhatAPermissionDoesNotAllow = Task.make(
-  "a file granted every permission still may not use the APIs no permission allows: other SQL clients, other ways to start commands, raw argument readers, import.meta.require and node:vm, Effect Console, process.stdout and timed schedules such as Schedule.fibonacci",
-  Effect.gen(function* () {
+export const noGrantLiftsWhatAPermissionDoesNotAllow = Task.make({
+  name: "a file granted every permission still may not use the APIs no permission allows: other SQL clients, other ways to start commands, raw argument readers, import.meta.require and node:vm, Effect Console, process.stdout and timed schedules such as Schedule.fibonacci",
+  run: Effect.gen(function* () {
     const output = yield* lintWithPermissions(`{ "beyond.ts": ${ALL_PERMISSIONS} }`, {
       "beyond.ts": BEYOND_EVERY_ALLOW_LIST,
     });
@@ -900,11 +899,11 @@ export const noGrantLiftsWhatAPermissionDoesNotAllow = Task.make(
       expect(output).toContain(report);
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const servicePermissionsNameEachService = Task.make(
-  "a services grant allows exactly the named services in each file",
-  Effect.gen(function* () {
+export const servicePermissionsNameEachService = Task.make({
+  name: "a services grant allows exactly the named services in each file",
+  run: Effect.gen(function* () {
     const unlisted = yield* lintWithPermissions('{ "permitted.ts": { services: ["Cache"] } }', {
       "permitted.ts": PERMITTED,
     });
@@ -919,11 +918,11 @@ export const servicePermissionsNameEachService = Task.make(
     expect(merged).not.toContain("declares unlisted service");
     expect(merged).not.toContain("is not declared here");
   }).pipe(Effect.scoped),
-);
+});
 
-export const unknownPermissionsFailTypeChecking = Task.make(
-  "TypeScript rejects unknown permission names and keys and a file granted twice",
-  Effect.gen(function* () {
+export const unknownPermissionsFailTypeChecking = Task.make({
+  name: "TypeScript rejects unknown permission names and keys and a file granted twice",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -962,31 +961,11 @@ export const unknownPermissionsFailTypeChecking = Task.make(
     expect(failure.message).toContain("deny");
     expect(failure.message).toContain("unknown.ts(5,");
   }).pipe(Effect.scoped),
-);
+});
 
-export const scriptsRunTasksByPosition = Task.make(
-  "a file directly in scripts/ runs tasks with no grant, while a file under a subdirectory of scripts/ or in src/ may not",
-  Effect.gen(function* () {
-    const runsATask =
-      'import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\nTask.main(Task.make("runs", Effect.void));\n';
-    const output = yield* lintWithPermissions("{}", {
-      "scripts/ci.ts": runsATask,
-      "scripts/shared/helper.ts": runsATask,
-      "src/main.ts": runsATask,
-    });
-    expect(
-      output
-        .split("\n")
-        .filter((line) => line.includes("sshkeda(no-task-main)"))
-        .map((line) => line.slice(0, line.indexOf(":")))
-        .toSorted(),
-    ).toEqual(["scripts/shared/helper.ts", "src/main.ts"]);
-  }).pipe(Effect.scoped),
-);
-
-export const scriptsDefaultExportImportsByPosition = Task.make(
-  "a file directly in scripts/ may default export an imported task with no grant, while a file under a subdirectory of scripts/ or in src/ may not, and a named re-export stays refused in scripts/",
-  Effect.gen(function* () {
+export const scriptsDefaultExportImportsByPosition = Task.make({
+  name: "a file directly in scripts/ may default export an imported task with no grant, while a file under a subdirectory of scripts/ or in src/ may not, and a named re-export stays refused in scripts/",
+  run: Effect.gen(function* () {
     const defaultExportsATask = 'import { tests } from "./tests.ts";\nexport default tests;\n';
     const output = yield* lintWithPermissions("{}", {
       "scripts/ci.ts": defaultExportsATask,
@@ -1002,7 +981,7 @@ export const scriptsDefaultExportImportsByPosition = Task.make(
         .toSorted(),
     ).toEqual(["scripts/build.ts", "scripts/shared/helper.ts", "src/main.ts"]);
   }).pipe(Effect.scoped),
-);
+});
 
 const DECLARES_A_SCHEMA_FROM_A_GUARD = `import { Schema } from "effect";
 
@@ -1010,9 +989,9 @@ export const Port = Schema.declare((input): input is 80 => input === 80);
 export const isPort = (value: number): value is 80 => value === 80;
 `;
 
-export const unverifiedTypesLiftsOnlyThePredicateOfASchemaDeclaration = Task.make(
-  "without a grant, a Schema.declare callback's type predicate is refused by both bans, and a file granted trustsUnverifiedTypes may keep that predicate while every other type predicate in it stays refused",
-  Effect.gen(function* () {
+export const unverifiedTypesLiftsOnlyThePredicateOfASchemaDeclaration = Task.make({
+  name: "without a grant, a Schema.declare callback's type predicate is refused by both bans, and a file granted trustsUnverifiedTypes may keep that predicate while every other type predicate in it stays refused",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", {
       "port.ts": DECLARES_A_SCHEMA_FROM_A_GUARD,
     });
@@ -1029,7 +1008,7 @@ export const unverifiedTypesLiftsOnlyThePredicateOfASchemaDeclaration = Task.mak
     expect(granted).not.toContain("`input is 80`");
     expect(granted).toContain("`value is 80` is an unchecked type predicate");
   }).pipe(Effect.scoped),
-);
+});
 
 const HANDLES_EVERY_FAILURE = `import { Deferred, Effect, Fiber, Stream } from "effect";
 import { exit as outcome } from "effect/Effect";
@@ -1046,9 +1025,9 @@ export const observed = (fiber: Fiber.Fiber<number, string>) => fiber.addObserve
 export const fallenBack = (work: Effect.Effect<number, string>) => Effect.catchTags(work, {}, () => Effect.succeed(0));
 `;
 
-export const handlesEveryFailureLiftsTheUnnamedRecoveryBans = Task.make(
-  "without a grant, every operation that turns a failure it does not name into a success or a value is refused, and a file granted handlesEveryFailure may use all of them while orDie stays refused",
-  Effect.gen(function* () {
+export const handlesEveryFailureLiftsTheUnnamedRecoveryBans = Task.make({
+  name: "without a grant, every operation that turns a failure it does not name into a success or a value is refused, and a file granted handlesEveryFailure may use all of them while orDie stays refused",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", { "edge.ts": HANDLES_EVERY_FAILURE });
     for (const usage of [
       "Effect.exit",
@@ -1077,7 +1056,7 @@ export const handlesEveryFailureLiftsTheUnnamedRecoveryBans = Task.make(
     expect(granted).not.toContain("is given a fallback");
     expect(granted).toContain("Effect.orDie is banned");
   }).pipe(Effect.scoped),
-);
+});
 
 const FALLS_BACK_TO_FIXED_VALUES = `import { Effect } from "effect";
 
@@ -1091,15 +1070,15 @@ const FIXED_FALLBACK =
 const UNUSED_FIXED_FALLBACKS_GRANT =
   "this file is granted fallsBackToFixedValues, but uses nothing fallsBackToFixedValues allows";
 
-export const fixedFallbacksNeedAGrant = Task.make(
-  "a recovery that answers a whole library error with a fixed value and never reads it is refused outside the test home, a file granted fallsBackToFixedValues may keep it, and a granted file with no fixed fallback is reported",
-  Effect.gen(function* () {
+export const fixedFallbacksNeedAGrant = Task.make({
+  name: "a recovery that answers a whole library error with a fixed value and never reads it is refused outside the test home, a file granted fallsBackToFixedValues may keep it, and a granted file with no fixed fallback is reported",
+  run: Effect.gen(function* () {
     const ungranted = yield* lintWithPermissions("{}", {
       "src/listed.ts": FALLS_BACK_TO_FIXED_VALUES,
       "tests/listed.ts": FALLS_BACK_TO_FIXED_VALUES,
     });
     expect(ungranted).toContain(
-      `src/listed.ts:4:52: error sshkeda(no-fixed-fallbacks): ${FIXED_FALLBACK}. Name the reason you expect, or fail`,
+      `src/listed.ts:4:52: error sshkeda(no-fixed-fallbacks): ${FIXED_FALLBACK}`,
     );
     expect(ungranted).not.toContain("tests/listed.ts");
     const granted = yield* lintWithPermissions(
@@ -1119,4 +1098,4 @@ export const fixedFallbacksNeedAGrant = Task.make(
       `src/listed.ts:1:1: error sshkeda(no-fixed-fallbacks): ${UNUSED_FIXED_FALLBACKS_GRANT}`,
     );
   }).pipe(Effect.scoped),
-);
+});

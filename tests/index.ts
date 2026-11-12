@@ -87,9 +87,9 @@ import * as checkCommand from "./internal/starts-check-as-a-command.ts";
 import * as pickedLintRules from "./internal/turns-on-the-picked-lint-rules.ts";
 import { stageCheckUnderNodeModules } from "./shared/checked-project.ts";
 
-export const ci = Task.make(
-  "ci",
-  Effect.andThen(
+export const ci = Task.make({
+  name: "ci",
+  run: Effect.andThen(
     stageCheckUnderNodeModules,
     Task.allSettled(
       [
@@ -181,4 +181,4 @@ export const ci = Task.make(
       { concurrency: 6 },
     ),
   ),
-);
+});

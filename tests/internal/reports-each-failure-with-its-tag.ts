@@ -48,9 +48,9 @@ const declaredErrorTagsOf = (file: string, text: string) => {
   });
 };
 
-export const everyRuleMessageStatesOneFact = Task.make(
-  "every lint rule ID starts with no-, and every rule message is one line without a final period",
-  Effect.sync(() => {
+export const everyRuleMessageStatesOneFact = Task.make({
+  name: "every lint rule ID starts with no-, and every rule message is one line without a final period",
+  run: Effect.sync(() => {
     const messages = Object.entries(plugin.rules).flatMap(([rule, definition]) =>
       Object.entries(definition.meta?.messages ?? {}).map(([messageId, message]) => ({
         id: `${rule}/${messageId}`,
@@ -65,11 +65,11 @@ export const everyRuleMessageStatesOneFact = Task.make(
     ).toEqual([]);
     expect(Object.keys(plugin.rules).filter((rule) => !rule.startsWith("no-"))).toEqual([]);
   }),
-);
+});
 
-export const everyErrorTagIsConstructedInSource = Task.make(
-  "every error and violation tag declared in an errors file is constructed with new <Tag>( somewhere else in src, so grepping a printed tag finds the code that raised it",
-  Effect.gen(function* () {
+export const everyErrorTagIsConstructedInSource = Task.make({
+  name: "every error and violation tag declared in an errors file is constructed with new <Tag>( somewhere else in src, so grepping a printed tag finds the code that raised it",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const sourceDirectory = yield* path.fromFileUrl(new URL("../../src/", import.meta.url));
@@ -87,11 +87,11 @@ export const everyErrorTagIsConstructedInSource = Task.make(
       [],
     );
   }),
-);
+});
 
-export const violationsCarryEveryPrintedField = Task.make(
-  "a violation becomes a printable error with the user's location, its tag and its message",
-  Effect.sync(() => {
+export const violationsCarryEveryPrintedField = Task.make({
+  name: "a violation becomes a printable error with the user's location, its tag and its message",
+  run: Effect.sync(() => {
     const [misnamedFile] = pathViolations("BadName.ts");
     expect(misnamedFile === undefined ? undefined : printableError(misnamedFile)).toEqual({
       tag: "NotKebabCase",
@@ -113,7 +113,7 @@ export const violationsCarryEveryPrintedField = Task.make(
       message: '"./main.ts": is not a normalized path',
     });
   }),
-);
+});
 
 const DYNAMIC_IMPORT_REPORT = `{ "diagnostics": [{"message": "import() is banned","code": "sshkeda(no-dynamic-import)","severity": "error","filename": "src/load.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 3,"column": 7}}]}] }`;
 
@@ -121,9 +121,9 @@ const UPSTREAM_HELP_REPORT = `{ "diagnostics": [{"message": "Unexpected any. Spe
 {"message": "Unexpected console statement.","code": "eslint(no-console)","severity": "error","help": "Delete this console statement.","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 2,"column": 1}}]},
 {"message": "Expected === and instead saw ==","code": "eslint(eqeqeq)","severity": "error","help": "Prefer === operator","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 3,"column": 1}}]}] }`;
 
-export const upstreamHelpIsNeverPrinted = Task.make(
-  "oxlint's own help is dropped from every violation, so each prints only its message",
-  Effect.gen(function* () {
+export const upstreamHelpIsNeverPrinted = Task.make({
+  name: "oxlint's own help is dropped from every violation, so each prints only its message",
+  run: Effect.gen(function* () {
     expect(
       (yield* oxlintReport("oxlint", UPSTREAM_HELP_REPORT)).violations.map(formattedError),
     ).toEqual([
@@ -132,16 +132,16 @@ export const upstreamHelpIsNeverPrinted = Task.make(
       "src/a.ts:3:1: error eslint(eqeqeq): Expected === and instead saw ==",
     ]);
   }),
-);
+});
 
 const UNORDERED_REPORT = `{ "diagnostics": [{"message": "comment in code","code": "sshkeda(no-comments)","severity": "error","filename": "src/b.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 1,"column": 1}}]},
 {"message": "Unexpected console statement.","code": "eslint(no-console)","severity": "error","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 10,"column": 1}}]},
 {"message": "Unexpected any. Specify a different type.","code": "typescript(no-explicit-any)","severity": "error","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 2,"column": 9}}]},
 {"message": "comment in code","code": "sshkeda(no-comments)","severity": "error","filename": "src/a.ts","labels": [{"span": {"offset": 0,"length": 1,"line": 2,"column": 3}}]}] }`;
 
-export const lintViolationsPrintInFileAndLineOrder = Task.make(
-  "oxlint lints files on many threads, so its violations print sorted by file, line and column, the same on every run",
-  Effect.gen(function* () {
+export const lintViolationsPrintInFileAndLineOrder = Task.make({
+  name: "oxlint lints files on many threads, so its violations print sorted by file, line and column, the same on every run",
+  run: Effect.gen(function* () {
     expect(
       (yield* oxlintReport("oxlint", UNORDERED_REPORT)).violations.map(formattedError),
     ).toEqual([
@@ -151,11 +151,11 @@ export const lintViolationsPrintInFileAndLineOrder = Task.make(
       "src/b.ts:1:1: error sshkeda(no-comments): comment in code",
     ]);
   }),
-);
+});
 
-export const violationsPrintOnlyTheirMessage = Task.make(
-  "a lint rule or a check violation becomes a printable error with its tag, location and message, and prints one message line",
-  Effect.gen(function* () {
+export const violationsPrintOnlyTheirMessage = Task.make({
+  name: "a lint rule or a check violation becomes a printable error with its tag, location and message, and prints one message line",
+  run: Effect.gen(function* () {
     const linted = (yield* oxlintReport("oxlint", DYNAMIC_IMPORT_REPORT)).violations;
     expect(linted).toEqual([
       {
@@ -177,17 +177,17 @@ export const violationsPrintOnlyTheirMessage = Task.make(
       "src/a.ts:1: error UnusedExport: export a is used by nothing",
     );
   }),
-);
+});
 
-export const parentSegmentsAreReportedWithoutClaimingTheyLeave = Task.make(
-  "a grant path with a .. segment that stays inside the repository is reported as having the segment, not as leaving",
-  Effect.sync(() => {
+export const parentSegmentsAreReportedWithoutClaimingTheyLeave = Task.make({
+  name: "a grant path with a .. segment that stays inside the repository is reported as having the segment, not as leaving",
+  run: Effect.sync(() => {
     const recorded = recordedGrantsOf({ "src/../main.ts": { allow: ["readsConfig"] } });
     expect(taggedViolations("violations" in recorded ? recorded.violations : [])).toEqual([
       'oxlint.config.ts: error MalformedGrant: "src/../main.ts": has a .. segment',
     ]);
   }),
-);
+});
 
 const BUN_CHECK_STANDARD_OUTPUT = `index.ts(2,30): error TS2591: Cannot find name 'node:fs'.
 error TS6053: File '/tmp/tcv/nope.ts' not found.
@@ -196,9 +196,9 @@ error TS6053: File '/tmp/tcv/nope.ts' not found.
 tsconfig.json(1,40): error TS5023: Unknown compiler option 'bogus'.
 `;
 
-export const typeCheckOutputMapsToViolations = Task.make(
-  "bun check's stdout maps located and location-less diagnostics with their continuation lines, and any other line is TypeCheckLineUnrecognized",
-  Effect.sync(() => {
+export const typeCheckOutputMapsToViolations = Task.make({
+  name: "bun check's stdout maps located and location-less diagnostics with their continuation lines, and any other line is TypeCheckLineUnrecognized",
+  run: Effect.sync(() => {
     expect(typeCheckReport(BUN_CHECK_STANDARD_OUTPUT, false).violations).toEqual([
       { tag: "TS2591", location: "index.ts:2:30", message: "Cannot find name 'node:fs'." },
       {
@@ -226,16 +226,16 @@ export const typeCheckOutputMapsToViolations = Task.make(
       { tag: "TS2591", location: "index.ts:2:30", message: "Cannot find name 'node:fs'." },
     ]);
   }),
-);
+});
 
 const OXLINT_SYNTAX_ERROR_REPORT = `{ "diagnostics": [{"message": "Unexpected token","severity": "error","filename": "bad.ts","labels": [{"span": {"offset": 17,"length": 1,"line": 1,"column": 18}}]},
 {"message": "Unsafe assignment of an error typed value.","code": "typescript(no-unsafe-assignment)","severity": "error","filename": "bad.ts","labels": [{"label": "Assigned value has type \`error\`.","span": {"offset": 17,"length": 4294967295,"line": null,"column": null}},{"label": "Target is inferred as \`error\`.","span": {"offset": 13,"length": 1,"line": 1,"column": 14}}]},
 {"message": "Unused oxlint-disable directive (no problems were reported).","severity": "warning","filename": "bad.ts","labels": [{"span": {"offset": 20,"length": 38,"line": 2,"column": 1}}]}],
   "number_of_files": 1, "number_of_rules": 224, "threads_count": 14, "start_time": 0.2 }`;
 
-export const oxlintReportsMapFieldByField = Task.make(
-  "an oxlint report with a code-less parse error, a null label line and a warning maps field by field, and a plain-text report is ToolReportUndecodable with its text",
-  Effect.gen(function* () {
+export const oxlintReportsMapFieldByField = Task.make({
+  name: "an oxlint report with a code-less parse error, a null label line and a warning maps field by field, and a plain-text report is ToolReportUndecodable with its text",
+  run: Effect.gen(function* () {
     expect(yield* oxlintReport("oxlint", OXLINT_SYNTAX_ERROR_REPORT)).toEqual({
       violations: [
         {
@@ -258,11 +258,11 @@ export const oxlintReportsMapFieldByField = Task.make(
       notes: [],
     });
   }),
-);
+});
 
-export const disableDirectivesPrintTheirDirective = Task.make(
-  "a disable directive becomes a printable error at its line that names the directive",
-  Effect.sync(() => {
+export const disableDirectivesPrintTheirDirective = Task.make({
+  name: "a disable directive becomes a printable error at its line that names the directive",
+  run: Effect.sync(() => {
     expect(
       printableError(
         new DisableDirective({ file: "src/cli.ts", line: 4, directive: "@ts-expect-error" }),
@@ -273,13 +273,13 @@ export const disableDirectivesPrintTheirDirective = Task.make(
       message: "has disable directive @ts-expect-error",
     });
   }),
-);
+});
 
 const LARGE_OUTPUT_DIAGNOSTICS = 50_000;
 
-export const largeTypeCheckOutputIsReadInOnePass = Task.make(
-  "100,000 lines of bun check output, each diagnostic followed by a continuation line, become one violation per diagnostic",
-  Effect.sync(() => {
+export const largeTypeCheckOutputIsReadInOnePass = Task.make({
+  name: "100,000 lines of bun check output, each diagnostic followed by a continuation line, become one violation per diagnostic",
+  run: Effect.sync(() => {
     const output = Array.from(
       { length: LARGE_OUTPUT_DIAGNOSTICS },
       (_entry, index) =>
@@ -289,4 +289,4 @@ export const largeTypeCheckOutputIsReadInOnePass = Task.make(
     expect(violations.length).toBe(LARGE_OUTPUT_DIAGNOSTICS);
     expect(violations.at(-1)?.message).toBe("Type mismatch.\ncontinued detail");
   }),
-);
+});

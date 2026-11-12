@@ -12,9 +12,9 @@ import { writtenFiles } from "../shared/checked-project.ts";
 const IMPORTING_SOURCE =
   'import { one } from "effect";\nimport { two } from "other";\nexport const VALUE = [one, two];\n';
 
-export const duplicatedPackageIsReportedOnceForTheProject = Task.make(
-  "a package installed at two versions is reported once with both versions and paths, however many source files import it",
-  Effect.gen(function* () {
+export const duplicatedPackageIsReportedOnceForTheProject = Task.make({
+  name: "a package installed at two versions is reported once with both versions and paths, however many source files import it",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const repository = yield* path.fromFileUrl(new URL("../../", import.meta.url));
@@ -57,4 +57,4 @@ export const duplicatedPackageIsReportedOnceForTheProject = Task.make(
       `error effect(duplicatePackage): Multiple versions of package \`effect\` were detected: 1.0.0 @ ${path.join(directory, "node_modules/effect")}, 2.0.0 @ ${path.join(directory, "node_modules/other/node_modules/effect")}. Package duplication can change runtime identity and type equality across Effect modules.\n  If this is intentional, set the LSP config \`allowedDuplicatedPackages\` to ["effect"].`,
     ]);
   }).pipe(Effect.scoped),
-);
+});

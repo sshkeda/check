@@ -13,7 +13,7 @@ const IMPORTS = 'import { Clock, Effect, Option, Stream, pipe } from "effect";';
 const GRANTED = [{ fixedFallbacks: "granted" }] as const;
 
 const fixed = (operation: string, failure: string, value: string) => ({
-  message: `${operation} answers ${failure} with the fixed value ${value} and never reads the failure. Name the reason you expect, or fail`,
+  message: `${operation} answers ${failure} with the fixed value ${value} and never reads the failure`,
 });
 
 const recovering = (recovery: string) =>
@@ -21,9 +21,9 @@ const recovering = (recovery: string) =>
 
 const inModule = (body: string) => `${IMPORTS} ${body}`;
 
-export const fixedFallbacksAreRefused = Task.make(
-  "no-fixed-fallbacks refuses a catch-all or a whole library error that answers with a fixed value and never reads the failure, and leaves named reasons, own tags, failure-reading handlers, timeouts, picked failures and granted files alone",
-  ruleTest("no-fixed-fallbacks", {
+export const fixedFallbacksAreRefused = Task.make({
+  name: "no-fixed-fallbacks refuses a catch-all or a whole library error that answers with a fixed value and never reads the failure, and leaves named reasons, own tags, failure-reading handlers, timeouts, picked failures and granted files alone",
+  run: ruleTest("no-fixed-fallbacks", {
     valid: [
       recovering('Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([]))'),
       recovering('Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone)'),
@@ -343,4 +343,4 @@ export const fixedFallbacksAreRefused = Task.make(
       },
     ],
   }),
-);
+});

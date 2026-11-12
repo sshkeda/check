@@ -24,9 +24,9 @@ const DECLARED_VALUES = [
   "export declare const isText: (value: number | string) => value is string;",
 ] as const;
 
-export const declaredValuesAreRefused = Task.make(
-  "no-declared-values refuses a const, let, var, function, class or class field declared with declare, a class field asserted with !, or anything inside a declare global, module or namespace block, and every value in a declaration file, while implemented values and fields, overload-free functions and type-only declarations are left alone",
-  ruleTest("no-declared-values", {
+export const declaredValuesAreRefused = Task.make({
+  name: "no-declared-values refuses a const, let, var, function, class or class field declared with declare, a class field asserted with !, or anything inside a declare global, module or namespace block, and every value in a declaration file, while implemented values and fields, overload-free functions and type-only declarations are left alone",
+  run: ruleTest("no-declared-values", {
     valid: [
       "export const PORT = 80;",
       "export function isPort(value: number) { return value === 80; }",
@@ -63,4 +63,4 @@ export const declaredValuesAreRefused = Task.make(
       },
     ],
   }),
-);
+});

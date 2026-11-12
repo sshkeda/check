@@ -124,9 +124,9 @@ const derivedTestingHelpers = Effect.gen(function* () {
   };
 });
 
-export const testingHelpersMatchTheInstalledEffect = Task.make(
-  "no-testing-helpers refuses every effect/testing module, Test-named module and export the installed effect and @effect packages tag @category testing",
-  Effect.gen(function* () {
+export const testingHelpersMatchTheInstalledEffect = Task.make({
+  name: "no-testing-helpers refuses every effect/testing module, Test-named module and export the installed effect and @effect packages tag @category testing",
+  run: Effect.gen(function* () {
     const derived = yield* derivedTestingHelpers;
     expect(derived.modules.length).toBeGreaterThan(0);
     yield* ruleTest("no-testing-helpers", {
@@ -139,7 +139,7 @@ export const testingHelpersMatchTheInstalledEffect = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "testingHelper" }] })),
     });
   }),
-);
+});
 
 const TESTING_HELPER_USES = [
   'import { TestConsole } from "effect/testing";',
@@ -167,9 +167,9 @@ const TESTING_HELPER_USES = [
   'import type * as Http from "effect/http"; type Client = Http.HttpServer.makeTestClient;',
 ] as const;
 
-export const refusesTestingHelpers = Task.make(
-  "no-testing-helpers refuses Effect's testing helpers imported, aliased, namespaced, or in type positions, and leaves re-exports to no-re-exports and import {} to no-import-type-side-effects",
-  ruleTest("no-testing-helpers", {
+export const refusesTestingHelpers = Task.make({
+  name: "no-testing-helpers refuses Effect's testing helpers imported, aliased, namespaced, or in type positions, and leaves re-exports to no-re-exports and import {} to no-import-type-side-effects",
+  run: ruleTest("no-testing-helpers", {
     valid: [
       'import { Effect, Layer } from "effect"; Layer.succeed;',
       'import { Sharding } from "effect/cluster";',
@@ -228,11 +228,11 @@ export const refusesTestingHelpers = Task.make(
       ...TESTING_HELPER_USES.map((code) => ({ code, errors: [{ messageId: "testingHelper" }] })),
     ],
   }),
-);
+});
 
-export const testHomeIsExemptFromTestCodeRules = Task.make(
-  "oxlint refuses testing helpers, assertions and shared holders in a source file and allows them in tests/",
-  Effect.gen(function* () {
+export const testHomeIsExemptFromTestCodeRules = Task.make({
+  name: "oxlint refuses testing helpers, assertions and shared holders in a source file and allows them in tests/",
+  run: Effect.gen(function* () {
     const testCode = [
       'import { expect } from "bun:test";',
       'import { TestConsole } from "effect/testing";',
@@ -277,11 +277,11 @@ export const testHomeIsExemptFromTestCodeRules = Task.make(
     );
     expect(output).not.toContain(TEST_FILE);
   }).pipe(Effect.scoped),
-);
+});
 
-export const onlyScriptsImportTestHome = Task.make(
-  "only scripts/ and tests/ files import tests, while src imports are TestImported",
-  Effect.gen(function* () {
+export const onlyScriptsImportTestHome = Task.make({
+  name: "only scripts/ and tests/ files import tests, while src imports are TestImported",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tests/console.ts":
         'export { TestConsole } from "effect/testing";\nexport const HELPER = 1;\n',
@@ -305,4 +305,4 @@ export const onlyScriptsImportTestHome = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

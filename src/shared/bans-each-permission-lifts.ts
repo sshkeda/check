@@ -61,7 +61,6 @@ export const isDeclaredSync = (name: string) =>
 export const TASK_PACKAGE = "@sshkeda/task";
 export const TASK_NAMESPACE_EXPORT = "Task";
 export const TASK_MAKE_MEMBER = "make";
-export const TASK_MAIN_MEMBER = "main";
 
 export const IMPORT_META = "import.meta";
 
@@ -108,7 +107,6 @@ const CREATE_REQUIRE_IMPORTS = ["createRequire", "Module.createRequire"] as cons
 export const CREATED_REQUIRE_USAGE = "a require createRequire returns";
 export const CREATE_REQUIRE_VALUE_USAGE = "createRequire used other than by a call";
 
-export const SCRIPT = "script";
 export const TRUSTS_UNVERIFIED_TYPES = "trustsUnverifiedTypes";
 export const WRITES_TO_THE_TERMINAL = "writesToTheTerminal";
 export const READS_CONFIG = "readsConfig";
@@ -387,11 +385,6 @@ export const PERMISSION_BANS = {
       importsBan(MODULE_PATTERN_WILDCARD, [...SYNC_READS, ...SYNC_WRITES]),
       memberNamesBan([...SYNC_READS, ...SYNC_WRITES]),
     ],
-  },
-  [SCRIPT]: {
-    ruleName: "no-task-main",
-    message: "{{usage}} runs tasks outside a script",
-    bans: [importsBan(TASK_PACKAGE, [`${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER}`])],
   },
 };
 

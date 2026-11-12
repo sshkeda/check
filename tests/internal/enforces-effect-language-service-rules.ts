@@ -39,9 +39,9 @@ const diagnose = (source: string) =>
     return yield* checkEffectDiagnosticsOfProject(path.join(directory, "tsconfig.json"));
   }).pipe(Effect.scoped);
 
-export const allowsUnstableApisWithExplicitRecovery = Task.make(
-  "Effect diagnostics allow unstable APIs and do not recommend Effect.ignore or Effect.orDie",
-  Effect.gen(function* () {
+export const allowsUnstableApisWithExplicitRecovery = Task.make({
+  name: "Effect diagnostics allow unstable APIs and do not recommend Effect.ignore or Effect.orDie",
+  run: Effect.gen(function* () {
     yield* diagnose(
       'import { FileSystem } from "effect"; export const unstable = FileSystem.layerNoop;',
     );
@@ -49,11 +49,11 @@ export const allowsUnstableApisWithExplicitRecovery = Task.make(
       'import { Effect } from "effect"; export const recovered = Effect.fail("failure").pipe(Effect.catch(() => Effect.void));',
     );
   }),
-);
+});
 
-export const leavesBuiltinImportsToOxlint = Task.make(
-  "Effect diagnostics leave Node built-in imports to oxlint rules and reject crypto.randomUUID",
-  Effect.gen(function* () {
+export const leavesBuiltinImportsToOxlint = Task.make({
+  name: "Effect diagnostics leave Node built-in imports to oxlint rules and reject crypto.randomUUID",
+  run: Effect.gen(function* () {
     yield* diagnose(
       'import { appendFileSync } from "node:fs"; export const append = appendFileSync;',
     );
@@ -63,11 +63,11 @@ export const leavesBuiltinImportsToOxlint = Task.make(
     );
     expect(report).toContain('"name": "cryptoRandomUUID"');
   }),
-);
+});
 
-export const runsEffectDiagnosticsWithoutNode = Task.make(
-  "Effect diagnostics use Bun when Node is not on PATH",
-  Effect.gen(function* () {
+export const runsEffectDiagnosticsWithoutNode = Task.make({
+  name: "Effect diagnostics use Bun when Node is not on PATH",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const repository = yield* path.fromFileUrl(new URL("../../", import.meta.url));
@@ -102,11 +102,11 @@ export const runsEffectDiagnosticsWithoutNode = Task.make(
     yield* fileSystem.writeFileString(source, "export const IDENTIFIER = crypto.randomUUID();\n");
     expect(yield* diagnoseWithoutNode()).toContain('"name": "cryptoRandomUUID"');
   }).pipe(Effect.scoped),
-);
+});
 
-export const rejectsUnknownInTheErrorChannel = Task.make(
-  "Effect diagnostics reject an Effect whose error channel is unknown",
-  Effect.gen(function* () {
+export const rejectsUnknownInTheErrorChannel = Task.make({
+  name: "Effect diagnostics reject an Effect whose error channel is unknown",
+  run: Effect.gen(function* () {
     const report = yield* diagnose(
       'import { Effect } from "effect"; const value: unknown = 1; export const failed = Effect.fail(value);',
     ).pipe(
@@ -115,11 +115,11 @@ export const rejectsUnknownInTheErrorChannel = Task.make(
     );
     expect(report).toContain('"name": "anyUnknownInErrorContext"');
   }),
-);
+});
 
-export const rejectsEffectTryWithoutCatch = Task.make(
-  "Effect diagnostics reject Effect.try and Effect.tryPromise without a catch handler",
-  Effect.gen(function* () {
+export const rejectsEffectTryWithoutCatch = Task.make({
+  name: "Effect diagnostics reject Effect.try and Effect.tryPromise without a catch handler",
+  run: Effect.gen(function* () {
     const report = yield* diagnose(
       'import { Effect } from "effect"; export const parsed = Effect.try(() => Number("1")); export const fetched = Effect.tryPromise(() => Promise.resolve(1));',
     ).pipe(
@@ -130,11 +130,11 @@ export const rejectsEffectTryWithoutCatch = Task.make(
       report.split("\n").filter((line) => line.includes('"name": "effectTryWithoutCatch"')),
     ).toHaveLength(EFFECT_TRY_CALLS_WITHOUT_CATCH);
   }),
-);
+});
 
-export const setsEverySeverityExplicitly = Task.make(
-  "Effect diagnostics set the severity of exactly the diagnostics the installed @effect/tsgo schema lists",
-  Effect.gen(function* () {
+export const setsEverySeverityExplicitly = Task.make({
+  name: "Effect diagnostics set the severity of exactly the diagnostics the installed @effect/tsgo schema lists",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const repository = yield* path.fromFileUrl(new URL("../../", import.meta.url));
@@ -152,4 +152,4 @@ export const setsEverySeverityExplicitly = Task.make(
       unlisted: configured.filter((name) => !listed.includes(name)),
     }).toEqual({ unconfigured: [], unlisted: [] });
   }),
-);
+});

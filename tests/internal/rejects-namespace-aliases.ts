@@ -13,9 +13,9 @@ const WHOLE_NAMESPACE =
 
 const usedWhole = (name: string) => ({ message: `${name} ${WHOLE_NAMESPACE}` });
 
-export const namespacesNeedAMember = Task.make(
-  "no-namespace-aliases reports an Effect module, a module or namespace a permission ban names members of, or a banned global that is aliased, destructured, spread, passed or read with a computed key, and leaves members, calls, typeof, instanceof, Object.keys, types and local names alone",
-  ruleTest("no-namespace-aliases", {
+export const namespacesNeedAMember = Task.make({
+  name: "no-namespace-aliases reports an Effect module, a module or namespace a permission ban names members of, or a banned global that is aliased, destructured, spread, passed or read with a computed key, and leaves members, calls, typeof, instanceof, Object.keys, types and local names alone",
+  run: ruleTest("no-namespace-aliases", {
     valid: [
       'import { Effect } from "effect"; work.pipe(Effect.orDie);',
       'import { Effect } from "effect"; const run = Effect["map"];',
@@ -37,6 +37,7 @@ export const namespacesNeedAMember = Task.make(
       'import * as Local from "./node-util.ts"; const Library = Local;',
       'import type * as Util from "node:util"; type Parse = typeof Util.parseArgs;',
       "const Atomics = { wait: () => 0 }; const waits = Atomics;",
+      'import { Task } from "@sshkeda/task"; const Tasks = Task; Tasks.make(definition);',
     ],
     invalid: [
       {
@@ -82,10 +83,6 @@ export const namespacesNeedAMember = Task.make(
       {
         code: 'import Util from "util"; const KEY = "parseArgs"; Util[KEY]();',
         errors: [usedWhole("Util")],
-      },
-      {
-        code: 'import { Task } from "@sshkeda/task"; const Tasks = Task; Tasks.main(work);',
-        errors: [usedWhole("Task")],
       },
       {
         code: 'import * as Process from "effect/process"; const commands = Process; commands.ChildProcess.make("ls");',
@@ -178,4 +175,4 @@ export const namespacesNeedAMember = Task.make(
       },
     ],
   }),
-);
+});

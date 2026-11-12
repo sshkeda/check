@@ -163,9 +163,9 @@ const samplesOf = (
   }
 };
 
-export const everyBanCatchesItsSamplesOnly = Task.make(
-  "every permission ban reports a sample of each entry and spares each exception it lists",
-  Effect.forEach(
+export const everyBanCatchesItsSamplesOnly = Task.make({
+  name: "every permission ban reports a sample of each entry and spares each exception it lists",
+  run: Effect.forEach(
     PERMISSION_BAN_NAMES,
     (permission) => {
       const isWholeModuleBannedWithoutAGrant = (specifier: string) =>
@@ -185,4 +185,4 @@ export const everyBanCatchesItsSamplesOnly = Task.make(
     },
     { discard: true },
   ),
-);
+});

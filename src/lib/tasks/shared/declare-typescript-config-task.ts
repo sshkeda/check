@@ -26,9 +26,9 @@ const locatedFromThePackage = (
     : printable;
 };
 
-export const typeScriptConfig = Task.make(
-  "typescript-config",
-  inEachPackage("typescript-config", (packageDirectory) =>
+export const typeScriptConfig = Task.make({
+  name: "typescript-config",
+  run: inEachPackage("typescript-config", (packageDirectory) =>
     Path.Path.use((path) =>
       findTypeScriptConfigViolations(path.join(packageDirectory, TYPESCRIPT_PROJECT_FILE)).pipe(
         quietViolations("typescript-config"),
@@ -43,4 +43,4 @@ export const typeScriptConfig = Task.make(
       ),
     ),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

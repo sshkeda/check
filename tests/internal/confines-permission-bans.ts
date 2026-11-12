@@ -15,9 +15,9 @@ const bannedEvenWhenGranted = (code: string) => [
   { code, options: GRANTED, errors: [{ messageId: "bannedEvenWhenGranted" }] },
 ];
 
-export const sqlClientsStayInSqlFiles = Task.make(
-  "no-sql-clients rejects Effect SQL modules and SqlClient by import identity outside files granted usesSqlDatabases, and every other SQL client in every file",
-  ruleTest("no-sql-clients", {
+export const sqlClientsStayInSqlFiles = Task.make({
+  name: "no-sql-clients rejects Effect SQL modules and SqlClient by import identity outside files granted usesSqlDatabases, and every other SQL client in every file",
+  run: ruleTest("no-sql-clients", {
     valid: [
       'import { Effect } from "effect";',
       'import type { SqlClient } from "effect/sql/SqlClient";',
@@ -51,11 +51,11 @@ export const sqlClientsStayInSqlFiles = Task.make(
       ].flatMap((code) => bannedEvenWhenGranted(code)),
     ],
   }),
-);
+});
 
-export const processExitStaysInExitFiles = Task.make(
-  "no-process-exit rejects process.exit and exit from node:process, wrapped in a TypeScript as, satisfies or non-null expression included, and leaves type positions alone",
-  ruleTest("no-process-exit", {
+export const processExitStaysInExitFiles = Task.make({
+  name: "no-process-exit rejects process.exit and exit from node:process, wrapped in a TypeScript as, satisfies or non-null expression included, and leaves type positions alone",
+  run: ruleTest("no-process-exit", {
     valid: [
       "const process = { exit: () => 1 }; process.exit();",
       "process.exitCode;",
@@ -71,11 +71,11 @@ export const processExitStaysInExitFiles = Task.make(
       "const hidden = process.exit satisfies object;",
     ].map((code) => bannedUsage(code)),
   }),
-);
+});
 
-export const unverifiedTypesStayInGrantedFiles = Task.make(
-  "no-unverified-types refuses Schema.declare and Schema.declareConstructor however they are imported, and leaves other schemas alone",
-  ruleTest("no-unverified-types", {
+export const unverifiedTypesStayInGrantedFiles = Task.make({
+  name: "no-unverified-types refuses Schema.declare and Schema.declareConstructor however they are imported, and leaves other schemas alone",
+  run: ruleTest("no-unverified-types", {
     valid: [
       'import { Schema } from "effect"; Schema.Struct({ port: Schema.Number });',
       'import { Schema } from "other"; Schema.declare((input) => input !== null);',
@@ -87,30 +87,11 @@ export const unverifiedTypesStayInGrantedFiles = Task.make(
       'import * as Effectful from "effect"; Effectful.Schema.declare(isPort);',
     ].map((code) => ({ code, errors: [{ messageId: "banned" }] })),
   }),
-);
+});
 
-export const taskNamespaceRunsStayInScripts = Task.make(
-  "no-task-main recognizes Task.main by import identity including aliases and destructuring",
-  ruleTest("no-task-main", {
-    valid: [
-      'import { Task } from "@sshkeda/task"; Task.make("build", work);',
-      'import { Task } from "other"; Task.main(work);',
-      "const Task = { main: () => 1 }; Task.main();",
-      'import type { Task } from "@sshkeda/task";',
-      'import { Task } from "@sshkeda/task"; Task.exec("git", ["status"]);',
-    ],
-    invalid: [
-      'import { Task } from "@sshkeda/task"; Task.main(work);',
-      'import { Task as T } from "@sshkeda/task"; T.main(work);',
-      'import { Task as T } from "@sshkeda/task"; const { main: start } = T;',
-      'import * as Tasks from "@sshkeda/task"; Tasks.Task.main(work);',
-    ].map((code) => bannedUsage(code)),
-  }),
-);
-
-export const effectChildProcessesNeedTheCommandSpawnPermission = Task.make(
-  "no-command-spawn refuses ChildProcess and ChildProcessSpawner from effect/process however they are imported outside files granted spawnsCommands, refuses the Bun and Node spawner layers in every file, and leaves type imports, CommandLine and lookalikes alone",
-  ruleTest("no-command-spawn", {
+export const effectChildProcessesNeedTheCommandSpawnPermission = Task.make({
+  name: "no-command-spawn refuses ChildProcess and ChildProcessSpawner from effect/process however they are imported outside files granted spawnsCommands, refuses the Bun and Node spawner layers in every file, and leaves type imports, CommandLine and lookalikes alone",
+  run: ruleTest("no-command-spawn", {
     valid: [
       'import type { ChildProcess } from "effect/process";',
       'import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner";',
@@ -142,11 +123,11 @@ export const effectChildProcessesNeedTheCommandSpawnPermission = Task.make(
       ].flatMap((code) => bannedEvenWhenGranted(code)),
     ],
   }),
-);
+});
 
-export const moduleLoadersNeedTheDynamicImportsPermission = Task.make(
-  "no-dynamic-import refuses createRequire from node:module however it is imported outside files granted importsDynamically, refuses node:vm in every file, and leaves other node:module exports and type imports alone",
-  ruleTest("no-dynamic-import", {
+export const moduleLoadersNeedTheDynamicImportsPermission = Task.make({
+  name: "no-dynamic-import refuses createRequire from node:module however it is imported outside files granted importsDynamically, refuses node:vm in every file, and leaves other node:module exports and type imports alone",
+  run: ruleTest("no-dynamic-import", {
     valid: [
       'import { isBuiltin } from "node:module"; isBuiltin("fs");',
       'import type { Script } from "node:vm";',
@@ -182,16 +163,16 @@ export const moduleLoadersNeedTheDynamicImportsPermission = Task.make(
       ].flatMap((code) => bannedEvenWhenGranted(code)),
     ],
   }),
-);
+});
 
 const CREATED_REQUIRE_LOADS =
   "a require createRequire returns loads code in a way no file may; use import() in a file allowed importsDynamically";
 const CREATE_REQUIRE_AS_A_VALUE =
   "createRequire used other than by a call loads code in a way no file may; use import() in a file allowed importsDynamically";
 
-export const createdRequiresOnlyResolve = Task.make(
-  "no-dynamic-import lets the require createRequire returns only resolve a specifier, directly or through a constant, in a file granted importsDynamically, and refuses calling it, passing it on or passing createRequire on, under any name of node:module, where createRequire itself is allowed",
-  ruleTest("no-dynamic-import", {
+export const createdRequiresOnlyResolve = Task.make({
+  name: "no-dynamic-import lets the require createRequire returns only resolve a specifier, directly or through a constant, in a file granted importsDynamically, and refuses calling it, passing it on or passing createRequire on, under any name of node:module, where createRequire itself is allowed",
+  run: ruleTest("no-dynamic-import", {
     valid: [
       'import { createRequire } from "node:module"; createRequire(import.meta.url).resolve("effect");',
       'import { createRequire } from "node:module"; const load = createRequire(import.meta.url); load.resolve("effect"); load.resolve("oxlint");',
@@ -222,7 +203,7 @@ export const createdRequiresOnlyResolve = Task.make(
       })),
     ],
   }),
-);
+});
 
 const TYPE_PREDICATES = [
   "export const isPort = (value: number): value is 80 => value === 80;",
@@ -242,9 +223,9 @@ const SCHEMA_DECLARATION_CALLBACKS = [
   'import { declare } from "effect/Schema"; export const Port = declare((input): input is 80 => input === 80);',
 ] as const;
 
-export const typePredicatesAreRefused = Task.make(
-  "no-type-predicates refuses a type predicate, an assertion signature or a this predicate as the return type of any function, arrow, method or declared function, including a callback passed to Schema.declare, and leaves inferred predicates, function types and library guards alone",
-  ruleTest("no-type-predicates", {
+export const typePredicatesAreRefused = Task.make({
+  name: "no-type-predicates refuses a type predicate, an assertion signature or a this predicate as the return type of any function, arrow, method or declared function, including a callback passed to Schema.declare, and leaves inferred predicates, function types and library guards alone",
+  run: ruleTest("no-type-predicates", {
     valid: [
       'export const ports = [80, "a"].filter((port) => typeof port === "number");',
       'import { Predicate } from "effect"; export const names = ["a", 1].filter(Predicate.isString);',
@@ -265,11 +246,11 @@ export const typePredicatesAreRefused = Task.make(
       })),
     ],
   }),
-);
+});
 
-export const schemaDeclarationsMayKeepTheirTypePredicate = Task.make(
-  "with schemaDeclarations allowed, which a trustsUnverifiedTypes grant sets, no-type-predicates leaves the predicate of a callback passed directly to Schema.declare or declareConstructor and still refuses every other type predicate",
-  ruleTest("no-type-predicates", {
+export const schemaDeclarationsMayKeepTheirTypePredicate = Task.make({
+  name: "with schemaDeclarations allowed, which a trustsUnverifiedTypes grant sets, no-type-predicates leaves the predicate of a callback passed directly to Schema.declare or declareConstructor and still refuses every other type predicate",
+  run: ruleTest("no-type-predicates", {
     valid: SCHEMA_DECLARATION_CALLBACKS.map((code) => ({
       code,
       options: [{ schemaDeclarations: "allowed" }],
@@ -284,4 +265,4 @@ export const schemaDeclarationsMayKeepTheirTypePredicate = Task.make(
       errors: [{ messageId: "typePredicate" }],
     })),
   }),
-);
+});

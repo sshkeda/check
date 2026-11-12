@@ -4,6 +4,7 @@ import { Array as Arrays, Effect, Path } from "effect";
 import type { PlatformError } from "effect";
 
 import { projectDirectory } from "../../project-directory/index.ts";
+import { startDirectory } from "./declare-start-directory-task.ts";
 import { listedPackageFiles } from "./list-package-files.ts";
 import { quietViolations } from "./print-failures-and-keep-detail-in-the-trace.ts";
 import { locatedFromTheProject, printedFromTheProject } from "./report-paths-from-the-project.ts";
@@ -69,6 +70,7 @@ export const inEachPackage = <Requirements>(
   ) => Effect.Effect<void, PlatformError.PlatformError | ReportedErrors, Requirements>,
 ) =>
   Effect.gen(function* () {
+    yield* startDirectory;
     const pathModule = yield* Path.Path;
     const checkedProject = yield* projectDirectory.pipe(quietViolations(tool));
     const packageDirectories = yield* packageDirectoriesIn(checkedProject).pipe(

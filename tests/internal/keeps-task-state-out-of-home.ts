@@ -9,9 +9,9 @@ import { runTaskFile } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
-export const keepsTaskStateOutOfHome = Task.make(
-  "a check run by a test writes its trace to the test's own task state directory and creates no .sshkeda-task in HOME",
-  Effect.gen(function* () {
+export const keepsTaskStateOutOfHome = Task.make({
+  name: "a check run by a test writes its trace to the test's own task state directory and creates no .sshkeda-task in HOME",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const home = yield* fileSystem.makeTempDirectoryScoped();
@@ -31,4 +31,4 @@ export const keepsTaskStateOutOfHome = Task.make(
     expect(printed).toContain(`wrote the trace to ${path.join(taskStateDirectory, "traces")}`);
     expect(yield* fileSystem.exists(path.join(home, ".sshkeda-task"))).toBe(false);
   }).pipe(Effect.scoped),
-);
+});

@@ -14,9 +14,9 @@ const uncalled = (member: string) => ({
 
 const STREAM = 'import { Stream } from "effect"; ';
 
-export const checkedMembersAreCalledWhereNamed = Task.make(
-  "no-uncalled-members reports a member whose ban is checked at its call, such as Stream.catchTag, Effect.retry, Stream.retry, Context.Service, Atomics.wait or Number.parseInt, wherever it is stored, passed, returned, exported, bound or wrapped, including by a TypeScript as, satisfies, non-null or instantiation expression, instead of called where it is named, and leaves calls, type positions, other members and lookalikes alone",
-  ruleTest("no-uncalled-members", {
+export const checkedMembersAreCalledWhereNamed = Task.make({
+  name: "no-uncalled-members reports a member whose ban is checked at its call, such as Stream.catchTag, Effect.retry, Stream.retry, Context.Service, Atomics.wait or Number.parseInt, wherever it is stored, passed, returned, exported, bound or wrapped, including by a TypeScript as, satisfies, non-null or instantiation expression, instead of called where it is named, and leaves calls, type positions, other members and lookalikes alone",
+  run: ruleTest("no-uncalled-members", {
     valid: [
       `${STREAM}work.pipe(Stream.catchTag((error) => Stream.fail(error)));`,
       'import { catchTag } from "effect/Stream"; work.pipe(catchTag("Missing", (cause) => Stream.failCause(cause)));',
@@ -169,4 +169,4 @@ export const checkedMembersAreCalledWhereNamed = Task.make(
       },
     ],
   }),
-);
+});
