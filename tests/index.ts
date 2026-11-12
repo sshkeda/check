@@ -17,6 +17,7 @@ import * as effectServices from "./internal/enforces-effect-service-boundaries.t
 import * as fileLayout from "./internal/enforces-file-layout.ts";
 import * as fileTypes from "./internal/enforces-file-types.ts";
 import * as scriptsModuleLayout from "./internal/enforces-scripts-module-layout.ts";
+import * as typeScriptApiProcessStops from "./internal/fails-typescript-requests-when-the-api-process-stops.ts";
 import * as formatConfig from "./internal/formats-with-the-format-config-from-check.ts";
 import * as generatedFiles from "./internal/grants-generated-files.ts";
 import * as permissionsByFile from "./internal/grants-permissions-by-file.ts";
@@ -170,6 +171,7 @@ export const ci = Task.make({
         whileLoops,
         shebangLines,
         sharedTypeScriptProject,
+        typeScriptApiProcessStops,
         formatConfig,
         causesReportedOnce,
         duplicatePackageOnce,
