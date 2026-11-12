@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const dynamicImports = Task.make(
-  "dynamic imports are rejected while static imports pass, and a literal import() of a Node built-in Effect replaces is left to the rule that bans that module in every file",
-  ruleTest("no-dynamic-import", {
+export const dynamicImports = Task.make({
+  name: "dynamic imports are rejected while static imports pass, and a literal import() of a Node built-in Effect replaces is left to the rule that bans that module in every file",
+  run: ruleTest("no-dynamic-import", {
     valid: [
       'import { Effect } from "effect";',
       'export { Effect } from "effect";',
@@ -21,11 +21,11 @@ export const dynamicImports = Task.make(
       "const load = (specifier) => import(specifier);",
     ].map((code) => ({ code, errors: [{ messageId: "banned" }] })),
   }),
-);
+});
 
-export const allowsExplicitUntimedAtomicsWaits = Task.make(
-  "Atomics waits with explicit undefined or Infinity timeouts pass, while finite and shadowed timeouts are rejected",
-  ruleTest("no-clock-reads-and-sleeps", {
+export const allowsExplicitUntimedAtomicsWaits = Task.make({
+  name: "Atomics waits with explicit undefined or Infinity timeouts pass, while finite and shadowed timeouts are rejected",
+  run: ruleTest("no-clock-reads-and-sleeps", {
     valid: ["wait", "waitAsync"].flatMap((method) =>
       ["undefined", "Infinity"].map((timeout) => `Atomics.${method}(cells, 0, 0, ${timeout});`),
     ),
@@ -36,11 +36,11 @@ export const allowsExplicitUntimedAtomicsWaits = Task.make(
       "function wait(undefined) { return Atomics.waitAsync(cells, 0, 0, undefined); }",
     ].map((code) => ({ code, errors: [{ messageId: "timedWait" }] })),
   }),
-);
+});
 
-export const forgetsReassignedDateTimeFormatters = Task.make(
-  "a reassigned formatter is not classified by its old Intl.DateTimeFormat initializer",
-  ruleTest("no-clock-reads-and-sleeps", {
+export const forgetsReassignedDateTimeFormatters = Task.make({
+  name: "a reassigned formatter is not classified by its old Intl.DateTimeFormat initializer",
+  run: ruleTest("no-clock-reads-and-sleeps", {
     valid: [
       'let formatter: Pick<Intl.DateTimeFormat, "format"> = new Intl.DateTimeFormat(); formatter = { format: () => "fixed" }; formatter.format();',
       'let formatter: Pick<Intl.DateTimeFormat, "formatToParts"> = Intl.DateTimeFormat(); formatter = { formatToParts: () => [] }; formatter.formatToParts();',
@@ -50,11 +50,11 @@ export const forgetsReassignedDateTimeFormatters = Task.make(
       "const formatter = Intl.DateTimeFormat(); formatter.formatToParts();",
     ].map((code) => ({ code, errors: [{ messageId: "formatsNow" }] })),
   }),
-);
+});
 
-export const clockPropertiesRespectTheirBindings = Task.make(
-  "clock properties refer to global or imported runtime objects, while local objects and parameters pass",
-  ruleTest("no-clock-reads-and-sleeps", {
+export const clockPropertiesRespectTheirBindings = Task.make({
+  name: "clock properties refer to global or imported runtime objects, while local objects and parameters pass",
+  run: ruleTest("no-clock-reads-and-sleeps", {
     valid: [
       "function read(process) { return process.uptime(); }",
       "function read(Bun) { return Bun.nanoseconds(); }",
@@ -78,11 +78,11 @@ export const clockPropertiesRespectTheirBindings = Task.make(
       errors: [{ messageId: "restrictedProperty", data: { usage } }],
     })),
   }),
-);
+});
 
-export const clockReadsAndSleeps = Task.make(
-  "the Date constructor, DateTime's unsafe clock reads, Intl.DateTimeFormat without a date, Atomics waits with a timeout and Effect timeouts on Effect.never are rejected, while shadowed names, given dates, untimed waits and timeouts on real work pass",
-  ruleTest("no-clock-reads-and-sleeps", {
+export const clockReadsAndSleeps = Task.make({
+  name: "the Date constructor, DateTime's unsafe clock reads, Intl.DateTimeFormat without a date, Atomics waits with a timeout and Effect timeouts on Effect.never are rejected, while shadowed names, given dates, untimed waits and timeouts on real work pass",
+  run: ruleTest("no-clock-reads-and-sleeps", {
     valid: [
       "const Date = (value) => value; Date(1);",
       "function format(Date) { return Date(); }",
@@ -133,11 +133,11 @@ export const clockReadsAndSleeps = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "neverTimeout" }] })),
     ],
   }),
-);
+});
 
-export const cronStepsFromTheCurrentTime = Task.make(
-  "Cron.next, Cron.prev and Cron.sequence without a start time are rejected, while given start times, spread arguments and other modules pass",
-  ruleTest("no-clock-reads-and-sleeps", {
+export const cronStepsFromTheCurrentTime = Task.make({
+  name: "Cron.next, Cron.prev and Cron.sequence without a start time are rejected, while given start times, spread arguments and other modules pass",
+  run: ruleTest("no-clock-reads-and-sleeps", {
     valid: [
       'import { Cron } from "effect"; Cron.next(cron, start);',
       'import { prev } from "effect/Cron"; prev(cron, start);',
@@ -155,11 +155,11 @@ export const cronStepsFromTheCurrentTime = Task.make(
       errors: [{ messageId: "clockRead", data: { usage } }],
     })),
   }),
-);
+});
 
-export const clockServiceSleeps = Task.make(
-  "sleeping through the Clock service yielded from Clock.Clock or passed to clockWith is rejected, while its other members, other objects and reassigned bindings pass",
-  ruleTest("no-clock-reads-and-sleeps", {
+export const clockServiceSleeps = Task.make({
+  name: "sleeping through the Clock service yielded from Clock.Clock or passed to clockWith is rejected, while its other members, other objects and reassigned bindings pass",
+  run: ruleTest("no-clock-reads-and-sleeps", {
     valid: [
       'import { Clock, Effect } from "effect"; Effect.gen(function* () { const clock = yield* Clock.Clock; return clock.currentTimeMillis; });',
       'import { Effect } from "effect"; Effect.gen(function* () { const clock = yield* other; yield* clock.sleep("1 second"); });',
@@ -182,4 +182,4 @@ export const clockServiceSleeps = Task.make(
       errors: [{ messageId: "restrictedProperty", data: { usage: "Clock.sleep" } }],
     })),
   }),
-);
+});

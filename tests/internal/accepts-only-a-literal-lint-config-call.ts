@@ -75,9 +75,9 @@ const LOCAL_WRAPPER = [
   "",
 ].join("\n");
 
-export const configFileHoldsOnlyTheImportAndTheExport = Task.make(
-  "a local lintConfig wrapper that turns a rule off, any statement besides the import and the export, and an import of lintConfig that is renamed, a namespace or type-only are refused at their lines, and a file that only lacks the import is refused once",
-  Effect.sync(() => {
+export const configFileHoldsOnlyTheImportAndTheExport = Task.make({
+  name: "a local lintConfig wrapper that turns a rule off, any statement besides the import and the export, and an import of lintConfig that is renamed, a namespace or type-only are refused at their lines, and a file that only lacks the import is refused once",
+  run: Effect.sync(() => {
     expect(literalFormViolations(LOCAL_WRAPPER)).toEqual([
       holdsOtherStatement(1),
       holdsOtherStatement(LINE_AFTER_IMPORT),
@@ -97,11 +97,11 @@ export const configFileHoldsOnlyTheImportAndTheExport = Task.make(
       ]);
     }
   }),
-);
+});
 
-export const lintConfigImportedFromOutsideCheckIsRefused = Task.make(
-  "lintConfig imported from a local file, or from @sshkeda/check that tsconfig paths maps to a local file, is refused, naming the file it resolves to",
-  Effect.gen(function* () {
+export const lintConfigImportedFromOutsideCheckIsRefused = Task.make({
+  name: "lintConfig imported from a local file, or from @sshkeda/check that tsconfig paths maps to a local file, is refused, naming the file it resolves to",
+  run: Effect.gen(function* () {
     const looseLintConfig =
       'import { lintConfig as strictLintConfig } from "@sshkeda/check";\nexport const lintConfig = strictLintConfig;\n';
     expect(
@@ -131,7 +131,7 @@ export const lintConfigImportedFromOutsideCheckIsRefused = Task.make(
       "oxlint.config.ts:1: error ConfigFileImportsFromOutsideCheck: imports lintConfig from @sshkeda/check, which resolves to loose-lint-config.ts instead of a file of @sshkeda/check",
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const LOOSE_LINT_CONFIG =
   'import { lintConfig as strictLintConfig } from "@sshkeda/check";\nexport const lintConfig = strictLintConfig;\n';
@@ -139,9 +139,9 @@ const LOOSE_LINT_CONFIG =
 const importsFromOutsideCheck = (request: string, resolvedFile: string) =>
   `oxlint.config.ts:1: error ConfigFileImportsFromOutsideCheck: imports lintConfig from ${request}, which resolves to ${resolvedFile} instead of a file of @sshkeda/check`;
 
-export const lintConfigFromAnImportsEntryWithATypesConditionIsRefused = Task.make(
-  "lintConfig imported through a package.json imports entry whose types condition points at @sshkeda/check while Bun loads a local file is refused, since Bun resolves without the types condition",
-  Effect.gen(function* () {
+export const lintConfigFromAnImportsEntryWithATypesConditionIsRefused = Task.make({
+  name: "lintConfig imported through a package.json imports entry whose types condition points at @sshkeda/check while Bun loads a local file is refused, since Bun resolves without the types condition",
+  run: Effect.gen(function* () {
     expect(
       yield* loadedFromFiles({
         "package.json": yield* encodeJson({
@@ -155,11 +155,11 @@ export const lintConfigFromAnImportsEntryWithATypesConditionIsRefused = Task.mak
       }),
     ).toEqual([importsFromOutsideCheck("#check", "loose-lint-config.ts")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const lintConfigFromANestedPackageNamedCheckIsRefused = Task.make(
-  "lintConfig imported from a nested package named @sshkeda/check is refused, since it is neither an installed package nor the project itself",
-  Effect.gen(function* () {
+export const lintConfigFromANestedPackageNamedCheckIsRefused = Task.make({
+  name: "lintConfig imported from a nested package named @sshkeda/check is refused, since it is neither an installed package nor the project itself",
+  run: Effect.gen(function* () {
     expect(
       yield* loadedFromFiles({
         "src/vendored/package.json": yield* encodeJson({ name: "@sshkeda/check", type: "module" }),
@@ -169,11 +169,11 @@ export const lintConfigFromANestedPackageNamedCheckIsRefused = Task.make(
       }),
     ).toEqual([importsFromOutsideCheck("./src/vendored/index.ts", "src/vendored/index.ts")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const literalLintConfigCallLoadsItsGrants = Task.make(
-  "a literal lintConfig() call with quoted and bare keys loads every grant and boundary",
-  Effect.gen(function* () {
+export const literalLintConfigCallLoadsItsGrants = Task.make({
+  name: "a literal lintConfig() call with quoted and bare keys loads every grant and boundary",
+  run: Effect.gen(function* () {
     expect(
       yield* loadedFrom(
         'lintConfig({ "main.ts": { allow: ["usesSqlDatabases"], services: ["Store"] }, src: { cannotImport: ["main.ts"] }, "port.ts": { allow: ["usesSqlDatabases", "trustsUnverifiedTypes"] } })',
@@ -192,14 +192,14 @@ export const literalLintConfigCallLoadsItsGrants = Task.make(
       ],
     });
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const repeated = (key: string) =>
   `oxlint.config.ts:2: error LintConfigKeyRepeated: names ${key} more than once in one object passed to lintConfig()`;
 
-export const repeatedKeysInLintConfigAreRefused = Task.make(
-  "a key named twice in one object passed to lintConfig(), a grant or the path map, is refused at the line that names it again instead of the last one winning",
-  Effect.sync(() => {
+export const repeatedKeysInLintConfigAreRefused = Task.make({
+  name: "a key named twice in one object passed to lintConfig(), a grant or the path map, is refused at the line that names it again instead of the last one winning",
+  run: Effect.sync(() => {
     expect(
       literalFormViolations(
         `${IMPORT}export default lintConfig({ "a.ts": { allow: ["usesSqlDatabases"], allow: [] }, "a.ts": {} });\n`,
@@ -213,11 +213,11 @@ export const repeatedKeysInLintConfigAreRefused = Task.make(
       "oxlint.config.ts:6: error LintConfigKeyRepeated: names a.ts more than once in one object passed to lintConfig()",
     ]);
   }),
-);
+});
 
-export const wrappersAroundCheckAreRefused = Task.make(
-  "defineConfig, extends, a hand-written override (one turning a module ban off included), satisfies, a second argument or a renamed call around lintConfig() are refused",
-  Effect.sync(() => {
+export const wrappersAroundCheckAreRefused = Task.make({
+  name: "defineConfig, extends, a hand-written override (one turning a module ban off included), satisfies, a second argument or a renamed call around lintConfig() are refused",
+  run: Effect.sync(() => {
     const exportsSomethingElse =
       "oxlint.config.ts:2: error ConfigFileExportsSomethingElse: exports something other than lintConfig({ ... })";
     expect(wrapperViolations("export default defineConfig(lintConfig({}));")).toEqual([
@@ -237,11 +237,11 @@ export const wrappersAroundCheckAreRefused = Task.make(
     expect(wrapperViolations("export default lintConfig({}, {});")).toEqual([exportsSomethingElse]);
     expect(wrapperViolations("export default lint({});")).toEqual([exportsSomethingElse]);
   }),
-);
+});
 
-export const nonLiteralEntriesAreRefused = Task.make(
-  "spreads, computed keys, variables, methods and template strings inside lintConfig() are refused",
-  Effect.sync(() => {
+export const nonLiteralEntriesAreRefused = Task.make({
+  name: "spreads, computed keys, variables, methods and template strings inside lintConfig() are refused",
+  run: Effect.sync(() => {
     const passesNonLiterals =
       "oxlint.config.ts:2: error LintConfigArgumentNotLiteral: passes lintConfig() something other than literals";
     for (const argument of [
@@ -262,11 +262,11 @@ export const nonLiteralEntriesAreRefused = Task.make(
       ]);
     }
   }),
-);
+});
 
-export const configsWithoutADefaultLintConfigCallAreRefused = Task.make(
-  "a config bound to a variable, a config without export default or a file that does not parse is refused",
-  Effect.sync(() => {
+export const configsWithoutADefaultLintConfigCallAreRefused = Task.make({
+  name: "a config bound to a variable, a config without export default or a file that does not parse is refused",
+  run: Effect.sync(() => {
     expect(
       literalFormViolations(`${IMPORT}const config = lintConfig({});\nexport default config;\n`),
     ).toEqual([
@@ -281,11 +281,11 @@ export const configsWithoutADefaultLintConfigCallAreRefused = Task.make(
       "oxlint.config.ts: error ConfigFileUnparsable: does not parse: ",
     );
   }),
-);
+});
 
-export const refusedGrantsAreReportedFromTheParsedLiteral = Task.make(
-  "grants read from the parsed literal are validated by the same function lintConfig() uses, and a whole route parameter segment such as [slug] is a literal path, not a glob",
-  Effect.gen(function* () {
+export const refusedGrantsAreReportedFromTheParsedLiteral = Task.make({
+  name: "grants read from the parsed literal are validated by the same function lintConfig() uses, and a whole route parameter segment such as [slug] is a literal path, not a glob",
+  run: Effect.gen(function* () {
     expect(
       yield* loadedFrom('lintConfig({ "src/*.ts": { allow: ["usesSqlDatabases"] } })'),
     ).toEqual({
@@ -302,11 +302,11 @@ export const refusedGrantsAreReportedFromTheParsedLiteral = Task.make(
       /MalformedGrant: "app\/\[a-z\]\*\.tsx": is a glob/u,
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const configNeverLintsNodeModules = Task.make(
-  "lintConfig ignores node_modules, so a plain oxlint run never walks into a symlinked workspace package",
-  Effect.sync(() => {
+export const configNeverLintsNodeModules = Task.make({
+  name: "lintConfig ignores node_modules, so a plain oxlint run never walks into a symlinked workspace package",
+  run: Effect.sync(() => {
     expect(lintConfig({}).ignorePatterns).toContain("**/node_modules/**");
   }),
-);
+});

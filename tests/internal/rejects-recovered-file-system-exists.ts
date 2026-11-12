@@ -15,9 +15,9 @@ const recovered = (recovery: string) => ({
 const inGenerator = (body: string) =>
   `import { Effect, FileSystem, pipe } from "effect"; export const run = Effect.gen(function* () { const fileSystem = yield* FileSystem.FileSystem; ${body} });`;
 
-export const existsFailuresAreNotRecovered = Task.make(
-  "no-exists-recovery refuses recovering the failures of a yielded FileSystem's exists into a success, piped, data-first, after map or as, or through a destructured exists, and leaves other recoveries, other services and other exists methods alone",
-  ruleTest("no-exists-recovery", {
+export const existsFailuresAreNotRecovered = Task.make({
+  name: "no-exists-recovery refuses recovering the failures of a yielded FileSystem's exists into a success, piped, data-first, after map or as, or through a destructured exists, and leaves other recoveries, other services and other exists methods alone",
+  run: ruleTest("no-exists-recovery", {
     valid: [
       inGenerator("return yield* fileSystem.exists(file);"),
       inGenerator("return yield* fileSystem.exists(file).pipe(Effect.map((found) => !found));"),
@@ -225,4 +225,4 @@ export const existsFailuresAreNotRecovered = Task.make(
       },
     ],
   }),
-);
+});

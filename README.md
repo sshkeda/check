@@ -4,9 +4,9 @@ Check sends your AI slop code back to the kitchen!
 
 Check holds your TypeScript code to a strict standard built around Effect and Bun, so the code stays type-safe, observable and predictable.
 
-It runs about 310 lint rules, 66 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
+It runs about 310 lint rules, 65 of them its own, and about 80 checks on your project's layout, imports and config. It also runs oxfmt, Effect's diagnostics and `bun check`. Your agent keeps fixing what it reports until the slop is gone.
 
-No comment or setting turns a rule off everywhere. A small set of rules was picked to allow an override, and you grant each one to a single file in `oxlint.config.ts`. See [Grant a permission](docs/how-to-make-check-pass.md#grant-a-permission).
+No comment or setting turns a rule off everywhere. A small set of rules was picked to allow an override, and you grant each one to a single file in `oxlint.config.ts`. See [How to Grant a Permission](docs/how-to-grant-a-permission.md).
 
 Check is a command you run in your repo. It runs its checks with [Task](https://github.com/sshkeda/task), a task runner for Bun.
 
@@ -48,7 +48,8 @@ Here's what Check prints when it runs on that code:
 [typed-checks] error SettledTasksFailed: 2 of 6 tasks failed: oxlint, effect-tsgo
 [check] read node_modules/@sshkeda/check/docs/how-to-make-check-pass.md before you change the code
 [check] error SettledTasksFailed: 1 of 7 tasks failed: typed-checks
-failed: effect-tsgo, oxlint (2 of 17 tasks), 1.0s
+failed: effect-tsgo, oxlint (2 of 18 tasks), 1.0s
+...
 ```
 
 Here's what each error catches:
@@ -150,44 +151,7 @@ Check needs Bun 1.4.4 or newer and a Git repository.
 
    Check checks the package in the directory you start it in.
 
-## Run it from a script
-
-To run Check beside your own tasks, such as your tests, add Task and start the command from a task in `scripts/`.
-
-```bash
-bun add @sshkeda/task
-```
-
-`scripts/internal/start-check.ts` starts the command:
-
-```ts
-import { Task } from "@sshkeda/task";
-
-export const check = Task.make("check", Task.exec("bunx", ["@sshkeda/check"]));
-```
-
-`scripts/ci.ts` runs it:
-
-```ts
-import { Task } from "@sshkeda/task";
-
-import { check } from "./internal/start-check.ts";
-
-if (import.meta.main) {
-  Task.main(check);
-}
-```
-
-To run your tests too, make one task in `scripts/internal/run-checks-and-tests.ts` that runs both, and pass it to `Task.main` in `scripts/ci.ts`:
-
-```ts
-import { Task } from "@sshkeda/task";
-
-import { tests } from "../../tests/index.ts";
-import { check } from "./start-check.ts";
-
-export const ci = Task.make("ci", Task.allSettled([check, tests]));
-```
+   To run one check alone, name it, as in `bunx @sshkeda/check oxlint`.
 
 ## Make it yours
 

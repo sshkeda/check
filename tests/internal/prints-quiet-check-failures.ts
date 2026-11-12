@@ -9,7 +9,6 @@ import {
   theCheckCommand,
   FORMAT_CONFIG_TEXT,
   linkNodeModulesWithCheck,
-  RUNNER,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
@@ -54,9 +53,9 @@ const SERVICE_YIELDS_TSCONFIG = {
   files: ["index.ts"],
 } as const;
 
-export const printsToolOutputWithDetailInTrace = Task.make(
-  "every failed check prints its exit line naming the program, oxlint violations from its JSON report once each without its help, and messages that contain hint: stay whole, while the trace keeps the command and cause, and a package.json check script never runs in place of the type checker",
-  Effect.scoped(
+export const printsToolOutputWithDetailInTrace = Task.make({
+  name: "every failed check prints its exit line naming the program, oxlint violations from its JSON report once each without its help, and messages that contain hint: stay whole, while the trace keeps the command and cause, and a package.json check script never runs in place of the type checker",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -141,11 +140,11 @@ export const printsToolOutputWithDetailInTrace = Task.make(
       expect(trace).toContain("--lspconfig");
     }),
   ),
-);
+});
 
-export const printsEachViolationWithItsTag = Task.make(
-  "a checker query prints each violation as location: error <check> <Tag>: message",
-  Effect.scoped(
+export const printsEachViolationWithItsTag = Task.make({
+  name: "a checker query prints each violation as location: error <check> <Tag>: message",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -186,7 +185,7 @@ export const program = Effect.gen(function* () {
       );
       yield* fileSystem.writeFileString(
         path.join(directory, "run.ts"),
-        `import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\nimport { runChecksOverOneTypeScriptProject } from ${yield* encodeJson(CHECKS_OVER_ONE_PROJECT)};\nimport { ProjectQueryCachesLive } from ${yield* encodeJson(PROJECT_QUERY_CACHES)};\nimport { findRepeatedServiceYields } from ${yield* encodeJson(SERVICE_YIELDS_CHECK)};\nconst checkerQueries = Task.make("checker-queries", runChecksOverOneTypeScriptProject("tsconfig.json", { "service-yields": findRepeatedServiceYields }).pipe(Effect.provide(ProjectQueryCachesLive)));\nif (import.meta.main) {\n  Task.main(checkerQueries);\n}\n`,
+        `import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\nimport { runChecksOverOneTypeScriptProject } from ${yield* encodeJson(CHECKS_OVER_ONE_PROJECT)};\nimport { ProjectQueryCachesLive } from ${yield* encodeJson(PROJECT_QUERY_CACHES)};\nimport { findRepeatedServiceYields } from ${yield* encodeJson(SERVICE_YIELDS_CHECK)};\nconst checkerQueries = Task.make({ name: "checker-queries", run: runChecksOverOneTypeScriptProject("tsconfig.json", { "service-yields": findRepeatedServiceYields }).pipe(Effect.provide(ProjectQueryCachesLive)) });\nexport default checkerQueries;\n`,
       );
       yield* Task.exec("git", ["init", "--quiet"], options);
       const printed = yield* runTaskFile("bun run.ts", { ...options, taskStateDirectory }).pipe(
@@ -203,11 +202,11 @@ export const program = Effect.gen(function* () {
       expect(printed).not.toContain("detected at");
     }),
   ),
-);
+});
 
-export const reportsEachCauseOnce = Task.make(
-  "each cause is reported once by one owner: console by no-console, Date.now and JSON by no-restricted-properties, new Date() by no-clock-reads-and-sleeps, disable directives by the directives task, x! by no-non-null-assertion, async functions by effect(asyncFunction) and awaits in loops, top-level ones included, by no-await-in-loop, Effect.runSync is no Node sync method, Schema.Number gets check's message, Effect.catch is reported by no-unnamed-recovery alone, and no violation prints a hint or the help of oxlint",
-  Effect.scoped(
+export const reportsEachCauseOnce = Task.make({
+  name: "each cause is reported once by one owner: console by no-console, Date.now and JSON by no-restricted-properties, new Date() by no-clock-reads-and-sleeps, disable directives by the directives task, x! by no-non-null-assertion, async functions by effect(asyncFunction) and awaits in loops, top-level ones included, by no-await-in-loop, Effect.runSync is no Node sync method, Schema.Number gets check's message, Effect.catch is reported by no-unnamed-recovery alone, and no violation prints a hint or the help of oxlint",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -310,11 +309,11 @@ export const reportsEachCauseOnce = Task.make(
       }
     }),
   ),
-);
+});
 
-export const typeCheckIgnoresCheckScriptsAboveTheTemporaryDirectory = Task.make(
-  "type-check runs bun's own checker even when a package.json above the temporary directory has a check script",
-  Effect.scoped(
+export const typeCheckIgnoresCheckScriptsAboveTheTemporaryDirectory = Task.make({
+  name: "type-check runs bun's own checker even when a package.json above the temporary directory has a check script",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -333,7 +332,7 @@ export const typeCheckIgnoresCheckScriptsAboveTheTemporaryDirectory = Task.make(
         "package.json": `${yield* encodeIndentedJson({ name: path.basename(directory), type: "module" })}\n`,
         "tsconfig.json": `${yield* encodeIndentedJson(STRICT_INDEX_TSCONFIG)}\n`,
         "index.ts": "export const COUNT: number = 1;\n",
-        "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { typeCheck } from ${yield* encodeJson(TYPE_CHECK_TASK)};\nTask.main(typeCheck);\n`,
+        "run.ts": `import { typeCheck } from ${yield* encodeJson(TYPE_CHECK_TASK)};\nexport default typeCheck;\n`,
       };
       for (const [file, text] of Object.entries(files)) {
         yield* fileSystem.writeFileString(path.join(directory, file), text);
@@ -359,7 +358,7 @@ export const typeCheckIgnoresCheckScriptsAboveTheTemporaryDirectory = Task.make(
       expect(failed).not.toContain("SHADOWED");
     }),
   ),
-);
+});
 
 const fullCheckOutputWith = (
   projectFiles: Readonly<Record<string, string>>,
@@ -400,9 +399,9 @@ const fullCheckOutputWith = (
     );
   });
 
-export const everyCheckNamesAnUnreadablePackageJson = Task.make(
-  'a nested package.json whose name is no string, such as { "name": 5 }, is printed at its path with why on one line by every check that looks for the nested packages to check, the cached checks whose inputs list them included, and the typed checks wait for the TypeScript config check it fails',
-  Effect.scoped(
+export const everyCheckNamesAnUnreadablePackageJson = Task.make({
+  name: 'a nested package.json whose name is no string, such as { "name": 5 }, is printed at its path with why on one line by every check that looks for the nested packages to check, the cached checks whose inputs list them included, and the typed checks wait for the TypeScript config check it fails',
+  run: Effect.scoped(
     Effect.gen(function* () {
       const failures = yield* fullCheckOutputWith({ "sub/package.json": '{ "name": 5 }\n' });
       const printed = failures
@@ -425,11 +424,11 @@ export const everyCheckNamesAnUnreadablePackageJson = Task.make(
       expect(failures).not.toMatch(/^\[[^\]]+\]\s+at \[/mu);
     }),
   ),
-);
+});
 
-export const aPathThroughAFileOrASymlinkLoopFindsNoPackageJson = Task.make(
-  "an import through a file, such as ./a.ts/b.ts, or through a symlink loop beside the project finds no package.json there, so every check reads it as a missing file that the type check reports as TS2307, not as a package.json that cannot be read",
-  Effect.scoped(
+export const aPathThroughAFileOrASymlinkLoopFindsNoPackageJson = Task.make({
+  name: "an import through a file, such as ./a.ts/b.ts, or through a symlink loop beside the project finds no package.json there, so every check reads it as a missing file that the type check reports as TS2307, not as a package.json that cannot be read",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const failures = yield* fullCheckOutputWith(
         {
@@ -457,11 +456,11 @@ export const aPathThroughAFileOrASymlinkLoopFindsNoPackageJson = Task.make(
       );
     }),
   ),
-);
+});
 
-export const exceptionalFileTypeHasOneRecoveryDiagnostic = Task.make(
-  "the full Check CLI prints one file-type diagnostic with its exact path and only the fact",
-  Effect.scoped(
+export const exceptionalFileTypeHasOneRecoveryDiagnostic = Task.make({
+  name: "the full Check CLI prints one file-type diagnostic with its exact path and only the fact",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const output = yield* fullCheckOutputWith({ "src/native.c": "" });
       const failures = output
@@ -473,4 +472,4 @@ export const exceptionalFileTypeHasOneRecoveryDiagnostic = Task.make(
       );
     }),
   ),
-);
+});

@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const rejectsRetiredWordsInDeclaredNames = Task.make(
-  "no-retired-words reports fingerprint, folder, settings, finding and problem in the names a file chooses",
-  ruleTest("no-retired-words", {
+export const rejectsRetiredWordsInDeclaredNames = Task.make({
+  name: "no-retired-words reports fingerprint, folder, settings, finding and problem in the names a file chooses",
+  run: ruleTest("no-retired-words", {
     valid: [
       "const hash = 1;",
       "const violations = [];",
@@ -82,11 +82,11 @@ export const rejectsRetiredWordsInDeclaredNames = Task.make(
       },
     ],
   }),
-);
+});
 
-export const rejectsRetiredWordsInFileNames = Task.make(
-  "no-retired-words reports a retired word in the linted file's own name and leaves directories to the layout check",
-  ruleTest("no-retired-words", {
+export const rejectsRetiredWordsInFileNames = Task.make({
+  name: "no-retired-words reports a retired word in the linted file's own name and leaves directories to the layout check",
+  run: ruleTest("no-retired-words", {
     valid: [
       { code: "export const HASH = 1;", filename: "src/lib/file-hashes.ts" },
       { code: "export const HASH = 1;", filename: "src/folders/report.ts" },
@@ -115,4 +115,4 @@ export const rejectsRetiredWordsInFileNames = Task.make(
       },
     ],
   }),
-);
+});

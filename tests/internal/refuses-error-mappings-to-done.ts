@@ -29,9 +29,9 @@ const violationsOf = (sources: Readonly<Record<string, string>>) =>
     );
   }).pipe(Effect.scoped);
 
-export const errorMappingsToDoneAreRefused = Task.make(
-  "an Effect, Stream, Channel or Sink error mapping whose result can be Cause.Done is refused by its type, a helper or a union included, and mappings to ordinary failures pass",
-  Effect.gen(function* () {
+export const errorMappingsToDoneAreRefused = Task.make({
+  name: "an Effect, Stream, Channel or Sink error mapping whose result can be Cause.Done is refused by its type, a helper or a union included, and mappings to ordinary failures pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": `${IMPORTS}export const ended = Stream.fail("failure").pipe(Stream.mapError(() => Cause.Done()), Stream.runDrain);\n`,
@@ -49,13 +49,13 @@ export const errorMappingsToDoneAreRefused = Task.make(
       { location: "e.ts:2", operation: "Effect.mapBoth" },
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const TAGGED_FAILURE = `import { Schema } from "effect";\nclass LineUnreadable extends Schema.TaggedError<LineUnreadable>()("LineUnreadable", {}) {}\nconst failing = Stream.fail(new LineUnreadable());\n`;
 
-export const recoveriesThatFailWithDoneAreRefused = Task.make(
-  "an Effect or Stream recovery whose handler can fail with Cause.Done is refused like an error mapping to it, a catchTags handler or a data-first call included, and recoveries to ordinary failures or values pass",
-  Effect.gen(function* () {
+export const recoveriesThatFailWithDoneAreRefused = Task.make({
+  name: "an Effect or Stream recovery whose handler can fail with Cause.Done is refused like an error mapping to it, a catchTags handler or a data-first call included, and recoveries to ordinary failures or values pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "a.ts": `${IMPORTS}${TAGGED_FAILURE}export const ended = failing.pipe(Stream.catchTag("LineUnreadable", () => Stream.fail(Cause.Done())));\n`,
@@ -73,4 +73,4 @@ export const recoveriesThatFailWithDoneAreRefused = Task.make(
       { location: "e.ts:5", operation: "Stream.catch" },
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

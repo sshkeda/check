@@ -28,9 +28,9 @@ const OVERRIDE = (comment: string) => `export default defineConfig({
   ],
 });`;
 
-export const rejectsCodeComments = Task.make(
-  "no-comments flags every comment in code",
-  ruleTest("no-comments", {
+export const rejectsCodeComments = Task.make({
+  name: "no-comments flags every comment in code",
+  run: ruleTest("no-comments", {
     valid: ["const answer = 42;", "#!/usr/bin/env bun\nconst answer = 42;"],
     invalid: [
       { code: "// the answer\nconst answer = 42;", errors: [{ messageId: "comment" }] },
@@ -46,11 +46,11 @@ export const rejectsCodeComments = Task.make(
       },
     ],
   }),
-);
+});
 
-export const rejectsTheCommentAboveAnOverride = Task.make(
-  "no-comments flags the comment above an override entry like any other comment",
-  ruleTest("no-comments", {
+export const rejectsTheCommentAboveAnOverride = Task.make({
+  name: "no-comments flags the comment above an override entry like any other comment",
+  run: ruleTest("no-comments", {
     valid: [],
     invalid: [
       {
@@ -81,11 +81,11 @@ export const rejectsTheCommentAboveAnOverride = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "comment" }] })),
     ],
   }),
-);
+});
 
-export const leavesDisableDirectivesToTheDirectivesTask = Task.make(
-  "no-comments leaves every disable directive, explained or not, to the directives task, which a directive cannot switch off",
-  ruleTest("no-comments", {
+export const leavesDisableDirectivesToTheDirectivesTask = Task.make({
+  name: "no-comments leaves every disable directive, explained or not, to the directives task, which a directive cannot switch off",
+  run: ruleTest("no-comments", {
     valid: [
       "// oxlint-disable-next-line typescript/consistent-type-assertions -- the value is JSON the runner checked\nconst answer = value as Answer;",
       "// oxlint-disable-next-line no-console\nlog();",
@@ -103,11 +103,11 @@ export const leavesDisableDirectivesToTheDirectivesTask = Task.make(
     ],
     invalid: [],
   }),
-);
+});
 
-export const directivesTaskFindsEveryDisableDirective = Task.make(
-  "the directives task reports explained disables, TypeScript suppressions and Effect suppressions",
-  Effect.gen(function* () {
+export const directivesTaskFindsEveryDisableDirective = Task.make({
+  name: "the directives task reports explained disables, TypeScript suppressions and Effect suppressions",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -129,11 +129,11 @@ export const directivesTaskFindsEveryDisableDirective = Task.make(
       directives.map((_directive, index) => `${file}:${index + 1}`),
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const directivesTaskCountsLinesOncePerFile = Task.make(
-  "the directives task reports the line of each of 25,000 directives in a 50,000-line file in under 5 seconds",
-  Effect.gen(function* () {
+export const directivesTaskCountsLinesOncePerFile = Task.make({
+  name: "the directives task reports the line of each of 25,000 directives in a 50,000-line file in under 5 seconds",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -155,11 +155,11 @@ export const directivesTaskCountsLinesOncePerFile = Task.make(
     );
     expect(Duration.toMillis(elapsed)).toBeLessThan(MOST_MILLISECONDS_TO_SCAN_A_LARGE_FILE);
   }).pipe(Effect.scoped),
-);
+});
 
-export const directivesTaskFindsSuppressionsInsideBlockComments = Task.make(
-  "the directives task finds a TypeScript suppression on the last line of a block comment, where TypeScript reads one too, and reports the line the comment starts on",
-  Effect.gen(function* () {
+export const directivesTaskFindsSuppressionsInsideBlockComments = Task.make({
+  name: "the directives task finds a TypeScript suppression on the last line of a block comment, where TypeScript reads one too, and reports the line the comment starts on",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -185,11 +185,11 @@ export const directivesTaskFindsSuppressionsInsideBlockComments = Task.make(
       [`${file}:1`, `${file}:4`],
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const directivesTaskReportsTheLineThatDoesNotParse = Task.make(
-  "the directives task reports a file that does not parse at the line of each parse error",
-  Effect.gen(function* () {
+export const directivesTaskReportsTheLineThatDoesNotParse = Task.make({
+  name: "the directives task reports a file that does not parse at the line of each parse error",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -203,4 +203,4 @@ export const directivesTaskReportsTheLineThatDoesNotParse = Task.make(
       `${file}:3: error SourceFileUnparsable: does not parse: Unexpected token`,
     ]);
   }).pipe(Effect.scoped),
-);
+});

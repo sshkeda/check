@@ -36,9 +36,9 @@ const syncCallsIn = (tsconfigFile: string) =>
     ),
   );
 
-export const syncCallsNeedASyncGrant = Task.make(
-  "the declared-uses check reports a call to any package function or method whose declared name ends in Sync, called directly, destructured or aliased, in every file, and leaves in-memory sync functions and the named sync reads and writes to their own rules",
-  Effect.gen(function* () {
+export const syncCallsNeedASyncGrant = Task.make({
+  name: "the declared-uses check reports a call to any package function or method whose declared name ends in Sync, called directly, destructured or aliased, in every file, and leaves in-memory sync functions and the named sync reads and writes to their own rules",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       ...BLOCKING_PACKAGE,
       "load.ts": `import { decodeSync, fetchSync, Store, sync, writeFileSync } from "blocking";
@@ -66,4 +66,4 @@ export const loaded = new Store().loadSync("a");
       "other.ts:2 Store.loadSync runs synchronously",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

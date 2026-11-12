@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const typesAreDerivedInline = Task.make(
-  "no-type-declarations rejects every type alias, interface, enum, namespace, ambient module and declare global, while inline annotations, derived types and classes stay allowed",
-  ruleTest("no-type-declarations", {
+export const typesAreDerivedInline = Task.make({
+  name: "no-type-declarations rejects every type alias, interface, enum, namespace, ambient module and declare global, while inline annotations, derived types and classes stay allowed",
+  run: ruleTest("no-type-declarations", {
     valid: [
       'import { Schema } from "effect"; const Payload = Schema.Struct({ id: Schema.String }); const read = (payload: typeof Payload.Type) => payload.id;',
       "const make = () => ({ id: 1 }); const keep = (made: ReturnType<typeof make>) => made.id;",
@@ -82,11 +82,11 @@ export const typesAreDerivedInline = Task.make(
       },
     ],
   }),
-);
+});
 
-export const overloadsAreSeparateFunctions = Task.make(
-  "no-overloads groups bodiless signatures and implementations by name within each container and rejects every signature that shares its name, so one signature before its implementation is rejected too, while a lone ambient signature stays allowed",
-  ruleTest("no-overloads", {
+export const overloadsAreSeparateFunctions = Task.make({
+  name: "no-overloads groups bodiless signatures and implementations by name within each container and rejects every signature that shares its name, so one signature before its implementation is rejected too, while a lone ambient signature stays allowed",
+  run: ruleTest("no-overloads", {
     valid: [
       "function parse(text: string) { return text; }",
       "const parseText = (text: string) => text; const parseCount = (count: number) => count;",
@@ -185,4 +185,4 @@ export const overloadsAreSeparateFunctions = Task.make(
       },
     ],
   }),
-);
+});

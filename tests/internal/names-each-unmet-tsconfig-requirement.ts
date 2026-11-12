@@ -1,7 +1,17 @@
 import { expect } from "bun:test";
 
 import { Task } from "@sshkeda/task";
-import { Effect, FileSystem, Option, Path, Record, Schema, Array as Arrays, flow } from "effect";
+import {
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Predicate,
+  Record,
+  Schema,
+  Array as Arrays,
+  flow,
+} from "effect";
 
 import { findInferrableAnnotations } from "../../src/lib/tasks/lib/detect-inferrable-annotations/internal/find-inferrable-annotations.ts";
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
@@ -82,24 +92,24 @@ const optionsDefaultingToStrict = tscHelpEntries.pipe(
   Effect.map((entries) => flagsOf(entries.filter((entry) => entry.includes(STRICT_BY_DEFAULT)))),
 );
 
-export const readsEveryFlagFromTscHelp = Task.make(
-  "the tsc --help --all reader reads coloured output and flags that have a short form",
-  Effect.gen(function* () {
+export const readsEveryFlagFromTscHelp = Task.make({
+  name: "the tsc --help --all reader reads coloured output and flags that have a short form",
+  run: Effect.gen(function* () {
     const flags = yield* Effect.map(tscHelpEntries, flagsOf);
     expect(
       ["build", "project", "strictNullChecks", "noCheck"].filter((flag) => !flags.includes(flag)),
     ).toEqual([]);
   }),
-);
+});
 
-export const checksExactlyTheOptionsTscDefaultsFromStrict = Task.make(
-  "the strict options check judges are strict and exactly the options tsc --help --all defaults from strict",
-  Effect.gen(function* () {
+export const checksExactlyTheOptionsTscDefaultsFromStrict = Task.make({
+  name: "the strict options check judges are strict and exactly the options tsc --help --all defaults from strict",
+  run: Effect.gen(function* () {
     expect(["strict", ...(yield* optionsDefaultingToStrict)].toSorted()).toEqual(
       [...STRICT_OPTIONS].toSorted(),
     );
   }),
-);
+});
 
 const OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING = {
   noImplicitReturns: true,
@@ -117,20 +127,20 @@ const REQUIRED_OPTIONS = [
   ...Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT),
 ];
 
-export const looseCompilerOptionNamesOnlyARequiredOption = Task.make(
-  "LooseCompilerOption decodes an option check requires and refuses any other option",
-  Effect.sync(() => {
+export const looseCompilerOptionNamesOnlyARequiredOption = Task.make({
+  name: "LooseCompilerOption decodes an option check requires and refuses any other option",
+  run: Effect.sync(() => {
     const decoded = Schema.decodeUnknownOption(LooseCompilerOption.fields.option);
     expect(REQUIRED_OPTIONS.map((option) => Option.isSome(decoded(option)))).toEqual(
       REQUIRED_OPTIONS.map(() => true),
     );
     expect(Option.isNone(decoded("noErrorTruncation"))).toBe(true);
   }),
-);
+});
 
-export const judgesUnsetOptionsOutsideStrictByTheirTscDefault = Task.make(
-  "every option check requires outside strict defaults to false in tsc --help --all, so an unset one resolves to false",
-  Effect.gen(function* () {
+export const judgesUnsetOptionsOutsideStrictByTheirTscDefault = Task.make({
+  name: "every option check requires outside strict defaults to false in tsc --help --all, so an unset one resolves to false",
+  run: Effect.gen(function* () {
     const entries = yield* tscHelpEntries;
     const optionsThatDefaultToFalse = Record.keys(REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT).filter(
       (option) => !OPTIONS_TSC_LEAVES_UNSET.has(option),
@@ -143,32 +153,32 @@ export const judgesUnsetOptionsOutsideStrictByTheirTscDefault = Task.make(
       ),
     ).toEqual(optionsThatDefaultToFalse.map(() => true));
   }),
-);
+});
 
-export const acceptsAConfigThatLeavesStrictUnset = Task.make(
-  "a tsconfig whose extended base does not set strict meets every requirement because TypeScript 7 is strict by default",
-  Effect.gen(function* () {
+export const acceptsAConfigThatLeavesStrictUnset = Task.make({
+  name: "a tsconfig whose extended base does not set strict meets every requirement because TypeScript 7 is strict by default",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* projectExtending({
       module: "CommonJS",
       moduleResolution: "Bundler",
     });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesStrictTurnedOffInAnExtendedBase = Task.make(
-  "strict written as false in an extended base is reported against the project that resolves it",
-  Effect.gen(function* () {
+export const namesStrictTurnedOffInAnExtendedBase = Task.make({
+  name: "strict written as false in an extended base is reported against the project that resolves it",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* projectExtending({ strict: false });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([
       `${tsconfigFile}: error LooseCompilerOption: strict resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesEveryStrictOptionTurnedOffUnderStrict = Task.make(
-  "every option that tsc defaults from strict is reported when written as false next to strict true",
-  Effect.gen(function* () {
+export const namesEveryStrictOptionTurnedOffUnderStrict = Task.make({
+  name: "every option that tsc defaults from strict is reported when written as false next to strict true",
+  run: Effect.gen(function* () {
     const strictOptions = yield* optionsDefaultingToStrict;
     expect(strictOptions.length).toBeGreaterThan(0);
     const { tsconfigFile } = yield* projectExtending({
@@ -181,11 +191,11 @@ export const namesEveryStrictOptionTurnedOffUnderStrict = Task.make(
         .toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const followsOverridesAlongTheExtendsChain = Task.make(
-  "a project that overrides its base's strict options is judged by the values it resolves to",
-  Effect.gen(function* () {
+export const followsOverridesAlongTheExtendsChain = Task.make({
+  name: "a project that overrides its base's strict options is judged by the values it resolves to",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const turnedBackOn = yield* projectExtending({ strict: false, strictNullChecks: false });
@@ -212,11 +222,11 @@ export const followsOverridesAlongTheExtendsChain = Task.make(
       `${turnedOff.tsconfigFile}: error LooseCompilerOption: noImplicitAny resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const followsExtendsIntoAPackage = Task.make(
-  "a strict option turned off in a tsconfig extended from a package is reported",
-  Effect.gen(function* () {
+export const followsExtendsIntoAPackage = Task.make({
+  name: "a strict option turned off in a tsconfig extended from a package is reported",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "node_modules/shared-config/package.json": yield* encodeJson({ name: "shared-config" }),
       "node_modules/shared-config/tsconfig.json": yield* encodeJson({
@@ -237,11 +247,11 @@ export const followsExtendsIntoAPackage = Task.make(
       `${tsconfigFile}: error LooseCompilerOption: strictFunctionTypes resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
-  "strict options turned off in referenced tsconfig and jsconfig projects are reported against each of them",
-  Effect.gen(function* () {
+export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make({
+  name: "strict options turned off in referenced tsconfig and jsconfig projects are reported against each of them",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
@@ -285,7 +295,7 @@ export const namesStrictOptionsTurnedOffInReferencedProjects = Task.make(
       `${path.join(directory, "web/jsconfig.json")}: error LooseCompilerOption: strict resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const solutionStyleProject = (referencedStrict: boolean) =>
   Effect.gen(function* () {
@@ -308,9 +318,9 @@ const solutionStyleProject = (referencedStrict: boolean) =>
     });
   });
 
-export const judgesOnlyProjectsThatCompileFiles = Task.make(
-  "a solution-style root tsconfig that compiles no files is not judged, so its strict false passes when the referenced project is strict and only the referenced project is named when it is not",
-  Effect.gen(function* () {
+export const judgesOnlyProjectsThatCompileFiles = Task.make({
+  name: "a solution-style root tsconfig that compiles no files is not judged, so its strict false passes when the referenced project is strict and only the referenced project is named when it is not",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     expect(yield* unmetRequirements((yield* solutionStyleProject(true)).tsconfigFile)).toEqual([]);
     const { directory, tsconfigFile } = yield* solutionStyleProject(false);
@@ -318,11 +328,11 @@ export const judgesOnlyProjectsThatCompileFiles = Task.make(
       `${path.join(directory, "server/tsconfig.json")}: error LooseCompilerOption: strict resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const refusesAnAbsoluteReferencePath = Task.make(
-  "a reference whose path is absolute is reported at the referencing tsconfig and not followed, whether or not a project exists there, so it is neither judged nor reported missing under the referencing project's directory",
-  Effect.gen(function* () {
+export const refusesAnAbsoluteReferencePath = Task.make({
+  name: "a reference whose path is absolute is reported at the referencing tsconfig and not followed, whether or not a project exists there, so it is neither judged nor reported missing under the referencing project's directory",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* solutionStyleProject(false);
@@ -340,11 +350,11 @@ export const refusesAnAbsoluteReferencePath = Task.make(
       ]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const acceptsACheckedJsconfigThatLeavesStrictUnset = Task.make(
-  "a referenced jsconfig that sets checkJs and does not set strict meets every requirement",
-  Effect.gen(function* () {
+export const acceptsACheckedJsconfigThatLeavesStrictUnset = Task.make({
+  name: "a referenced jsconfig that sets checkJs and does not set strict meets every requirement",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
         compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
@@ -364,11 +374,11 @@ export const acceptsACheckedJsconfigThatLeavesStrictUnset = Task.make(
     });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesNoCheckInTheRootAndReferencedProjects = Task.make(
-  "noCheck resolving to true in the root or a referenced project is reported because bun check then reports no type errors",
-  Effect.gen(function* () {
+export const namesNoCheckInTheRootAndReferencedProjects = Task.make({
+  name: "noCheck resolving to true in the root or a referenced project is reported because bun check then reports no type errors",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* projectExtending({ noCheck: true });
@@ -399,7 +409,7 @@ export const namesNoCheckInTheRootAndReferencedProjects = Task.make(
       `${path.join(directory, "server/tsconfig.json")}: error LooseCompilerOption: noCheck resolves to true`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const printedCheckOf = (directory: string) =>
   Effect.gen(function* () {
@@ -419,13 +429,15 @@ const printedCheckOf = (directory: string) =>
       taskStateDirectory: yield* fileSystem.makeTempDirectoryScoped(),
     }).pipe(
       failureAsValue,
-      Effect.map((failure) => failure.message),
+      Effect.map((failure) =>
+        Predicate.isTagged(failure, "CommandFailed") ? failure.standardOutput : failure.message,
+      ),
     );
   });
 
-export const checkRefusesNoCheckOverRealTypeErrors = Task.make(
-  "check fails a project whose tsconfig sets noCheck over a real type error",
-  Effect.gen(function* () {
+export const checkRefusesNoCheckOverRealTypeErrors = Task.make({
+  name: "check fails a project whose tsconfig sets noCheck over a real type error",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory } = yield* projectExtending({ noCheck: true });
@@ -438,11 +450,11 @@ export const checkRefusesNoCheckOverRealTypeErrors = Task.make(
       "[typescript-config] tsconfig.json: error LooseCompilerOption: noCheck resolves to true",
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const namesReferencesOfTheWrongShape = Task.make(
-  "references written as something other than an array of { path } objects is reported against that file",
-  Effect.gen(function* () {
+export const namesReferencesOfTheWrongShape = Task.make({
+  name: "references written as something other than an array of { path } objects is reported against that file",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({ files: [], references: "./server" }),
     });
@@ -452,11 +464,11 @@ export const namesReferencesOfTheWrongShape = Task.make(
       `${tsconfigFile}: error ProjectReferencesUndecodable: references do not decode:`,
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const acceptsAnUnbuiltBaseConfigWithNoInputs = Task.make(
-  "a shared base tsconfig that only the root project extends and that has no inputs of its own meets every requirement, because nothing builds it",
-  Effect.gen(function* () {
+export const acceptsAnUnbuiltBaseConfigWithNoInputs = Task.make({
+  name: "a shared base tsconfig that only the root project extends and that has no inputs of its own meets every requirement, because nothing builds it",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "config/tsconfig.base.json": yield* encodeJson({
@@ -469,11 +481,11 @@ export const acceptsAnUnbuiltBaseConfigWithNoInputs = Task.make(
     );
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const judgesABaseConfigOnlyThroughTheProjectThatExtendsIt = Task.make(
-  "a base tsconfig that sets strict to false is not reported when the tsconfig.json extending it sets strict back to true",
-  Effect.gen(function* () {
+export const judgesABaseConfigOnlyThroughTheProjectThatExtendsIt = Task.make({
+  name: "a base tsconfig that sets strict to false is not reported when the tsconfig.json extending it sets strict back to true",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "tsconfig.base.json": yield* encodeJson({
@@ -486,11 +498,11 @@ export const judgesABaseConfigOnlyThroughTheProjectThatExtendsIt = Task.make(
     );
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const leavesConfigErrorsOfAReferencedProjectToBunCheck = Task.make(
-  "a referenced tsconfig that sets an option to the wrong type passes here because type-check builds it with bun check, which reports it",
-  Effect.gen(function* () {
+export const leavesConfigErrorsOfAReferencedProjectToBunCheck = Task.make({
+  name: "a referenced tsconfig that sets an option to the wrong type passes here because type-check builds it with bun check, which reports it",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
         compilerOptions: { ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT, noEmit: true },
@@ -510,11 +522,11 @@ export const leavesConfigErrorsOfAReferencedProjectToBunCheck = Task.make(
     });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const leavesJavaScriptToTheLintedFilesCheck = Task.make(
-  "a project with allowJs and no checkJs meets every requirement, whether or not it compiles JavaScript, because linted-files-type-checked judges each file",
-  Effect.gen(function* () {
+export const leavesJavaScriptToTheLintedFilesCheck = Task.make({
+  name: "a project with allowJs and no checkJs meets every requirement, whether or not it compiles JavaScript, because linted-files-type-checked judges each file",
+  run: Effect.gen(function* () {
     const withoutJavaScript = yield* projectExtending({ allowJs: true });
     expect(yield* unmetRequirements(withoutJavaScript.tsconfigFile)).toEqual([]);
     const withJavaScript = yield* makeProject({
@@ -535,11 +547,11 @@ export const leavesJavaScriptToTheLintedFilesCheck = Task.make(
     });
     expect(yield* unmetRequirements(withJavaScript.tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesAnUnparsableReferencedProject = Task.make(
-  "a referenced tsconfig that does not parse is reported against that file",
-  Effect.gen(function* () {
+export const namesAnUnparsableReferencedProject = Task.make({
+  name: "a referenced tsconfig that does not parse is reported against that file",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({ files: [], references: [{ path: "./server" }] }),
@@ -550,11 +562,11 @@ export const namesAnUnparsableReferencedProject = Task.make(
       `${path.join(directory, "server/tsconfig.json")}: error TypeScriptConfigUnparsable: does not parse as JSONC:`,
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesAMissingReferencedProject = Task.make(
-  "a reference to a project without tsconfig.json gets a violation naming the missing file",
-  Effect.gen(function* () {
+export const namesAMissingReferencedProject = Task.make({
+  name: "a reference to a project without tsconfig.json gets a violation naming the missing file",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({ files: [], references: [{ path: "./server" }] }),
@@ -564,19 +576,19 @@ export const namesAMissingReferencedProject = Task.make(
       `${path.join(directory, "server/tsconfig.json")}: error TypeScriptProjectFileMissing: does not exist`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const requiresNothingMoreOfAProjectImportingTask = Task.make(
-  "a project importing @sshkeda/task whose extended base sets strict and the options check requires outside strict, and nothing else, meets every requirement",
-  Effect.gen(function* () {
+export const requiresNothingMoreOfAProjectImportingTask = Task.make({
+  name: "a project importing @sshkeda/task whose extended base sets strict and the options check requires outside strict, and nothing else, meets every requirement",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* projectExtending({ strict: true });
     expect(yield* unmetRequirements(tsconfigFile)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const strictKeepsUndefinedOutOfInferrableAnnotations = Task.make(
-  "only under strict does inferrable-annotations see that an annotation hides undefined, which is why check requires strict",
-  Effect.gen(function* () {
+export const strictKeepsUndefinedOutOfInferrableAnnotations = Task.make({
+  name: "only under strict does inferrable-annotations see that an annotation hides undefined, which is why check requires strict",
+  run: Effect.gen(function* () {
     const annotationHidingUndefined =
       'const lookup = (key: string) => (key === "a" ? "found" : undefined);\nexport const shout = (key: string) => {\n  const found: string = lookup(key);\n  return found.toUpperCase();\n};\n';
     const violationsUnder = (strict: boolean) =>
@@ -603,11 +615,11 @@ export const strictKeepsUndefinedOutOfInferrableAnnotations = Task.make(
       "main.ts:3:16: error InferrableTypeAnnotation: found has a type annotation TypeScript can infer",
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesAMissingProjectFile = Task.make(
-  "a package without tsconfig.json gets a violation naming the missing file",
-  Effect.gen(function* () {
+export const namesAMissingProjectFile = Task.make({
+  name: "a package without tsconfig.json gets a violation naming the missing file",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory } = yield* makeProject({ "main.ts": "export const MAIN = 1;\n" });
     const missingProjectFile = path.join(directory, "missing/tsconfig.json");
@@ -615,11 +627,11 @@ export const namesAMissingProjectFile = Task.make(
       `${missingProjectFile}: error TypeScriptProjectFileMissing: does not exist`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.make(
-  "check prints the unmet tsconfig requirement once and the typed checks wait on it instead of reporting type errors",
-  Effect.gen(function* () {
+export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.make({
+  name: "check prints the unmet tsconfig requirement once and the typed checks wait on it instead of reporting type errors",
+  run: Effect.gen(function* () {
     const printed = yield* printedCheckOf(
       (yield* projectExtending({ strictNullChecks: false })).directory,
     );
@@ -640,11 +652,11 @@ export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.mak
         .filter((line) => !TASK_LOADING_NOTICE.test(line)),
     ).toEqual([]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const typedChecksRunPastAFileNoProjectCompiles = Task.make(
-  "a script file no project compiles fails linted-files-type-checked and does not stop typescript-config or type-check",
-  Effect.gen(function* () {
+export const typedChecksRunPastAFileNoProjectCompiles = Task.make({
+  name: "a script file no project compiles fails linted-files-type-checked and does not stop typescript-config or type-check",
+  run: Effect.gen(function* () {
     const { directory } = yield* makeProject(
       {
         "src/index.ts": `${IMPORTS_TASK}export const COUNT: number = NAMED;\n`,
@@ -661,22 +673,22 @@ export const typedChecksRunPastAFileNoProjectCompiles = Task.make(
     );
     expect(printed).not.toContain("AwaitedTaskFailed");
   }).pipe(Effect.scoped),
-);
+});
 
-export const printsANonBooleanStrictValueOnceFromBunCheck = Task.make(
-  "check prints a non-boolean strict value once, from bun check, and typescript-config passes",
-  Effect.gen(function* () {
+export const printsANonBooleanStrictValueOnceFromBunCheck = Task.make({
+  name: "check prints a non-boolean strict value once, from bun check, and typescript-config passes",
+  run: Effect.gen(function* () {
     const printed = yield* printedCheckOf((yield* projectExtending({ strict: "yes" })).directory);
     expect(printed.split("\n").filter((line) => line.includes("error TS5024"))).toEqual([
       "[type-check] base.json:17:15: error TS5024: Compiler option 'strict' requires a value of type boolean.",
     ]);
     expect(printed).toMatch(/^\[typescript-config\] passed in /mu);
   }).pipe(Effect.scoped),
-);
+});
 
-export const typeChecksAConsumerShapedProjectWithoutStrict = Task.make(
-  "a consumer-shaped tsconfig with no strict key passes typescript-config and type-check reports strict errors",
-  Effect.gen(function* () {
+export const typeChecksAConsumerShapedProjectWithoutStrict = Task.make({
+  name: "a consumer-shaped tsconfig with no strict key passes typescript-config and type-check reports strict errors",
+  run: Effect.gen(function* () {
     const { directory } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
         compilerOptions: {
@@ -711,11 +723,11 @@ export const typeChecksAConsumerShapedProjectWithoutStrict = Task.make(
       "[type-check] src/index.ts:3:22: error TS7006: Parameter 'value' implicitly has an 'any' type.",
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const namesIndexAndOptionalCheckingLeftUnset = Task.make(
-  "a tsconfig that leaves noUncheckedIndexedAccess, exactOptionalPropertyTypes and allowImportingTsExtensions unset is reported once for each, because tsc then resolves each to false",
-  Effect.gen(function* () {
+export const namesIndexAndOptionalCheckingLeftUnset = Task.make({
+  name: "a tsconfig that leaves noUncheckedIndexedAccess, exactOptionalPropertyTypes and allowImportingTsExtensions unset is reported once for each, because tsc then resolves each to false",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
         compilerOptions: {
@@ -734,11 +746,11 @@ export const namesIndexAndOptionalCheckingLeftUnset = Task.make(
       `${tsconfigFile}: error LooseCompilerOption: allowImportingTsExtensions resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesUnreachableCodeAndUnusedLabelsLeftUnset = Task.make(
-  "a tsconfig that leaves allowUnreachableCode and allowUnusedLabels unset is reported once for each, because tsc then only suggests a fix instead of failing",
-  Effect.gen(function* () {
+export const namesUnreachableCodeAndUnusedLabelsLeftUnset = Task.make({
+  name: "a tsconfig that leaves allowUnreachableCode and allowUnusedLabels unset is reported once for each, because tsc then only suggests a fix instead of failing",
+  run: Effect.gen(function* () {
     const { allowUnreachableCode, allowUnusedLabels, ...everyOtherOption } =
       REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT;
     const { tsconfigFile } = yield* makeProject({
@@ -754,7 +766,7 @@ export const namesUnreachableCodeAndUnusedLabelsLeftUnset = Task.make(
       `${tsconfigFile}: error LooseCompilerOption: allowUnusedLabels is unset`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const unmetRequirementsWith = (compilerOptions: Readonly<Record<string, boolean | undefined>>) =>
   Effect.gen(function* () {
@@ -768,9 +780,9 @@ const unmetRequirementsWith = (compilerOptions: Readonly<Record<string, boolean 
     return { tsconfigFile, unmet: yield* unmetRequirements(tsconfigFile) };
   });
 
-export const namesEachNewSettingLeftUnsetOrLoose = Task.make(
-  "each setting Task and Check use is reported when it is unset or written with the wrong value, and passes with the required value",
-  Effect.gen(function* () {
+export const namesEachNewSettingLeftUnsetOrLoose = Task.make({
+  name: "each setting Task and Check use is reported when it is unset or written with the wrong value, and passes with the required value",
+  run: Effect.gen(function* () {
     for (const [option, required] of Record.toEntries(OPTIONS_BEYOND_INDEX_AND_OPTIONAL_CHECKING)) {
       const { [option]: _removed, ...everyOtherOption } = REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT;
       const unset = yield* unmetRequirementsWith(everyOtherOption);
@@ -787,7 +799,7 @@ export const namesEachNewSettingLeftUnsetOrLoose = Task.make(
       expect(met.unmet).toEqual([]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const rewritingProject = (rewrittenImportOptions: Readonly<Record<string, boolean>>) =>
   Effect.gen(function* () {
@@ -808,9 +820,9 @@ const rewritingProject = (rewrittenImportOptions: Readonly<Record<string, boolea
     });
   });
 
-export const acceptsRewrittenImportExtensions = Task.make(
-  "rewriteRelativeImportExtensions set to true makes allowImportingTsExtensions resolve to true whether it is unset or false, while allowImportingTsExtensions written as false without it, or with it false, is still reported",
-  Effect.gen(function* () {
+export const acceptsRewrittenImportExtensions = Task.make({
+  name: "rewriteRelativeImportExtensions set to true makes allowImportingTsExtensions resolve to true whether it is unset or false, while allowImportingTsExtensions written as false without it, or with it false, is still reported",
+  run: Effect.gen(function* () {
     for (const passing of [
       { rewriteRelativeImportExtensions: true },
       { rewriteRelativeImportExtensions: true, allowImportingTsExtensions: false },
@@ -827,11 +839,11 @@ export const acceptsRewrittenImportExtensions = Task.make(
       ]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.make(
-  "noUncheckedIndexedAccess, exactOptionalPropertyTypes and allowImportingTsExtensions written as false in a referenced project are reported against it",
-  Effect.gen(function* () {
+export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.make({
+  name: "noUncheckedIndexedAccess, exactOptionalPropertyTypes and allowImportingTsExtensions written as false in a referenced project are reported against it",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
@@ -859,11 +871,11 @@ export const namesIndexAndOptionalCheckingTurnedOffInAReferencedProject = Task.m
       `${server}: error LooseCompilerOption: allowImportingTsExtensions resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const checkRefusesUncheckedIndexAccessOverAPossiblyMissingElement = Task.make(
-  "check names noUncheckedIndexedAccess left unset over an index access that can miss, and the typed checks wait on it",
-  Effect.gen(function* () {
+export const checkRefusesUncheckedIndexAccessOverAPossiblyMissingElement = Task.make({
+  name: "check names noUncheckedIndexedAccess left unset over an index access that can miss, and the typed checks wait on it",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory } = yield* makeProject({
@@ -889,14 +901,14 @@ export const checkRefusesUncheckedIndexAccessOverAPossiblyMissingElement = Task.
     );
     expect(printed).toContain("[typed-checks] error AwaitedTaskFailed: typescript-config failed");
   }).pipe(Effect.scoped),
-);
+});
 
 const buildOutput = (projectFile: string, option: string) =>
   `${projectFile}: error BuildOutputCompilerOption: ${option} is set, but the package ships its TypeScript source and builds nothing`;
 
-export const namesEveryBuildOptionOfTheRootProject = Task.make(
-  "a root project that leaves noEmit unset, or resolves it to false and sets outDir, declaration, declarationDir and emitDeclarationOnly, is named for each, while declaration written as false passes",
-  Effect.gen(function* () {
+export const namesEveryBuildOptionOfTheRootProject = Task.make({
+  name: "a root project that leaves noEmit unset, or resolves it to false and sets outDir, declaration, declarationDir and emitDeclarationOnly, is named for each, while declaration written as false passes",
+  run: Effect.gen(function* () {
     const emitting = yield* makeProjectWith(
       {
         ...REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
@@ -926,7 +938,7 @@ export const namesEveryBuildOptionOfTheRootProject = Task.make(
       `${unset.tsconfigFile}: error LooseCompilerOption: noEmit is unset`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const referencedProject = (emitDeclarationOnly: Readonly<Record<string, boolean>>) =>
   encodeJson({
@@ -939,9 +951,9 @@ const referencedProject = (emitDeclarationOnly: Readonly<Record<string, boolean>
     files: ["main.ts"],
   });
 
-export const requiresReferencedProjectsToEmitOnlyDeclarations = Task.make(
-  "a referenced project, which bun check --build must let emit, passes with emitDeclarationOnly and an outDir, and is named when it leaves emitDeclarationOnly unset or false",
-  Effect.gen(function* () {
+export const requiresReferencedProjectsToEmitOnlyDeclarations = Task.make({
+  name: "a referenced project, which bun check --build must let emit, passes with emitDeclarationOnly and an outDir, and is named when it leaves emitDeclarationOnly unset or false",
+  run: Effect.gen(function* () {
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject({
       "tsconfig.json": yield* encodeJson({
@@ -961,4 +973,4 @@ export const requiresReferencedProjectsToEmitOnlyDeclarations = Task.make(
       `${path.join(directory, "web/tsconfig.json")}: error LooseCompilerOption: emitDeclarationOnly resolves to false`,
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

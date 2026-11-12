@@ -19,9 +19,9 @@ import { ProjectQueryCachesLive } from "../shared/provide-project-query-caches.t
 import { TYPESCRIPT_PROJECT_FILE } from "../shared/query-the-typescript-project.ts";
 import { runChecksOverOneTypeScriptProject } from "./run-checks-over-one-typescript-project.ts";
 
-export const checkerQueries = Task.make(
-  "checker-queries",
-  Effect.andThen(
+export const checkerQueries = Task.make({
+  name: "checker-queries",
+  run: Effect.andThen(
     Task.all([typeScriptConfig, lintConfigFile]),
     inEachPackage("checker-queries", (packageDirectory) =>
       Path.Path.use((path) =>
@@ -41,4 +41,4 @@ export const checkerQueries = Task.make(
       ),
     ),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

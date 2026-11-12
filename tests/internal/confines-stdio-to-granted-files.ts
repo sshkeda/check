@@ -141,9 +141,9 @@ const stdioUses = (sources: Readonly<Record<string, string>>) =>
     Effect.scoped,
   );
 
-export const stdioArgumentReadsAreRefused = Task.make(
-  "outside files granted readsConfig, files granted writesToTheTerminal included, reading args from a value whose type is Effect's Stdio is refused, by property access, element access or object destructuring, with a literal, constant or generic key, on a union that includes Stdio, including in a Stdio.use or Effect.flatMap callback",
-  Effect.gen(function* () {
+export const stdioArgumentReadsAreRefused = Task.make({
+  name: "outside files granted readsConfig, files granted writesToTheTerminal included, reading args from a value whose type is Effect's Stdio is refused, by property access, element access or object destructuring, with a literal, constant or generic key, on a union that includes Stdio, including in a Stdio.use or Effect.flatMap callback",
+  run: Effect.gen(function* () {
     expect(yield* stdioUses(ARGUMENT_READS)).toEqual(
       [
         "computed-key.ts:2:29",
@@ -167,11 +167,11 @@ export const stdioArgumentReadsAreRefused = Task.make(
       ),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const stdioTerminalWritesAreRefused = Task.make(
-  "outside files granted writesToTheTerminal, files granted readsConfig included, reading the stdout or stderr sink from a value whose type is Effect's Stdio is refused, by property access, element access or destructuring, with a literal, constant or generic key",
-  Effect.gen(function* () {
+export const stdioTerminalWritesAreRefused = Task.make({
+  name: "outside files granted writesToTheTerminal, files granted readsConfig included, reading the stdout or stderr sink from a value whose type is Effect's Stdio is refused, by property access, element access or destructuring, with a literal, constant or generic key",
+  run: Effect.gen(function* () {
     expect(yield* stdioUses(TERMINAL_WRITES)).toEqual(
       [
         "config-writes.ts:4:52 stdout",
@@ -189,18 +189,18 @@ export const stdioTerminalWritesAreRefused = Task.make(
       }),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const stdioUsesOtherThanArgumentReadsAreAllowed = Task.make(
-  "stdin and the isTerminal checks, spreading Stdio into Stdio.make, providing it, args on a type that is not Stdio, args in files granted readsConfig and stdout or stderr in files granted writesToTheTerminal are allowed",
-  Effect.gen(function* () {
+export const stdioUsesOtherThanArgumentReadsAreAllowed = Task.make({
+  name: "stdin and the isTerminal checks, spreading Stdio into Stdio.make, providing it, args on a type that is not Stdio, args in files granted readsConfig and stdout or stderr in files granted writesToTheTerminal are allowed",
+  run: Effect.gen(function* () {
     expect(yield* stdioUses(ALLOWED_USES)).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const terminalWritesNeedTheConsolePermission = Task.make(
-  "no-terminal-writes refuses Effect Console, node:console under any of its names, process.stdout, process.stderr, Bun.stdout and Bun.stderr however they are reached, in every file, even one granted writesToTheTerminal, and leaves type imports, Effect.log, stdin and lookalikes alone",
-  ruleTest("no-terminal-writes", {
+export const terminalWritesNeedTheConsolePermission = Task.make({
+  name: "no-terminal-writes refuses Effect Console, node:console under any of its names, process.stdout, process.stderr, Bun.stdout and Bun.stderr however they are reached, in every file, even one granted writesToTheTerminal, and leaves type imports, Effect.log, stdin and lookalikes alone",
+  run: ruleTest("no-terminal-writes", {
     valid: [
       'import type { Console } from "effect"; type Sink = Console.Console;',
       'import { Effect } from "effect"; Effect.log("ready");',
@@ -240,7 +240,7 @@ export const terminalWritesNeedTheConsolePermission = Task.make(
       },
     ]),
   }),
-);
+});
 
 const STDIO = 'import { Effect, Layer, Stdio, Stream } from "effect";\n';
 
@@ -248,9 +248,9 @@ const usedForMore = (usage: string) => ({
   message: `${usage} is used for more than reading stdin, args or whether a stream is a terminal`,
 });
 
-export const stdioServiceNeedsTheTerminalOutputPermission = Task.make(
-  "no-stdio-service refuses the Effect Stdio service yielded, used, mapped, piped, provided, stored or passed anywhere, a structural stand-in for its stdout included, and leaves a direct read of stdin, args or an isTerminal check, through yield*, use, an Effect map or flatMap, or the first step of a pipe, a type and Stdio.make alone",
-  ruleTest("no-stdio-service", {
+export const stdioServiceNeedsTheTerminalOutputPermission = Task.make({
+  name: "no-stdio-service refuses the Effect Stdio service yielded, used, mapped, piped, provided, stored or passed anywhere, a structural stand-in for its stdout included, and leaves a direct read of stdin, args or an isTerminal check, through yield*, use, an Effect map or flatMap, or the first step of a pipe, a type and Stdio.make alone",
+  run: ruleTest("no-stdio-service", {
     valid: [
       `${STDIO}export const input = Stdio.Stdio.use(({ stdin }) => Stream.runDrain(stdin));`,
       `${STDIO}export const input = Stdio.Stdio.use((stdio) => Stream.runDrain(stdio.stdin));`,
@@ -332,4 +332,4 @@ export const stdioServiceNeedsTheTerminalOutputPermission = Task.make(
       },
     ],
   }),
-);
+});

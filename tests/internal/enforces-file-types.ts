@@ -19,7 +19,6 @@ import { ProjectQueryCachesLive } from "../../src/lib/tasks/shared/provide-proje
 import { recordedGrantsOf } from "../../src/shared/record-and-grant-permissions-by-path.ts";
 import {
   makeProject as makeProjectWith,
-  RUNNER,
   writtenFiles,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
@@ -30,9 +29,9 @@ const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_O
 
 const FILE_TYPES_TASK = stagedCheckModule("src/lib/tasks/lib/enforce-file-types/index.ts");
 
-export const foreignCodeAndUnknownFilesNeedExactGrants = Task.make(
-  "foreign source languages and unknown data formats need an exact file-type grant while TypeScript, TSX, Markdown and named tools pass",
-  Effect.sync(() => {
+export const foreignCodeAndUnknownFilesNeedExactGrants = Task.make({
+  name: "foreign source languages and unknown data formats need an exact file-type grant while TypeScript, TSX, Markdown and named tools pass",
+  run: Effect.sync(() => {
     const exceptional = [
       "src/native.c",
       "src/native.cpp",
@@ -92,11 +91,11 @@ export const foreignCodeAndUnknownFilesNeedExactGrants = Task.make(
       ),
     ).toEqual(["src/native.c"]);
   }),
-);
+});
 
-export const aFileInAGrantedDirectoryNeedsItsOwnFileTypeGrant = Task.make(
-  "a file type inside a granted directory still needs its own grant",
-  Effect.sync(() => {
+export const aFileInAGrantedDirectoryNeedsItsOwnFileTypeGrant = Task.make({
+  name: "a file type inside a granted directory still needs its own grant",
+  run: Effect.sync(() => {
     const workflow = ".github/workflows/publish.yml";
     const directoryGrant = { path: ".github", allow: ["isAnUnlistedDirectory" as const] };
     expect(
@@ -109,11 +108,11 @@ export const aFileInAGrantedDirectoryNeedsItsOwnFileTypeGrant = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const toolLocationsRemainIndependentOfTypeGrants = Task.make(
-  "supported tool names have precise locations and a file-type grant does not move code or a tool file",
-  Effect.sync(() => {
+export const toolLocationsRemainIndependentOfTypeGrants = Task.make({
+  name: "supported tool names have precise locations and a file-type grant does not move code or a tool file",
+  run: Effect.sync(() => {
     for (const path of [
       "tsconfig.json",
       "src/internal/tsconfig.json",
@@ -152,11 +151,11 @@ export const toolLocationsRemainIndependentOfTypeGrants = Task.make(
       ),
     ).toEqual(["docs/tsconfig.json"]);
   }),
-);
+});
 
-export const exceptionalFileGrantsUseExistingValidation = Task.make(
-  "file-type grants reject missing paths and directories, and a Markdown file may be granted its file type",
-  Effect.sync(() => {
+export const exceptionalFileGrantsUseExistingValidation = Task.make({
+  name: "file-type grants reject missing paths and directories, and a Markdown file may be granted its file type",
+  run: Effect.sync(() => {
     expect(
       permissionGrantViolations(
         ["src/index.ts"],
@@ -182,11 +181,11 @@ export const exceptionalFileGrantsUseExistingValidation = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const listedPackageFilesDriveTheTypeCheck = Task.make(
-  "the file types of a package cover its tracked and untracked files, skip ignored files, leave the files of a nested package to that package's own run, and read exact grants",
-  Effect.gen(function* () {
+export const listedPackageFilesDriveTheTypeCheck = Task.make({
+  name: "the file types of a package cover its tracked and untracked files, skip ignored files, leave the files of a nested package to that package's own run, and read exact grants",
+  run: Effect.gen(function* () {
     const { directory } = yield* makeProject(
       {
         "src/index.ts": "export {};\n",
@@ -209,17 +208,17 @@ export const listedPackageFilesDriveTheTypeCheck = Task.make(
     yield* writtenFiles(directory, { "oxlint.config.ts": "not a valid config\n" });
     expect(yield* findFileTypeViolations(directory)).toBeUndefined();
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const untrackedForbiddenFilesFailTheNextRun = Task.make(
-  "a file-type task that passed reports a new untracked C file on its next run",
-  Effect.gen(function* () {
+export const untrackedForbiddenFilesFailTheNextRun = Task.make({
+  name: "a file-type task that passed reports a new untracked C file on its next run",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* makeProject({
       "src/index.ts": "export {};\n",
       ".gitignore": "node_modules\nrun.ts\n",
     });
     yield* writtenFiles(directory, {
-      "run.ts": `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { fileTypes } from ${yield* encodeJson(FILE_TYPES_TASK)};\nTask.main(fileTypes);\n`,
+      "run.ts": `import { fileTypes } from ${yield* encodeJson(FILE_TYPES_TASK)};\nexport default fileTypes;\n`,
     });
     const options = { cwd: directory, taskStateDirectory };
     expect(yield* runTaskFile("bun run.ts", options)).toContain("[file-types] passed");
@@ -228,11 +227,11 @@ export const untrackedForbiddenFilesFailTheNextRun = Task.make(
     expect(failure.message).toContain("src/untracked.c");
     expect(failure.message).toContain("FileTypeNotGranted");
   }).pipe(Effect.scoped),
-);
+});
 
-export const patchFilesNeedOnlyAPatchGrant = Task.make(
-  "a .patch file that package.json lists and that is granted patchesADependency, itself or through its directory, needs no file-type grant, while an unlisted .patch file beside it, another file in that directory and an ungranted patch still do",
-  Effect.sync(() => {
+export const patchFilesNeedOnlyAPatchGrant = Task.make({
+  name: "a .patch file that package.json lists and that is granted patchesADependency, itself or through its directory, needs no file-type grant, while an unlisted .patch file beside it, another file in that directory and an ungranted patch still do",
+  run: Effect.sync(() => {
     expect(
       fileTypeViolations(
         [
@@ -256,11 +255,11 @@ export const patchFilesNeedOnlyAPatchGrant = Task.make(
       ).map(({ location }) => location),
     ).toEqual(["patches/notes.patch", "patches/notes.txt", "other/is-odd.patch"]);
   }),
-);
+});
 
-export const fileTypesReadThePatchesTheManifestLists = Task.make(
-  "the file-type check reads patchedDependencies from the package's package.json, so a granted patch directory passes the patch it lists and not an unlisted one beside it",
-  Effect.gen(function* () {
+export const fileTypesReadThePatchesTheManifestLists = Task.make({
+  name: "the file-type check reads patchedDependencies from the package's package.json, so a granted patch directory passes the patch it lists and not an unlisted one beside it",
+  run: Effect.gen(function* () {
     const { directory } = yield* makeProject(
       {
         "src/index.ts": "export {};\n",
@@ -282,4 +281,4 @@ export const fileTypesReadThePatchesTheManifestLists = Task.make(
       ]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

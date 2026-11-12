@@ -24,9 +24,9 @@ const vagueSuffix = (path: string, suffix: string) => ({
   errors: [{ messageId: "vagueSuffix", data: { fileName: fileNameIn(path), suffix } }],
 });
 
-export const rejectsVagueFileNames = Task.make(
-  "no-vague-file-names rejects utils, helpers, common, misc, types, logic and impl as names or dotted suffixes, and index files that are not index.ts or index.tsx entries",
-  ruleTest("no-vague-file-names", {
+export const rejectsVagueFileNames = Task.make({
+  name: "no-vague-file-names rejects utils, helpers, common, misc, types, logic and impl as names or dotted suffixes, and index files that are not index.ts or index.tsx entries",
+  run: ruleTest("no-vague-file-names", {
     valid: [
       { code: CODE, filename: "src/lib/encode-json.ts" },
       { code: CODE, filename: "src/lib/error-types.ts" },
@@ -63,4 +63,4 @@ export const rejectsVagueFileNames = Task.make(
       },
     ],
   }),
-);
+});

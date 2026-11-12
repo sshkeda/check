@@ -12,9 +12,9 @@ const instant = (usage: string) => ({
   message: `${usage} retries at once, with no wait between attempts`,
 });
 
-export const instantRetriesAreRejected = Task.make(
-  "no-instant-retries reports an Effect or Stream retry whose policy is no schedule or only a bare Schedule.recurs(n), and leaves timed or mapped schedules, unknown policies and repeats alone",
-  ruleTest("no-instant-retries", {
+export const instantRetriesAreRejected = Task.make({
+  name: "no-instant-retries reports an Effect or Stream retry whose policy is no schedule or only a bare Schedule.recurs(n), and leaves timed or mapped schedules, unknown policies and repeats alone",
+  run: ruleTest("no-instant-retries", {
     valid: [
       'import { Effect, Schedule } from "effect"; Effect.retry(work, { times: 3, schedule: Schedule.spaced("1 second") });',
       'import { Effect, Schedule } from "effect"; work.pipe(Effect.retry(Schedule.exponential("10 millis")));',
@@ -114,4 +114,4 @@ export const instantRetriesAreRejected = Task.make(
       ].map((code) => ({ code, errors: [instant("Stream.retry")] })),
     ],
   }),
-);
+});

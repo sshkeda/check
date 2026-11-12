@@ -34,9 +34,9 @@ const readsGlobal = (code: string, name: string) => ({
   errors: [{ message: `index file reads the global ${name}` }],
 });
 
-export const indexFilesHoldOnlyWiring = Task.make(
-  "no-index-logic lets index.ts and index.tsx hold only imports, import = and export import = aliases, re-exports, export as namespace, type declarations, export const declarations, export default, export = and expression statements built from the file's own bindings, undefined, member reads, calls, new, literals, negative number and bigint literals, templates, arrays, objects, spreads and TypeScript-only wrappers, so an index.ts run directly starts with a top-level call, and reports every other statement, if (import.meta.main) included, let, var and using declarations, every function, method, getter, setter, class, operator and other expression, each namespace, each declaration outside an export statement, even one a later export { } lists or a declare function, and each read of a global",
-  ruleTest("no-index-logic", {
+export const indexFilesHoldOnlyWiring = Task.make({
+  name: "no-index-logic lets index.ts and index.tsx hold only imports, import = and export import = aliases, re-exports, export as namespace, type declarations, export const declarations, export default, export = and expression statements built from the file's own bindings, undefined, member reads, calls, new, literals, negative number and bigint literals, templates, arrays, objects, spreads and TypeScript-only wrappers, so an index.ts run directly starts with a top-level call, and reports every other statement, if (import.meta.main) included, let, var and using declarations, every function, method, getter, setter, class, operator and other expression, each namespace, each declaration outside an export statement, even one a later export { } lists or a declare function, and each read of a global",
+  run: ruleTest("no-index-logic", {
     valid: [
       {
         code: [
@@ -148,4 +148,4 @@ export const indexFilesHoldOnlyWiring = Task.make(
       readsGlobal("run(console);", "console"),
     ],
   }),
-);
+});

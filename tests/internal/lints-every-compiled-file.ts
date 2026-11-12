@@ -10,11 +10,7 @@ import {
   programFiles,
   openTypeScriptProjects,
 } from "../../src/lib/tasks/shared/query-the-typescript-project.ts";
-import {
-  makeProject as makeProjectWith,
-  RUNNER,
-  stagedCheckModule,
-} from "../shared/checked-project.ts";
+import { makeProject as makeProjectWith, stagedCheckModule } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 import { oxlintBinary } from "../shared/oxlint-binary.ts";
 import { runTaskFile } from "../shared/run-task-files.ts";
@@ -50,7 +46,7 @@ const taskRunIn = (
     const path = yield* Path.Path;
     yield* fileSystem.writeFileString(
       path.join(directory, `run-${name}.ts`),
-      `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { ${name} } from ${yield* encodeJson(taskModule)};\nTask.main(${name});\n`,
+      `import { ${name} } from ${yield* encodeJson(taskModule)};\nexport default ${name};\n`,
     );
     return yield* runTaskFile(`bun run-${name}.ts`, {
       cwd: directory,
@@ -90,9 +86,9 @@ const projectWithReferencedIgnoredFile = Effect.gen(function* () {
   );
 });
 
-export const programFilesFollowEveryImport = Task.make(
-  "the compiled file set includes imported files outside include, gitignored files, project declaration files and referenced projects",
-  Effect.gen(function* () {
+export const programFilesFollowEveryImport = Task.make({
+  name: "the compiled file set includes imported files outside include, gitignored files, project declaration files and referenced projects",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* projectWithReferencedIgnoredFile;
     expect(yield* programFiles(tsconfigFile)).toEqual([
       "ignored-globals.d.ts",
@@ -103,11 +99,11 @@ export const programFilesFollowEveryImport = Task.make(
       "referenced/referenced.ts",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const typedChecksReadReferencedProjectFiles = Task.make(
-  "the typed checks find each compiled file, including referenced project files, in its project",
-  Effect.gen(function* () {
+export const typedChecksReadReferencedProjectFiles = Task.make({
+  name: "the typed checks find each compiled file, including referenced project files, in its project",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* projectWithReferencedIgnoredFile;
     const projects = yield* openTypeScriptProjects(tsconfigFile);
     expect(
@@ -122,11 +118,11 @@ export const typedChecksReadReferencedProjectFiles = Task.make(
       "referenced/referenced.ts",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const libraryFilesNeitherListedNorOutsideTheProject = Task.make(
-  "TypeScript library and @types files outside the project directory are not listed and do not make the project count as outside its directory",
-  Effect.gen(function* () {
+export const libraryFilesNeitherListedNorOutsideTheProject = Task.make({
+  name: "TypeScript library and @types files outside the project directory are not listed and do not make the project count as outside its directory",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       { "main.ts": "export const MAIN = Bun.version;\n" },
       "lintConfig({})",
@@ -137,11 +133,11 @@ export const libraryFilesNeitherListedNorOutsideTheProject = Task.make(
     );
     expect(yield* programFiles(tsconfigFile)).toEqual(["main.ts"]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aProjectInsideANodeModulesDirectoryStillListsItsOwnFiles = Task.make(
-  "a project that lives inside a node_modules directory lists its own files and still treats the node_modules directories inside it as libraries",
-  Effect.gen(function* () {
+export const aProjectInsideANodeModulesDirectoryStillListsItsOwnFiles = Task.make({
+  name: "a project that lives inside a node_modules directory lists its own files and still treats the node_modules directories inside it as libraries",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const installedParent = path.join(
@@ -163,11 +159,11 @@ export const aProjectInsideANodeModulesDirectoryStillListsItsOwnFiles = Task.mak
         .toSorted(),
     ).toEqual(["main.ts", "oxlint.config.ts"]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const projectCompilingOnlyOutsideItsDirectoryFailsLoudly = Task.make(
-  "a project whose compiled files all lie outside its directory fails with ProgramFilesOutsideProject instead of checking nothing",
-  Effect.gen(function* () {
+export const projectCompilingOnlyOutsideItsDirectoryFailsLoudly = Task.make({
+  name: "a project whose compiled files all lie outside its directory fails with ProgramFilesOutsideProject instead of checking nothing",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory } = yield* makeProject(
@@ -188,11 +184,11 @@ export const projectCompilingOnlyOutsideItsDirectoryFailsLoudly = Task.make(
     expect(failure.message).toContain(path.join(directory, "main.ts"));
     expect(failure.message).not.toContain("node_modules");
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const referencedGitignoredFilesAreChecked = Task.make(
-  "oxlint and type-check cover gitignored files, declaration files among them, and referenced projects",
-  Effect.gen(function* () {
+export const referencedGitignoredFilesAreChecked = Task.make({
+  name: "oxlint and type-check cover gitignored files, declaration files among them, and referenced projects",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* projectWithReferencedIgnoredFile;
@@ -210,7 +206,7 @@ export const referencedGitignoredFilesAreChecked = Task.make(
     );
     expect(typeChecked).toContain("[type-check] referenced/referenced.ts:2:14: error TS2322");
   }).pipe(Effect.scoped),
-);
+});
 
 const projectImportingIgnoredJavaScriptWithDeclarations = () =>
   makeProject(
@@ -234,20 +230,20 @@ const projectImportingIgnoredJavaScriptWithDeclarations = () =>
     },
   );
 
-export const ignoredJavaScriptWithDeclarationsIsLinted = Task.make(
-  "oxlint checks an imported gitignored JavaScript implementation even when TypeScript selects its sibling declaration",
-  Effect.gen(function* () {
+export const ignoredJavaScriptWithDeclarationsIsLinted = Task.make({
+  name: "oxlint checks an imported gitignored JavaScript implementation even when TypeScript selects its sibling declaration",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } =
       yield* projectImportingIgnoredJavaScriptWithDeclarations();
     const printed = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
     expect(printed).toContain("src/engine.js:1:28: error sshkeda(no-command-spawn)");
     expect(printed).not.toContain("TaskCalledLocationOperations");
   }).pipe(Effect.scoped),
-);
+});
 
-export const ignoredJavaScriptWithDeclarationsNeedsTypeChecking = Task.make(
-  "the coverage guard rejects an imported gitignored JavaScript implementation when TypeScript compiles only its declaration",
-  Effect.gen(function* () {
+export const ignoredJavaScriptWithDeclarationsNeedsTypeChecking = Task.make({
+  name: "the coverage guard rejects an imported gitignored JavaScript implementation when TypeScript compiles only its declaration",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } =
       yield* projectImportingIgnoredJavaScriptWithDeclarations();
     const printed = yield* failedTaskOutput(
@@ -259,7 +255,7 @@ export const ignoredJavaScriptWithDeclarationsNeedsTypeChecking = Task.make(
     expect(printed).toContain("src/engine.js: error LintedFileOutsideTypeScriptProgram");
     expect(printed).not.toContain("TaskCalledLocationOperations");
   }).pipe(Effect.scoped),
-);
+});
 
 const projectCompilingSomeLintedFiles = (
   compilerOptions: Readonly<Record<string, boolean>>,
@@ -305,9 +301,9 @@ const projectCompilingSomeLintedFiles = (
     return { directory, taskStateDirectory };
   });
 
-export const lintedFilesTheTypeCheckSkipsFail = Task.make(
-  "a linted file no program compiles, a JavaScript file compiled without checkJs and a declaration file compiled with skipLibCheck each fail, since the type checker and effect-tsgo would not check them",
-  Effect.gen(function* () {
+export const lintedFilesTheTypeCheckSkipsFail = Task.make({
+  name: "a linted file no program compiles, a JavaScript file compiled without checkJs and a declaration file compiled with skipLibCheck each fail, since the type checker and effect-tsgo would not check them",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* projectCompilingSomeLintedFiles({
       skipLibCheck: true,
     });
@@ -334,11 +330,11 @@ export const lintedFilesTheTypeCheckSkipsFail = Task.make(
     );
     expect(printed).not.toMatch(/main\.ts: error|oxlint\.config\.ts: error/u);
   }).pipe(Effect.scoped),
-);
+});
 
-export const generatedSourceTheTypeCheckSkipsFails = Task.make(
-  "generated source files must be type-checked like any other source file, but generated declaration files need not be",
-  Effect.gen(function* () {
+export const generatedSourceTheTypeCheckSkipsFails = Task.make({
+  name: "generated source files must be type-checked like any other source file, but generated declaration files need not be",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* projectCompilingSomeLintedFiles(
       { skipLibCheck: true },
       'lintConfig({ "outside.ts": { allow: ["isGeneratedByATool"] }, "script.js": { allow: ["isGeneratedByATool"] }, "globals.d.ts": { allow: ["isGeneratedByATool"] }, "styles.d.css.ts": { allow: ["isGeneratedByATool"] } })',
@@ -353,11 +349,11 @@ export const generatedSourceTheTypeCheckSkipsFails = Task.make(
     expect(printed).toContain("script.js: error LintedJavaScriptFileNotTypeChecked");
     expect(printed).not.toMatch(/globals\.d\.ts: error|styles\.d\.css\.ts: error/u);
   }).pipe(Effect.scoped),
-);
+});
 
-export const lintedFilesTheTypeCheckCoversPass = Task.make(
-  "JavaScript files compiled with checkJs and declaration files compiled without skipLibCheck count as type-checked",
-  Effect.gen(function* () {
+export const lintedFilesTheTypeCheckCoversPass = Task.make({
+  name: "JavaScript files compiled with checkJs and declaration files compiled without skipLibCheck count as type-checked",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* projectCompilingSomeLintedFiles({
       checkJs: true,
       skipLibCheck: false,
@@ -374,11 +370,11 @@ export const lintedFilesTheTypeCheckCoversPass = Task.make(
     expect(printed).not.toContain("globals.d.ts: error");
     expect(printed).not.toContain("styles.d.css.ts: error");
   }).pipe(Effect.scoped),
-);
+});
 
-export const referencedProjectsThatSkipLintedFilesFail = Task.make(
-  "a referenced project that compiles a JavaScript file without checkJs or a declaration file with skipLibCheck fails, naming the referenced tsconfig",
-  Effect.gen(function* () {
+export const referencedProjectsThatSkipLintedFilesFail = Task.make({
+  name: "a referenced project that compiles a JavaScript file without checkJs or a declaration file with skipLibCheck fails, naming the referenced tsconfig",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -420,11 +416,11 @@ export const referencedProjectsThatSkipLintedFilesFail = Task.make(
       "referenced/globals.d.ts: error LintedDeclarationFileNotTypeChecked: must be type-checked, but referenced/tsconfig.json compiles it without checking declaration files",
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const aDeclarationFileOneProjectChecksPasses = Task.make(
-  "a declaration file passes when one project compiles it with skipLibCheck and another compiles it without",
-  Effect.gen(function* () {
+export const aDeclarationFileOneProjectChecksPasses = Task.make({
+  name: "a declaration file passes when one project compiles it with skipLibCheck and another compiles it without",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -471,11 +467,11 @@ export const aDeclarationFileOneProjectChecksPasses = Task.make(
     expect(printed).toContain("stray.ts: error LintedFileOutsideTypeScriptProgram");
     expect(printed).not.toContain("shapes.d.ts: error");
   }).pipe(Effect.scoped),
-);
+});
 
-export const configFilesCheckLoadsMustBeCompiled = Task.make(
-  "oxlint.config.ts fails linted-files-type-checked when the tsconfig does not include it, since check loads it and lints it like any other file",
-  Effect.gen(function* () {
+export const configFilesCheckLoadsMustBeCompiled = Task.make({
+  name: "oxlint.config.ts fails linted-files-type-checked when the tsconfig does not include it, since check loads it and lints it like any other file",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -495,11 +491,11 @@ export const configFilesCheckLoadsMustBeCompiled = Task.make(
     );
     expect(printed).not.toContain("src/index.ts: error");
   }).pipe(Effect.scoped),
-);
+});
 
-export const javaScriptWithJsxIsJudgedWithoutParsingIt = Task.make(
-  "a .js file with JSX that a project compiles under allowJs and jsx preserve without checkJs is reported as not type-checked instead of crashing the task",
-  Effect.gen(function* () {
+export const javaScriptWithJsxIsJudgedWithoutParsingIt = Task.make({
+  name: "a .js file with JSX that a project compiles under allowJs and jsx preserve without checkJs is reported as not type-checked instead of crashing the task",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -530,11 +526,11 @@ export const javaScriptWithJsxIsJudgedWithoutParsingIt = Task.make(
     expect(printed).toContain("view.js: error LintedJavaScriptFileNotTypeChecked");
     expect(printed).not.toContain("SourceFileUnparsable");
   }).pipe(Effect.scoped),
-);
+});
 
-export const aFileCompiledThroughASymlinkPasses = Task.make(
-  "a linted file that a project compiles through a symlink to it is not reported as outside the program",
-  Effect.gen(function* () {
+export const aFileCompiledThroughASymlinkPasses = Task.make({
+  name: "a linted file that a project compiles through a symlink to it is not reported as outside the program",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -558,11 +554,11 @@ export const aFileCompiledThroughASymlinkPasses = Task.make(
     expect(printed).toContain("stray.ts: error LintedFileOutsideTypeScriptProgram");
     expect(printed).not.toMatch(/(?:lib\/real|src\/link)\.ts: error/u);
   }).pipe(Effect.scoped),
-);
+});
 
-export const retargetingADirectoryLinkRerunsTheCheck = Task.make(
-  "retargeting a gitignored directory symlink that a project compiles through reruns linted-files-type-checked instead of reusing its cached pass",
-  Effect.gen(function* () {
+export const retargetingADirectoryLinkRerunsTheCheck = Task.make({
+  name: "retargeting a gitignored directory symlink that a project compiles through reruns linted-files-type-checked instead of reusing its cached pass",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -596,11 +592,11 @@ export const retargetingADirectoryLinkRerunsTheCheck = Task.make(
     );
     expect(printed).toContain("lib/real.ts: error LintedFileOutsideTypeScriptProgram");
   }).pipe(Effect.scoped),
-);
+});
 
-export const staticImportCyclesFailTheLint = Task.make(
-  "a two-file static import cycle fails check's oxlint task with import(no-cycle), since placement leaves cycles to that rule",
-  Effect.gen(function* () {
+export const staticImportCyclesFailTheLint = Task.make({
+  name: "a two-file static import cycle fails check's oxlint task with import(no-cycle), since placement leaves cycles to that rule",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* makeProject({
       "package.json": '{"name":"cycle"}\n',
       "first.ts": 'import { SECOND } from "./second.ts";\nexport const FIRST = () => SECOND;\n',
@@ -611,7 +607,7 @@ export const staticImportCyclesFailTheLint = Task.make(
     expect(linted).toMatch(/first\.ts:1:\d+: error import\(no-cycle\)/u);
     expect(linted).toMatch(/second\.ts:1:\d+: error import\(no-cycle\)/u);
   }).pipe(Effect.scoped),
-);
+});
 
 const COMPOSITE_PROJECT = {
   compilerOptions: {
@@ -625,9 +621,9 @@ const COMPOSITE_PROJECT = {
   include: ["*.ts"],
 } as const;
 
-export const referencesThatImportEachOtherAreTypeCheckedFromSource = Task.make(
-  "type-check follows project references that import each other from source, with no build output, and reports the error at its path in the package",
-  Effect.gen(function* () {
+export const referencesThatImportEachOtherAreTypeCheckedFromSource = Task.make({
+  name: "type-check follows project references that import each other from source, with no build output, and reports the error at its path in the package",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject(
@@ -652,7 +648,7 @@ export const referencesThatImportEachOtherAreTypeCheckedFromSource = Task.make(
     yield* fileSystem.writeFileString(path.join(directory, "package.json"), '{"name":"linked"}\n');
     yield* fileSystem.writeFileString(
       path.join(directory, "run-type-check.ts"),
-      `import { Task } from ${yield* encodeJson(RUNNER)};\nimport { typeCheck } from ${yield* encodeJson(TYPE_CHECK_TASK)};\nTask.main(typeCheck);\n`,
+      `import { typeCheck } from ${yield* encodeJson(TYPE_CHECK_TASK)};\nexport default typeCheck;\n`,
     );
     const typeChecked = yield* runTaskFile("bun run-type-check.ts", {
       cwd: directory,
@@ -665,13 +661,13 @@ export const referencesThatImportEachOtherAreTypeCheckedFromSource = Task.make(
     expect(typeChecked).not.toMatch(/TS6305|TS6310/u);
     expect(yield* fileSystem.exists(path.join(directory, "first/dist"))).toBe(false);
   }).pipe(Effect.scoped),
-);
+});
 
 const SPAWNING_SOURCE = 'export const spawned = () => Bun.spawn(["git"]);\n';
 
-export const filesAnEslintIgnoreListsAreLinted = Task.make(
-  "oxlint lints a file that .eslintignore lists, since check names every file it lints",
-  Effect.gen(function* () {
+export const filesAnEslintIgnoreListsAreLinted = Task.make({
+  name: "oxlint lints a file that .eslintignore lists, since check names every file it lints",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* makeProject({
       "package.json": '{"name":"ignoring"}\n',
       "src/listed.ts": SPAWNING_SOURCE,
@@ -681,7 +677,7 @@ export const filesAnEslintIgnoreListsAreLinted = Task.make(
     const linted = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
     expect(linted).toContain("src/listed.ts:1:30: error sshkeda(no-command-spawn)");
   }).pipe(Effect.scoped),
-);
+});
 
 const LINTED_FILE_COUNT = 1500;
 const DIRECTORY_NAME_REPEATS = 4;
@@ -696,9 +692,9 @@ const LONG_DIRECTORY = [
   ),
 ].join("/");
 
-export const aFileListLongerThanOneCommandTakesIsLintedInRuns = Task.make(
-  "a package whose linted files make a longer argument list than one command can take is linted in several oxlint runs that together report the first and the last file",
-  Effect.gen(function* () {
+export const aFileListLongerThanOneCommandTakesIsLintedInRuns = Task.make({
+  name: "a package whose linted files make a longer argument list than one command can take is linted in several oxlint runs that together report the first and the last file",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const files = Array.from(
@@ -727,7 +723,7 @@ export const aFileListLongerThanOneCommandTakesIsLintedInRuns = Task.make(
     expect(linted).toContain(`${files[0]}:1:30: error sshkeda(no-command-spawn)`);
     expect(linted).toContain(`${files.at(-1)}:1:30: error sshkeda(no-command-spawn)`);
   }).pipe(Effect.scoped),
-);
+});
 
 const TYPE_AWARE_ERROR_COUNT = 1000;
 const PADDING_BYTES_PER_ERROR = 1000;
@@ -735,9 +731,9 @@ const MOST_BYTES_OXLINT_MAY_HOLD = 536_870_912;
 const PEAK_MEMORY_OF_OXLINT = `const run = Bun.spawnSync([process.execPath, ...process.argv.slice(1)], { stdout: "ignore", stderr: "ignore" });
 console.log(run.resourceUsage.maxRSS);`;
 
-export const aLargeFileWithManyTypeAwareErrorsLintsInBoundedMemory = Task.make(
-  "oxlint lints a 1 MB file with a thousand type-aware errors without holding a copy of the file for each error",
-  Effect.gen(function* () {
+export const aLargeFileWithManyTypeAwareErrorsLintsInBoundedMemory = Task.make({
+  name: "oxlint lints a 1 MB file with a thousand type-aware errors without holding a copy of the file for each error",
+  run: Effect.gen(function* () {
     const padding = "x".repeat(PADDING_BYTES_PER_ERROR);
     const { directory } = yield* makeProject({
       "generated.ts": [
@@ -765,4 +761,4 @@ export const aLargeFileWithManyTypeAwareErrorsLintsInBoundedMemory = Task.make(
     );
     expect(Number(peakBytes)).toBeLessThan(MOST_BYTES_OXLINT_MAY_HOLD);
   }).pipe(Effect.scoped),
-);
+});

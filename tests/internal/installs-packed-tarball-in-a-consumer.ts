@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 
 import { Task } from "@sshkeda/task";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Predicate, flow } from "effect";
 
 import packageJson from "../../package.json" with { type: "json" };
 import { encodeJson } from "../../src/lib/tasks/shared/encode-compact-json.ts";
@@ -25,15 +25,23 @@ const TASK_DEPENDENCY = { "@sshkeda/task": packageJson.dependencies["@sshkeda/ta
 const startTheCheckCommandText = encodeJson(packageJson.name).pipe(
   Effect.map(
     (name) =>
-      `import { Task } from "@sshkeda/task";\n\nexport const check = Task.make("check", Task.exec("bunx", [${name}]));\n`,
+      `import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\n\nexport const check = Task.make({ name: "check", run: Effect.asVoid(Task.exec("bunx", [${name}])) });\n`,
   ),
 );
 
 const CI_SCRIPT_TEXT =
-  'import { Task } from "@sshkeda/task";\n\nimport { check } from "./internal/start-the-check-command.ts";\n\nif (import.meta.main) {\n  Task.main(check);\n}\n';
-
-const DEFAULT_EXPORT_SCRIPT_TEXT =
   'import { check } from "./internal/start-the-check-command.ts";\n\nexport default check;\n';
+
+const printedByAFailedRun = flow(
+  failureAsValue<
+    string,
+    Effect.Error<ReturnType<typeof runTaskFile>>,
+    Effect.Services<ReturnType<typeof runTaskFile>>
+  >,
+  Effect.map((failed) =>
+    Predicate.isTagged(failed, "CommandFailed") ? failed.standardOutput : failed.message,
+  ),
+);
 
 const SCRIPT_FILES = ["scripts/ci.ts", "scripts/internal/start-the-check-command.ts"] as const;
 
@@ -64,9 +72,9 @@ const STRICTEST_OPTIONS_A_CONSUMER_MAY_TURN_ON = {
   allowUnusedLabels: false,
 } as const;
 
-export const runsChecksFromPackedTarball = Task.make(
-  "the packed tarball runs type-aware checks after an isolated frozen install without scripts or a root tsgolint, typescript or @effect/tsgo dependency, points failed runs at the installed guide, and its shipped source type-checks under every strict compiler option a consumer may turn on",
-  Effect.scoped(
+export const runsChecksFromPackedTarball = Task.make({
+  name: "the packed tarball runs type-aware checks after an isolated frozen install without scripts or a root tsgolint, typescript or @effect/tsgo dependency, points failed runs at the installed guide, and its shipped source type-checks under every strict compiler option a consumer may turn on",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -74,11 +82,9 @@ export const runsChecksFromPackedTarball = Task.make(
       const options = { cwd: consumer };
       const taskStateDirectory = yield* fileSystem.makeTempDirectoryScoped();
       const tarball = yield* packedTarballInto(consumer);
-      const peersAtDevelopmentVersions = yield* peerDependenciesAtDevelopmentVersions(
+      const peersAtDevelopmentVersions = peerDependenciesAtDevelopmentVersions(
         packageJson.devDependencies,
         packageJson.peerDependencies,
-        consumer,
-        consumer,
       );
       yield* fileSystem.writeFileString(
         path.join(consumer, "bunfig.toml"),
@@ -177,15 +183,13 @@ export const runsChecksFromPackedTarball = Task.make(
       const configMistake = yield* runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
-      }).pipe(failureAsValue);
-      expect(configMistake.message).toContain(
+      }).pipe(printedByAFailedRun);
+      expect(configMistake).toContain(
         '[lint-config] oxlint.config.ts: error MalformedGrant: "src/*.ts": is a glob',
       );
-      expect(configMistake.message).toContain(
-        "[oxlint] error AwaitedTaskFailed: lint-config failed",
-      );
-      expect(configMistake.message).not.toContain("/dist/");
-      expect(pointersToTheGuide(configMistake.message)).toEqual([pointerTo(installedGuide)]);
+      expect(configMistake).toContain("[oxlint] error AwaitedTaskFailed: lint-config failed");
+      expect(configMistake).not.toContain("/dist/");
+      expect(pointersToTheGuide(configMistake)).toEqual([pointerTo(installedGuide)]);
       expect(yield* fileSystem.exists(path.join(consumer, installedGuide))).toBe(true);
       yield* fileSystem.writeFileString(lintConfigFile, lintConfig);
       yield* fileSystem.writeFileString(
@@ -195,17 +199,17 @@ export const runsChecksFromPackedTarball = Task.make(
       const failure = yield* runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
-      }).pipe(failureAsValue);
-      expect(failure.message).toMatch(
+      }).pipe(printedByAFailedRun);
+      expect(failure).toMatch(
         /^\[oxlint\] src\/index\.ts:1:14: error sshkeda\(no-loose-literal-constants\): const greeting/mu,
       );
-      expect(failure.message).toMatch(
+      expect(failure).toMatch(
         /^\[oxlint\] src\/index\.ts:2:\d+: error typescript\(no-unnecessary-type-conversion\): /mu,
       );
-      expect(failure.message).toContain(
+      expect(failure).toContain(
         "[layout] Notes.json: error NotKebabCase: Notes.json is not kebab-case",
       );
-      expect(pointersToTheGuide(failure.message)).toEqual([pointerTo(installedGuide)]);
+      expect(pointersToTheGuide(failure)).toEqual([pointerTo(installedGuide)]);
       yield* fileSystem.remove(misnamedFile);
       yield* fileSystem.writeFileString(source, 'export const GREETING = "hello";\n');
       const passing = yield* runTaskFile(CHECK_COMMAND, {
@@ -238,11 +242,11 @@ export const runsChecksFromPackedTarball = Task.make(
       expect(strictest).toContain("passed");
     }),
   ),
-);
+});
 
-export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
-  "the packed tarball checks a workspace package whose dependencies are hoisted to the workspace root, with one script that calls Task.main and one whose default export is the check task, and a failed run points at the guide by its path from that package",
-  Effect.scoped(
+export const installsPackedTarballInAHoistedWorkspacePackage = Task.make({
+  name: "the packed tarball checks a workspace package whose dependencies are hoisted to the workspace root, with a script whose default export is the check task, and a failed run points at the guide by its path from that package",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -252,12 +256,10 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
       const taskStateDirectory = yield* fileSystem.makeTempDirectoryScoped();
       const tarball = yield* packedTarballInto(workspace);
       const peersAtDevelopmentVersions = {
-        ...(yield* peerDependenciesAtDevelopmentVersions(
+        ...peerDependenciesAtDevelopmentVersions(
           packageJson.devDependencies,
           packageJson.peerDependencies,
-          workspace,
-          consumer,
-        )),
+        ),
         "@types/bun": packageJson.devDependencies["@types/bun"],
       };
       yield* fileSystem.makeDirectory(path.join(consumer, "scripts/internal"), { recursive: true });
@@ -313,10 +315,6 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
       );
       yield* fileSystem.writeFileString(path.join(consumer, "scripts/ci.ts"), CI_SCRIPT_TEXT);
       yield* fileSystem.writeFileString(
-        path.join(consumer, "scripts/check.ts"),
-        DEFAULT_EXPORT_SCRIPT_TEXT,
-      );
-      yield* fileSystem.writeFileString(
         path.join(consumer, "scripts/internal/start-the-check-command.ts"),
         yield* startTheCheckCommandText,
       );
@@ -330,8 +328,8 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
       const failure = yield* runTaskFile("bun packages/app/scripts/ci.ts", {
         ...options,
         taskStateDirectory,
-      }).pipe(failureAsValue);
-      const printedByCheck = throughTheCheckTask(failure.message);
+      }).pipe(printedByAFailedRun);
+      const printedByCheck = throughTheCheckTask(failure);
       expect(printedByCheck).toContain(
         "[oxlint] src/index.ts:1:14: error sshkeda(no-loose-literal-constants)",
       );
@@ -348,11 +346,11 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make(
       expect(pointersToTheGuide(throughTheCheckTask(passing))).toEqual([]);
     }),
   ),
-);
+});
 
-export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
-  "in a packed-tarball consumer plain bun fmt fixes what check reports, after check passed, changing the installed FORMAT_CONFIG makes check list the file again",
-  Effect.scoped(
+export const formatsAPackedConsumerWithItsFormatConfig = Task.make({
+  name: "in a packed-tarball consumer plain bun fmt fixes what check reports, after check passed, changing the installed FORMAT_CONFIG makes check list the file again",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -360,11 +358,9 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
       const options = { cwd: consumer };
       const taskStateDirectory = yield* fileSystem.makeTempDirectoryScoped();
       const tarball = yield* packedTarballInto(consumer);
-      const peersAtDevelopmentVersions = yield* peerDependenciesAtDevelopmentVersions(
+      const peersAtDevelopmentVersions = peerDependenciesAtDevelopmentVersions(
         packageJson.devDependencies,
         packageJson.peerDependencies,
-        consumer,
-        consumer,
       );
       const filesByPath = {
         ".gitignore": "node_modules\n*.tgz\n",
@@ -434,4 +430,4 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make(
       expect(yield* checkOutput).toContain(unformattedSource);
     }),
   ),
-);
+});

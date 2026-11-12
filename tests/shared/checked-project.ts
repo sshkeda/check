@@ -11,9 +11,9 @@ const STAGED_FILES = ["package.json", "src", "scripts", "docs"] as const;
 
 export const stagedCheckModule = (file: string) => new URL(file, STAGED_CHECK).href;
 
-export const stageCheckUnderNodeModules = Task.make(
-  "stage check under node_modules",
-  Effect.gen(function* () {
+export const stageCheckUnderNodeModules = Task.make({
+  name: "stage check under node_modules",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const staged = yield* path.fromFileUrl(STAGED_CHECK);
@@ -23,15 +23,13 @@ export const stageCheckUnderNodeModules = Task.make(
       yield* fileSystem.copy(file, path.join(staged, file));
     }
   }),
-);
+});
 
 export const theCheckCommand = Effect.gen(function* () {
   const path = yield* Path.Path;
   const command = yield* path.fromFileUrl(new URL("scripts/check.ts", STAGED_CHECK));
   return `bun ${yield* encodeJson(command)}`;
 });
-
-export const RUNNER = import.meta.resolve("@sshkeda/task");
 
 export const NO_PERMISSIONS = 0o000;
 

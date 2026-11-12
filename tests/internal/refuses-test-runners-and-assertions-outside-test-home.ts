@@ -17,9 +17,9 @@ const ASSERTING_SOURCES = [
   'import { deepEqual } from "assert/strict";',
 ] as const;
 
-export const refusesAssertions = Task.make(
-  "no-assertions refuses bun:test expect and node:assert outside tests/, and leaves import {} to no-import-type-side-effects and re-exports to no-re-exports",
-  ruleTest("no-assertions", {
+export const refusesAssertions = Task.make({
+  name: "no-assertions refuses bun:test expect and node:assert outside tests/, and leaves import {} to no-import-type-side-effects and re-exports to no-re-exports",
+  run: ruleTest("no-assertions", {
     valid: [
       'import type { AssertionError } from "node:assert";',
       'import { type Expect } from "bun:test";',
@@ -50,11 +50,11 @@ export const refusesAssertions = Task.make(
       ...ASSERTING_SOURCES.map((code) => ({ code, errors: [{ messageId: "assertion" }] })),
     ],
   }),
-);
+});
 
-export const refusesTestRunners = Task.make(
-  "no-test-runners refuses test runner modules, every bun:test value but expect, and a side-effect import of bun:test, in tests/ too, while import {}, re-exports and import = of bun:test stay with the rules that own them",
-  ruleTest("no-test-runners", {
+export const refusesTestRunners = Task.make({
+  name: "no-test-runners refuses test runner modules, every bun:test value but expect, and a side-effect import of bun:test, in tests/ too, while import {}, re-exports and import = of bun:test stay with the rules that own them",
+  run: ruleTest("no-test-runners", {
     valid: [
       'import { expect } from "bun:test";',
       'import { type Mock, expect as check } from "bun:test";',
@@ -85,4 +85,4 @@ export const refusesTestRunners = Task.make(
       errors: [{ message: `imports ${imported}` }],
     })),
   }),
-);
+});

@@ -15,9 +15,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
 
 const IMPORT_CONTEXT = 'import { Context } from "effect"; ';
 
-export const serviceKeyNames = Task.make(
-  "Effect service keys end in the named class including template literals and constants that hold them, and an unnamed class is left to no-service-declarations",
-  ruleTest("no-mismatched-service-keys", {
+export const serviceKeyNames = Task.make({
+  name: "Effect service keys end in the named class including template literals and constants that hold them, and an unnamed class is left to no-service-declarations",
+  run: ruleTest("no-mismatched-service-keys", {
     valid: [
       ...[
         'class Store extends Context.Service<Store>()("@example/Store") {}',
@@ -66,11 +66,11 @@ export const serviceKeyNames = Task.make(
       },
     ],
   }),
-);
+});
 
-export const serviceLocations = Task.make(
-  "services require approved files while other property restrictions stay enabled",
-  Effect.scoped(
+export const serviceLocations = Task.make({
+  name: "services require approved files while other property restrictions stay enabled",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -107,4 +107,4 @@ export default { jsPlugins: config.jsPlugins, rules: Object.fromEntries(rules.ma
       );
     }),
   ),
-);
+});

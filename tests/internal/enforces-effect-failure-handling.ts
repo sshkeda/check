@@ -24,9 +24,9 @@ const operationTest = (rule: string, invalid: readonly string[]) =>
     invalid: invalid.map((code) => ({ code, errors: [{ messageId: "operation" }] })),
   });
 
-export const unsafeOperations = Task.make(
-  "Effect failure, fiber, tracing and sleeping restrictions are separate rules that follow imports and respect shadowing",
-  Effect.all(
+export const unsafeOperations = Task.make({
+  name: "Effect failure, fiber, tracing and sleeping restrictions are separate rules that follow imports and respect shadowing",
+  run: Effect.all(
     [
       operationTest("no-dropped-failures", [
         'import { Effect } from "effect"; Effect.orDie(work);',
@@ -55,11 +55,11 @@ export const unsafeOperations = Task.make(
     ],
     { discard: true },
   ),
-);
+});
 
-export const taggedRecovery = Task.make(
-  "Effect recovery callbacks use tagged errors instead of instanceof",
-  ruleTest("no-error-instanceof", {
+export const taggedRecovery = Task.make({
+  name: "Effect recovery callbacks use tagged errors instead of instanceof",
+  run: ruleTest("no-error-instanceof", {
     valid: [
       'import { Effect } from "effect"; Effect.catchTag("Failure", failure => recover(failure));',
       'import { Effect } from "effect"; Effect.catch(failure => other instanceof Other);',
@@ -85,4 +85,4 @@ export const taggedRecovery = Task.make(
       },
     ],
   }),
-);
+});

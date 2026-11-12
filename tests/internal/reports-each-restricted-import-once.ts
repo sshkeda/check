@@ -74,9 +74,9 @@ const expectEachCaseReports = (
     ).toEqual(reported(cases));
   });
 
-export const restrictedImportsOutsideTheTestHome = Task.make(
-  "outside tests/, each restricted import is reported once, with a message that states only what is imported: Node built-ins Effect replaces, members of Bun that are restricted, assertions, test runners and loads of bun:test that name nothing, with a load that names nothing also reported by import(no-unassigned-import), while import =, import {}, re-exports and import() of a module no rule bans stay with the rule that owns them",
-  expectEachCaseReports("src", [
+export const restrictedImportsOutsideTheTestHome = Task.make({
+  name: "outside tests/, each restricted import is reported once, with a message that states only what is imported: Node built-ins Effect replaces, members of Bun that are restricted, assertions, test runners and loads of bun:test that name nothing, with a load that names nothing also reported by import(no-unassigned-import), while import =, import {}, re-exports and import() of a module no rule bans stay with the rule that owns them",
+  run: expectEachCaseReports("src", [
     ['import { join } from "node:path";\n\nexport const USED = [join];', [NODE_PATH]],
     ['import path = require("node:path");\n\nexport const USED = [path.join];', [REQUIRE_IMPORT]],
     [
@@ -135,11 +135,11 @@ export const restrictedImportsOutsideTheTestHome = Task.make(
       [UNASSIGNED_IMPORT, "sshkeda(no-test-runners): imports a test runner from vitest/node"],
     ],
   ]),
-);
+});
 
-export const restrictedImportsInTheTestHome = Task.make(
-  "in tests/, assertions pass while a test runner, a whole bun:test namespace, a load of bun:test that names nothing and an import() of an assertion module are each reported once by their ban, with the load that names nothing also reported by import(no-unassigned-import)",
-  expectEachCaseReports("tests/shared", [
+export const restrictedImportsInTheTestHome = Task.make({
+  name: "in tests/, assertions pass while a test runner, a whole bun:test namespace, a load of bun:test that names nothing and an import() of an assertion module are each reported once by their ban, with the load that names nothing also reported by import(no-unassigned-import)",
+  run: expectEachCaseReports("tests/shared", [
     ['import { expect } from "bun:test";\n\nexport const USED = [expect];', []],
     ['import assert from "node:assert/strict";\n\nexport const USED = [assert];', []],
     [
@@ -154,11 +154,11 @@ export const restrictedImportsInTheTestHome = Task.make(
     ['import { join } from "node:path";\n\nexport const USED = [join];', [NODE_PATH]],
     ['export const load = () => import("node:assert");', [DYNAMIC_IMPORT]],
   ]),
-);
+});
 
-export const builtinImportsInFilesGrantedDynamicImports = Task.make(
-  "a file granted importsDynamically may import() a module no rule bans, but a literal import() of a module a ban covers is still reported once, by that module's ban",
-  expectEachCaseReports(
+export const builtinImportsInFilesGrantedDynamicImports = Task.make({
+  name: "a file granted importsDynamically may import() a module no rule bans, but a literal import() of a module a ban covers is still reported once, by that module's ban",
+  run: expectEachCaseReports(
     "src",
     [
       ['export const load = () => import("node:path");', [NODE_PATH]],
@@ -185,7 +185,7 @@ export const builtinImportsInFilesGrantedDynamicImports = Task.make(
     ],
     ["importsDynamically"],
   ),
-);
+});
 
 const MODULE_IN_A_PATTERN = "x";
 
@@ -258,27 +258,27 @@ const literalImportCases = (allow: readonly string[]) =>
 
 const GRANTS_AROUND_A_MODULE_BAN = [[], [DYNAMIC_IMPORTS], GRANTABLE_BAN_NAMES];
 
-export const literalImportsOfEveryBuiltin = Task.make(
-  "a literal import() of a Node built-in Effect replaces is reported once, by that module's ban, in a file granted nothing, importsDynamically or every permission",
-  Effect.gen(function* () {
+export const literalImportsOfEveryBuiltin = Task.make({
+  name: "a literal import() of a Node built-in Effect replaces is reported once, by that module's ban, in a file granted nothing, importsDynamically or every permission",
+  run: Effect.gen(function* () {
     for (const allow of GRANTS_AROUND_A_MODULE_BAN) {
       yield* expectEachGrantedCaseReportsOnce("src", literalImportCases(allow));
     }
   }),
-);
+});
 
-export const literalImportsOfEveryBuiltinInTheTestHome = Task.make(
-  "in tests/, a literal import() of a Node built-in Effect replaces is reported once, by that module's ban, whatever the file is granted",
-  Effect.gen(function* () {
+export const literalImportsOfEveryBuiltinInTheTestHome = Task.make({
+  name: "in tests/, a literal import() of a Node built-in Effect replaces is reported once, by that module's ban, whatever the file is granted",
+  run: Effect.gen(function* () {
     for (const allow of GRANTS_AROUND_A_MODULE_BAN) {
       yield* expectEachGrantedCaseReportsOnce("tests/shared", literalImportCases(allow));
     }
   }),
-);
+});
 
-export const emptyNamedImportsOfEveryBannedModule = Task.make(
-  "import {} from a banned module is reported once, by typescript(no-import-type-side-effects), like import {} from bun:test",
-  expectEachGrantedCaseReportsOnce(
+export const emptyNamedImportsOfEveryBannedModule = Task.make({
+  name: "import {} from a banned module is reported once, by typescript(no-import-type-side-effects), like import {} from bun:test",
+  run: expectEachGrantedCaseReportsOnce(
     "src",
     BANNED_MODULES.map((module) => ({
       code: `import {} from "${module}";`,
@@ -286,15 +286,15 @@ export const emptyNamedImportsOfEveryBannedModule = Task.make(
       rules: ["typescript(no-import-type-side-effects)"],
     })),
   ),
-);
+});
 
 const RESTRICTED_MEMBER_RULE = "eslint(no-restricted-imports)";
 
 const BUN_ALIAS_PROTOCOL = "bun:";
 
-export const importsOfEveryRestrictedMember = Task.make(
-  "a named import of a restricted Bun or process member is reported once, by no-restricted-imports, from bun:process too, and a type-only import of it is not where TypeScript knows the module",
-  expectEachGrantedCaseReportsOnce(
+export const importsOfEveryRestrictedMember = Task.make({
+  name: "a named import of a restricted Bun or process member is reported once, by no-restricted-imports, from bun:process too, and a type-only import of it is not where TypeScript knows the module",
+  run: expectEachGrantedCaseReportsOnce(
     "src",
     RESTRICTED_IMPORT_PATHS.flatMap(({ name: module, importNames }) =>
       importNames.flatMap((name) => [
@@ -320,7 +320,7 @@ export const importsOfEveryRestrictedMember = Task.make(
       ]),
     ),
   ),
-);
+});
 
 const reExportCases = [
   ['export * from "node:path";', "export * from node:path"],
@@ -334,12 +334,12 @@ const reExportCases = [
     [code, [`sshkeda(no-re-exports): ${reExport} re-exports another module`]] as const,
 );
 
-export const reExportsOfEveryBannedModule = Task.make(
-  "a re-export of a module or a name that a rule bans, export *, export * as, export { x } or their type-only forms, is reported once, by no-re-exports",
-  expectEachCaseReports("src", reExportCases),
-);
+export const reExportsOfEveryBannedModule = Task.make({
+  name: "a re-export of a module or a name that a rule bans, export *, export * as, export { x } or their type-only forms, is reported once, by no-re-exports",
+  run: expectEachCaseReports("src", reExportCases),
+});
 
-export const reExportsInFilesGrantedEverything = Task.make(
-  "a file granted every permission still gets the one no-re-exports report for each re-export of a banned module or name",
-  expectEachCaseReports("src", reExportCases, GRANTABLE_BAN_NAMES),
-);
+export const reExportsInFilesGrantedEverything = Task.make({
+  name: "a file granted every permission still gets the one no-re-exports report for each re-export of a banned module or name",
+  run: expectEachCaseReports("src", reExportCases, GRANTABLE_BAN_NAMES),
+});

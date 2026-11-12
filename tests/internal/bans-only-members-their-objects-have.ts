@@ -44,9 +44,9 @@ const objectTypeOf = (checker: Checker, location: SourceFile, object: string) =>
       : yield* typeScriptRequest("read a global type", () => checker.getTypeOfSymbol(symbol));
   });
 
-export const bannedMembersExistOnTheirObjects = Task.make(
-  "every banned member names a property its global object really has",
-  Effect.gen(function* () {
+export const bannedMembersExistOnTheirObjects = Task.make({
+  name: "every banned member names a property its global object really has",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({ "main.ts": "export const MAIN = 1;\n" });
     const [rootProject] = yield* openTypeScriptProjects(tsconfigFile);
     const location = rootProject?.sourceFiles[0]?.sourceFile;
@@ -86,4 +86,4 @@ export const bannedMembersExistOnTheirObjects = Task.make(
     expect(resolvedObjects).toContain(IMPORT_META);
     expect(missingMembers).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

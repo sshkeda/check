@@ -27,12 +27,14 @@ import {
   FILE_TYPE,
   PATCH,
 } from "../../src/shared/record-and-grant-permissions-by-path.ts";
-import { linkNodeModulesWithCheck, writtenFiles } from "../shared/checked-project.ts";
+import { linkNodeModulesWithCheck } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 
 const taggedViolations = Arrays.map(flow(printableError, formattedError));
 
-const RUNNABLE =
+const RUNNABLE = 'import { build } from "./shared/build.ts";\n\nexport default build;\n';
+
+const CALLS_TASK_MAIN =
   'import { Task } from "@sshkeda/task";\nimport { build } from "./shared/build.ts";\n\nif (import.meta.main) {\n  Task.main(build);\n}\n';
 
 const outside = (field: string, specifier: string, manifest = "package.json") =>
@@ -41,14 +43,14 @@ const outside = (field: string, specifier: string, manifest = "package.json") =>
 const nonScript = (path: string) =>
   `${path}: error TopLevelNonScript: sits directly in scripts/ and is not a TypeScript or JavaScript file`;
 
-const withoutMain = (path: string) =>
-  `${path}: error TopLevelScriptWithoutMain: sits directly in scripts/ and neither calls Task.main imported from @sshkeda/task nor has a default export`;
+const withoutDefaultExport = (path: string) =>
+  `${path}: error TopLevelScriptWithoutDefaultExport: sits directly in scripts/ and has no default export`;
 
 const AT_REPOSITORY_ROOT = { root: "/repository", packageDirectory: "/repository" } as const;
 
-export const acceptsConventionalPaths = Task.make(
-  "kebab-case paths, tool-mandated and conventional names, files inside hidden directories with valid names and tests in tests pass the layout check",
-  Effect.sync(() => {
+export const acceptsConventionalPaths = Task.make({
+  name: "kebab-case paths, tool-mandated and conventional names, files inside hidden directories with valid names and tests in tests pass the layout check",
+  run: Effect.sync(() => {
     expect(
       [
         "package.json",
@@ -77,11 +79,11 @@ export const acceptsConventionalPaths = Task.make(
       ].flatMap((path) => taggedViolations(pathViolations(path))),
     ).toEqual([]);
   }),
-);
+});
 
-export const rejectsMisplacedPaths = Task.make(
-  "non-kebab names and non-scripts directly in scripts/ are reported while language restrictions belong to the file-type check",
-  Effect.sync(() => {
+export const rejectsMisplacedPaths = Task.make({
+  name: "non-kebab names and non-scripts directly in scripts/ are reported while language restrictions belong to the file-type check",
+  run: Effect.sync(() => {
     expect(taggedViolations(pathViolations("src/pool/workerPool.ts"))).toEqual([
       "src/pool/workerPool.ts: error NotKebabCase: workerPool.ts is not kebab-case",
     ]);
@@ -134,14 +136,14 @@ export const rejectsMisplacedPaths = Task.make(
     ]);
     expect(taggedViolations(pathViolations("scripts/shared/settings.json"))).toEqual([]);
   }),
-);
+});
 
 const duplicate = (path: string, others: string, scope: string) =>
   `${path}: error DuplicateFileName: has the same file name as ${others} in ${scope}`;
 
-export const sourceFileNamesAreUniqueInEachScope = Task.make(
-  "two source files with the same name in one scope, whatever their script extension, are each reported; modules, scripts/, the test home and the package root are scopes, internal and shared/ directories are not, and index files may repeat",
-  Effect.sync(() => {
+export const sourceFileNamesAreUniqueInEachScope = Task.make({
+  name: "two source files with the same name in one scope, whatever their script extension, are each reported; modules, scripts/, the test home and the package root are scopes, internal and shared/ directories are not, and index files may repeat",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         duplicateFileNameViolations([
@@ -182,11 +184,11 @@ export const sourceFileNamesAreUniqueInEachScope = Task.make(
       duplicate("tools/e/format.mts", "tools/c/format.ts, tools/d/format.tsx", "the package root"),
     ]);
   }),
-);
+});
 
-export const libraryDirectoriesOutsideModulesAreReported = Task.make(
-  "every lib/ directory below the package root that is not directly in a module is reported once, wherever it sits, while a root lib/ is left to MisplacedAtPackageRoot and a lib/ inside a directory outside the module layout is left to DirectoryOutsideModuleLayout",
-  Effect.sync(() => {
+export const libraryDirectoriesOutsideModulesAreReported = Task.make({
+  name: "every lib/ directory below the package root that is not directly in a module is reported once, wherever it sits, while a root lib/ is left to MisplacedAtPackageRoot and a lib/ inside a directory outside the module layout is left to DirectoryOutsideModuleLayout",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoryShapeViolations([
@@ -210,14 +212,14 @@ export const libraryDirectoriesOutsideModulesAreReported = Task.make(
       ),
     ]);
   }),
-);
+});
 
 const outsideModuleLayout = (directory: string, module: string) =>
   `${directory}: error DirectoryOutsideModuleLayout: is a directory in the module ${module}/ other than internal/, shared/ or lib/. Move it to ${module}/lib/${directory.split("/").at(-1)}/`;
 
-export const modulesHoldOnlyTheirIndexInternalSharedAndLibrary = Task.make(
-  "src/, scripts/, tests/ and every module in a lib/ below them may hold only its index, internal/, shared/ and lib/, so any other directory directly in one is DirectoryOutsideModuleLayout once, without reports for what it holds, while directories inside internal/ and shared/ and paths outside src/, scripts/ and tests/ are left to other rules",
-  Effect.sync(() => {
+export const modulesHoldOnlyTheirIndexInternalSharedAndLibrary = Task.make({
+  name: "src/, scripts/, tests/ and every module in a lib/ below them may hold only its index, internal/, shared/ and lib/, so any other directory directly in one is DirectoryOutsideModuleLayout once, without reports for what it holds, while directories inside internal/ and shared/ and paths outside src/, scripts/ and tests/ are left to other rules",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoryShapeViolations([
@@ -254,11 +256,11 @@ export const modulesHoldOnlyTheirIndexInternalSharedAndLibrary = Task.make(
       outsideModuleLayout("tests/fixtures", "tests"),
     ]);
   }),
-);
+});
 
-export const libraryDirectoriesHoldOnlyModules = Task.make(
-  "a lib/ directory of a module holds only modules, so a file directly in it is FileInLibraryDirectory and a directory in it without an index.ts or index.tsx is ModuleWithoutIndex",
-  Effect.sync(() => {
+export const libraryDirectoriesHoldOnlyModules = Task.make({
+  name: "a lib/ directory of a module holds only modules, so a file directly in it is FileInLibraryDirectory and a directory in it without an index.ts or index.tsx is ModuleWithoutIndex",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoryShapeViolations([
@@ -285,14 +287,14 @@ export const libraryDirectoriesHoldOnlyModules = Task.make(
       ]),
     ).toEqual([]);
   }),
-);
+});
 
 const withLayoutDirectoryName = (module: string) =>
   `${module}: error ModuleWithLayoutDirectoryName: is a module in ${module.split("/").slice(0, -1).join("/")}/ named internal, shared or lib`;
 
-export const libraryModulesCannotTakeLayoutDirectoryNames = Task.make(
-  "a module in a lib/ named internal, shared or lib is ModuleWithLayoutDirectoryName, and no other shape error is reported inside it",
-  Effect.sync(() => {
+export const libraryModulesCannotTakeLayoutDirectoryNames = Task.make({
+  name: "a module in a lib/ named internal, shared or lib is ModuleWithLayoutDirectoryName, and no other shape error is reported inside it",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoryShapeViolations([
@@ -323,16 +325,16 @@ export const libraryModulesCannotTakeLayoutDirectoryNames = Task.make(
       withLayoutDirectoryName("tests/lib/lib"),
     ]);
   }),
-);
+});
 
 const holdsOnly = (directory: string, child: string) =>
   `${directory}: error DirectoryHoldsOnlyADirectory: holds only the directory ${child}/`;
 
 const NO_NESTED_PACKAGES = [] as const;
 
-export const aDirectoryHoldingOnlyOneDirectoryIsReported = Task.make(
-  "a directory whose only entry is one directory is reported",
-  Effect.sync(() => {
+export const aDirectoryHoldingOnlyOneDirectoryIsReported = Task.make({
+  name: "a directory whose only entry is one directory is reported",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -342,11 +344,11 @@ export const aDirectoryHoldingOnlyOneDirectoryIsReported = Task.make(
       ),
     ).toEqual([holdsOnly("src", "memo")]);
   }),
-);
+});
 
-export const aDirectoryHoldingTwoDirectoriesPasses = Task.make(
-  "a directory holding two directories passes",
-  Effect.sync(() => {
+export const aDirectoryHoldingTwoDirectoriesPasses = Task.make({
+  name: "a directory holding two directories passes",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -356,11 +358,11 @@ export const aDirectoryHoldingTwoDirectoriesPasses = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const aDirectoryHoldingOneDirectoryAndAFilePasses = Task.make(
-  "a directory holding one directory and a file passes",
-  Effect.sync(() => {
+export const aDirectoryHoldingOneDirectoryAndAFilePasses = Task.make({
+  name: "a directory holding one directory and a file passes",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -370,11 +372,11 @@ export const aDirectoryHoldingOneDirectoryAndAFilePasses = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const aLibraryDirectoryHoldingOneModulePasses = Task.make(
-  "a lib/ directory of a module holding a single module passes, while src/ holding only lib/ is reported",
-  Effect.sync(() => {
+export const aLibraryDirectoryHoldingOneModulePasses = Task.make({
+  name: "a lib/ directory of a module holding a single module passes, while src/ holding only lib/ is reported",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -390,11 +392,11 @@ export const aLibraryDirectoryHoldingOneModulePasses = Task.make(
       ),
     ).toEqual([holdsOnly("scripts", "lib")]);
   }),
-);
+});
 
-export const nestedWrapperDirectoriesAreEachReported = Task.make(
-  "every level of nested wrapper directories is reported",
-  Effect.sync(() => {
+export const nestedWrapperDirectoriesAreEachReported = Task.make({
+  name: "every level of nested wrapper directories is reported",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -404,11 +406,11 @@ export const nestedWrapperDirectoriesAreEachReported = Task.make(
       ),
     ).toEqual([holdsOnly("src", "a"), holdsOnly("src/a", "b"), holdsOnly("src/a/b", "c")]);
   }),
-);
+});
 
-export const internalAndSharedDirectoriesHoldOnlyFiles = Task.make(
-  "an internal/ or shared/ directory that holds a code directory, one holding a script outside tests/ at any depth, a module with an index.ts included, is DirectoryInInternalOrShared once per directory it holds, an index.ts or index.tsx directly in one is IndexInInternalOrShared, while other files directly in them, deeper directories and directories of documents, assets, data or test fixtures pass",
-  Effect.sync(() => {
+export const internalAndSharedDirectoriesHoldOnlyFiles = Task.make({
+  name: "an internal/ or shared/ directory that holds a code directory, one holding a script outside tests/ at any depth, a module with an index.ts included, is DirectoryInInternalOrShared once per directory it holds, an index.ts or index.tsx directly in one is IndexInInternalOrShared, while other files directly in them, deeper directories and directories of documents, assets, data or test fixtures pass",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoryShapeViolations([
@@ -454,11 +456,11 @@ export const internalAndSharedDirectoriesHoldOnlyFiles = Task.make(
       "src/lib/web/shared/index.ts: error IndexInInternalOrShared: is an index file directly in shared/",
     ]);
   }),
-);
+});
 
-export const hiddenDirectoriesHoldingOnlyADirectoryAreReported = Task.make(
-  "hidden directories and their descendants follow the same rule against holding only one directory",
-  Effect.sync(() => {
+export const hiddenDirectoriesHoldingOnlyADirectoryAreReported = Task.make({
+  name: "hidden directories and their descendants follow the same rule against holding only one directory",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -477,11 +479,11 @@ export const hiddenDirectoriesHoldingOnlyADirectoryAreReported = Task.make(
       holdsOnly(".claude/skills", "review"),
     ]);
   }),
-);
+});
 
-export const aNestedPackageCountsAsAnEntry = Task.make(
-  "a nested package's root directory counts as an entry of the directory holding it, though its files are judged in that package's own run",
-  Effect.sync(() => {
+export const aNestedPackageCountsAsAnEntry = Task.make({
+  name: "a nested package's root directory counts as an entry of the directory holding it, though its files are judged in that package's own run",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -496,11 +498,11 @@ export const aNestedPackageCountsAsAnEntry = Task.make(
       ),
     ).toEqual([holdsOnly("src/fixtures", "pkg")]);
   }),
-);
+});
 
-export const directoriesInsideANestedPackageAreNotChecked = Task.make(
-  "directories inside a nested package belong to that package's layout, so a package holding another package is not reported",
-  Effect.sync(() => {
+export const directoriesInsideANestedPackageAreNotChecked = Task.make({
+  name: "directories inside a nested package belong to that package's layout, so a package holding another package is not reported",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoriesHoldingOnlyADirectory(
@@ -510,16 +512,16 @@ export const directoriesInsideANestedPackageAreNotChecked = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
 const outsideImplementation = (path: string) =>
   `${path}: error SourceOutsideInternalOrShared: is a non-index source file outside internal/ or shared/`;
 
-export const testsFollowTheModuleLayout = Task.make(
-  "tests/ is a module, so its index and files in its internal/, its shared/ and its lib/ modules pass whether or not they make a task, while any other file in tests/ is SourceOutsideInternalOrShared",
-  Effect.sync(() => {
+export const testsFollowTheModuleLayout = Task.make({
+  name: "tests/ is a module, so its index and files in its internal/, its shared/ and its lib/ modules pass whether or not they make a task, while any other file in tests/ is SourceOutsideInternalOrShared",
+  run: Effect.sync(() => {
     const test =
-      'import { Task } from "@sshkeda/task";\nexport const passes = Task.make("passes", work);\n';
+      'import { Task } from "@sshkeda/task";\nexport const passes = Task.make({ name: "passes", run: work });\n';
     const helper = "export const helper = 1;\n";
     expect(
       [
@@ -542,11 +544,11 @@ export const testsFollowTheModuleLayout = Task.make(
       outsideImplementation("tests/support/declares.ts"),
     ]);
   }),
-);
+});
 
-export const directoryNamesAreCheckedOnceEach = Task.make(
-  "a retired word in a directory name is reported once for the directory, including inside hidden directories, while file names are left to oxlint",
-  Effect.sync(() => {
+export const directoryNamesAreCheckedOnceEach = Task.make({
+  name: "a retired word in a directory name is reported once for the directory, including inside hidden directories, while file names are left to oxlint",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         directoryNameViolations([
@@ -566,128 +568,38 @@ export const directoryNamesAreCheckedOnceEach = Task.make(
       ".claude/settings: error RetiredWordInPath: uses the retired word settings",
     ]);
   }),
-);
+});
 
 const holdsOtherStatement = (location: string) =>
-  `${location}: error TopLevelScriptHoldsOtherStatement: holds a statement other than an import and if (import.meta.main) { Task.main(task); }`;
-
-const holdsOtherThanItsDefaultExport = (location: string) =>
   `${location}: error TopLevelScriptHoldsOtherStatement: holds a statement other than an import and export default task`;
 
-const mainAndDefaultExport = (location: string) =>
-  `${location}: error TopLevelScriptWithMainAndDefaultExport: calls Task.main and also has a default export. Keep one of them`;
-
-const guarded = (imports: string, call: string) =>
-  `${imports}\n\nif (import.meta.main) {\n  ${call};\n}\n`;
-
-export const scriptsMustRunTasks = Task.make(
-  "a script directly in scripts/ calls Task.main imported from @sshkeda/task by name or through a namespace, or it is TopLevelScriptWithoutMain, while a script in a scripts/ subdirectory need not",
-  Effect.sync(() => {
+export const scriptsMustRunTasks = Task.make({
+  name: "a script directly in scripts/ has a default export, or it is TopLevelScriptWithoutDefaultExport, a script that calls Task.main included, while a script in a scripts/ subdirectory need not",
+  run: Effect.sync(() => {
     expect(taggedViolations(sourceViolations("scripts/build.ts", RUNNABLE))).toEqual([]);
-    expect(
-      taggedViolations(
-        sourceViolations(
-          "scripts/build.ts",
-          guarded(
-            'import * as Tasks from "@sshkeda/task";\nimport { build } from "./shared/build.ts";',
-            "Tasks.Task.main(build)",
-          ),
-        ),
-      ),
-    ).toEqual([]);
     expect(
       taggedViolations(sourceViolations("scripts/shared/helpers.ts", "export const helper = 1;\n")),
     ).toEqual([]);
-    const notRunnable = withoutMain("scripts/helpers.ts");
+    expect(taggedViolations(sourceViolations("scripts/shared/build.ts", CALLS_TASK_MAIN))).toEqual(
+      [],
+    );
+    const notRunnable = withoutDefaultExport("scripts/helpers.ts");
     for (const helpers of [
       "export const helper = 1;\n",
       'import { run } from "./lib/run.ts";\nrun(build);\n',
       'import { Task } from "@sshkeda/task";\nexport { Task };\n',
+      CALLS_TASK_MAIN,
     ]) {
       expect(taggedViolations(sourceViolations("scripts/helpers.ts", helpers))).toEqual([
         notRunnable,
       ]);
     }
   }),
-);
+});
 
-export const scriptsHoldOnlyImportsAndTheirMainCall = Task.make(
-  "a script directly in scripts/ that calls Task.main may hold only imports and one if (import.meta.main) { Task.main(task); } with a named task, so each other statement is TopLevelScriptHoldsOtherStatement, including a bare or aliased Task.main call, a declaration, an export, a second guard and a guard with more in it, while a script in a scripts/ subdirectory may hold anything",
-  Effect.sync(() => {
-    const TASK = 'import { Task } from "@sshkeda/task";';
-    expect(
-      taggedViolations(
-        sourceViolations(
-          "scripts/build.ts",
-          guarded(
-            `import type { Effect } from "effect";\n${TASK}\nimport { build } from "./shared/build.ts";`,
-            "Task.main(build)",
-          ),
-        ),
-      ),
-    ).toEqual([]);
-    expect(
-      taggedViolations(sourceViolations("scripts/build.ts", `${TASK}\nTask.main(build);\n`)),
-    ).toEqual([holdsOtherStatement("scripts/build.ts:2")]);
-    expect(
-      taggedViolations(
-        sourceViolations(
-          "scripts/build.ts",
-          `${TASK}\nconst launch = Task.main;\nlaunch(build);\n`,
-        ),
-      ),
-    ).toEqual([
-      holdsOtherStatement("scripts/build.ts:2"),
-      holdsOtherStatement("scripts/build.ts:3"),
-    ]);
-    expect(
-      taggedViolations(
-        sourceViolations(
-          "scripts/ci.ts",
-          [
-            TASK,
-            'export const ci = Task.make("ci", work);',
-            "if (import.meta.main) {",
-            "  Task.main(ci);",
-            "}",
-            "if (import.meta.main) {",
-            "  Task.main(ci);",
-            "}",
-            "",
-          ].join("\n"),
-        ),
-      ),
-    ).toEqual([holdsOtherStatement("scripts/ci.ts:2"), holdsOtherStatement("scripts/ci.ts:6")]);
-    for (const guard of [
-      'if (import.meta.main) {\n  Task.main(Task.make("ci", work));\n}',
-      "if (import.meta.main) {\n  Task.main(ci);\n  done();\n}",
-      "if (import.meta.main) Task.main(ci);",
-      "if (import.meta.main) {\n  Task.main(ci);\n} else {\n  done();\n}",
-      "if (main) {\n  Task.main(ci);\n}",
-    ]) {
-      expect(
-        taggedViolations(
-          sourceViolations(
-            "scripts/ci.ts",
-            `${TASK}\nimport { ci } from "./shared/ci.ts";\n${guard}\n`,
-          ),
-        ),
-      ).toEqual([holdsOtherStatement("scripts/ci.ts:3")]);
-    }
-    expect(
-      taggedViolations(
-        sourceViolations(
-          "scripts/shared/ci.ts",
-          `${TASK}\nexport const ci = Task.make("ci", work);\nTask.main(ci);\n`,
-        ),
-      ),
-    ).toEqual([]);
-  }),
-);
-
-export const scriptsMayRunTheirDefaultExport = Task.make(
-  "a script directly in scripts/ may hold only imports and one export default of any expression, such as an imported task, Task.all, Task.allSettled or Task.make, so each other statement is TopLevelScriptHoldsOtherStatement, a default export beside a Task.main call is TopLevelScriptWithMainAndDefaultExport, and a script with neither is TopLevelScriptWithoutMain",
-  Effect.sync(() => {
+export const scriptsMayRunTheirDefaultExport = Task.make({
+  name: "a script directly in scripts/ may hold only imports and one export default of any expression, such as an imported task, Task.all, Task.allSettled or Task.make, so each other statement, a Task.main call included, is TopLevelScriptHoldsOtherStatement, and a script without a default export is TopLevelScriptWithoutDefaultExport",
+  run: Effect.sync(() => {
     const TASK = 'import { Task } from "@sshkeda/task";';
     const CHECK = 'import { check } from "./internal/start-check.ts";';
     const TESTS = 'import { tests } from "../tests/index.ts";';
@@ -696,7 +608,6 @@ export const scriptsMayRunTheirDefaultExport = Task.make(
       `${TASK}\n${CHECK}\n${TESTS}\n\nexport default Task.all([check, tests]);\n`,
       `${TASK}\n${CHECK}\n${TESTS}\n\nexport default Task.allSettled([check, tests]);\n`,
       `${TASK}\n${CHECK}\n\nexport default Task.make({ name: "ci", run: check });\n`,
-      `${TASK}\n${CHECK}\n\nexport default Task.make("ci", check);\n`,
     ]) {
       expect(taggedViolations(sourceViolations("scripts/ci.ts", script))).toEqual([]);
     }
@@ -707,18 +618,15 @@ export const scriptsMayRunTheirDefaultExport = Task.make(
           `${TASK}\n${CHECK}\nconst ci = Task.all([check]);\nexport default ci;\nexport const CI = ci;\n`,
         ),
       ),
-    ).toEqual([
-      holdsOtherThanItsDefaultExport("scripts/ci.ts:3"),
-      holdsOtherThanItsDefaultExport("scripts/ci.ts:5"),
-    ]);
+    ).toEqual([holdsOtherStatement("scripts/ci.ts:3"), holdsOtherStatement("scripts/ci.ts:5")]);
     expect(
       taggedViolations(
         sourceViolations(
           "scripts/ci.ts",
-          guarded(`${TASK}\n${CHECK}\n\nexport default check;`, "Task.main(check)"),
+          `${TASK}\n${CHECK}\n\nexport default check;\n\nif (import.meta.main) {\n  Task.main(check);\n}\n`,
         ),
       ),
-    ).toEqual([mainAndDefaultExport("scripts/ci.ts:4")]);
+    ).toEqual([holdsOtherStatement("scripts/ci.ts:6")]);
     expect(
       taggedViolations(
         sourceViolations(
@@ -726,14 +634,14 @@ export const scriptsMayRunTheirDefaultExport = Task.make(
           `${TASK}\n${CHECK}\nexport default check;\nTask.main(check);\n`,
         ),
       ),
-    ).toEqual([mainAndDefaultExport("scripts/ci.ts:3"), holdsOtherStatement("scripts/ci.ts:4")]);
+    ).toEqual([holdsOtherStatement("scripts/ci.ts:4")]);
     for (const script of [
       `${CHECK}\nexport { check };\n`,
       `export { check } from "./internal/start-check.ts";\n`,
       `export * from "./internal/start-check.ts";\n`,
     ]) {
       expect(taggedViolations(sourceViolations("scripts/ci.ts", script))).toEqual([
-        withoutMain("scripts/ci.ts"),
+        withoutDefaultExport("scripts/ci.ts"),
       ]);
     }
     expect(
@@ -745,7 +653,7 @@ export const scriptsMayRunTheirDefaultExport = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
 const grantsOf = (granted: {
   readonly documents: readonly string[];
@@ -776,9 +684,9 @@ const directoryGrantsOf = (directories: readonly string[]) =>
 const ungrantedDirectory = (directory: string) =>
   `${directory}: error UngrantedDirectory: is a directory outside the default layout that oxlint.config.ts does not allow`;
 
-export const exceptionalDirectoriesNeedExactGrants = Task.make(
-  "extra root directories need exact grants, while hidden and visible nested directories and dotfiles need none",
-  Effect.sync(() => {
+export const exceptionalDirectoriesNeedExactGrants = Task.make({
+  name: "extra root directories need exact grants, while hidden and visible nested directories and dotfiles need none",
+  run: Effect.sync(() => {
     const paths = [
       ".local-packages/check.tgz",
       ".local-packages/provenance.json",
@@ -816,11 +724,11 @@ export const exceptionalDirectoriesNeedExactGrants = Task.make(
       taggedViolations(permissionGrantViolations(paths, directoryGrantsOf(directories))),
     ).toEqual([]);
   }),
-);
+});
 
-export const directoryGrantsDoNotGrantFilePermissions = Task.make(
-  "a directory grant does not allow its documents, file permissions or services, and documents still need exact file grants",
-  Effect.sync(() => {
+export const directoryGrantsDoNotGrantFilePermissions = Task.make({
+  name: "a directory grant does not allow its documents, file permissions or services, and documents still need exact file grants",
+  run: Effect.sync(() => {
     const paths = [".github/PULL_REQUEST_TEMPLATE.md", ".github/actions/run.ts"];
     expect(
       taggedViolations(permissionGrantViolations(paths, directoryGrantsOf([".github"]))),
@@ -851,11 +759,11 @@ export const directoryGrantsDoNotGrantFilePermissions = Task.make(
       ]);
     }
   }),
-);
+});
 
-export const directoryGrantsRequireDirectories = Task.make(
-  "directory grants accept actual directories and refuse files and missing paths",
-  Effect.sync(() => {
+export const directoryGrantsRequireDirectories = Task.make({
+  name: "directory grants accept actual directories and refuse files and missing paths",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -871,11 +779,11 @@ export const directoryGrantsRequireDirectories = Task.make(
       "oxlint.config.ts: error GrantedPathMissing: .missing is listed but is not a repository file or directory",
     ]);
   }),
-);
+});
 
-export const standardDirectoriesNeedNoGrants = Task.make(
-  "src, scripts and docs at the root and ordinary nested directories need no directory grants, while documents still need theirs",
-  Effect.sync(() => {
+export const standardDirectoriesNeedNoGrants = Task.make({
+  name: "src, scripts and docs at the root and ordinary nested directories need no directory grants, while documents still need theirs",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -892,11 +800,11 @@ export const standardDirectoriesNeedNoGrants = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const nestedDirectoryGrantsDoNotGrantTheirParents = Task.make(
-  "granting a nested ordinary directory does not permit an exceptional root, and nested packages still require their root directory's grant",
-  Effect.sync(() => {
+export const nestedDirectoryGrantsDoNotGrantTheirParents = Task.make({
+  name: "granting a nested ordinary directory does not permit an exceptional root, and nested packages still require their root directory's grant",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -917,11 +825,11 @@ export const nestedDirectoryGrantsDoNotGrantTheirParents = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const scriptsNeedNoGrant = Task.make(
-  "scripts directly in scripts/ run tasks by position, and helpers under scripts/shared need no grant either",
-  Effect.sync(() => {
+export const scriptsNeedNoGrant = Task.make({
+  name: "scripts directly in scripts/ run tasks by position, and helpers under scripts/shared need no grant either",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -931,11 +839,11 @@ export const scriptsNeedNoGrant = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const grantsForMissingFilesAreRefused = Task.make(
-  "a file granted permissions that is not a repository file is reported",
-  Effect.sync(() => {
+export const grantsForMissingFilesAreRefused = Task.make({
+  name: "a file granted permissions that is not a repository file is reported",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -949,11 +857,11 @@ export const grantsForMissingFilesAreRefused = Task.make(
       "oxlint.config.ts: error GrantedPathMissing: src/gone.ts is listed but is not a repository file or directory",
     ]);
   }),
-);
+});
 
-export const grantsRepeatingBuiltInRulesAreRedundant = Task.make(
-  "a grant that repeats a built-in rule is RedundantGrant: cannotImport of scripts or anything within it on src or a directory under it, while other cannotImport targets pass",
-  Effect.sync(() => {
+export const grantsRepeatingBuiltInRulesAreRedundant = Task.make({
+  name: "a grant that repeats a built-in rule is RedundantGrant: cannotImport of scripts or anything within it on src or a directory under it, while other cannotImport targets pass",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -974,11 +882,11 @@ export const grantsRepeatingBuiltInRulesAreRedundant = Task.make(
       'oxlint.config.ts: error RedundantGrant: src/web is granted cannotImport: ["scripts/ci.ts"], but files in src/ cannot import scripts/',
     ]);
   }),
-);
+});
 
-export const grantedDocumentsPass = Task.make(
-  "Markdown files granted hasAnUnlistedFileType pass wherever they live, and the root README.md passes without a grant",
-  Effect.sync(() => {
+export const grantedDocumentsPass = Task.make({
+  name: "Markdown files granted hasAnUnlistedFileType pass wherever they live, and the root README.md passes without a grant",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -994,11 +902,11 @@ export const grantedDocumentsPass = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
-export const rootReadmeGrantIsRedundant = Task.make(
-  "a hasAnUnlistedFileType grant on the root README.md is RedundantGrant",
-  Effect.sync(() => {
+export const rootReadmeGrantIsRedundant = Task.make({
+  name: "a hasAnUnlistedFileType grant on the root README.md is RedundantGrant",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -1010,11 +918,11 @@ export const rootReadmeGrantIsRedundant = Task.make(
       "oxlint.config.ts: error RedundantGrant: README.md is granted hasAnUnlistedFileType, but the root README.md needs no grant",
     ]);
   }),
-);
+});
 
-export const ungrantedDocumentsAreRefused = Task.make(
-  "a Markdown file without hasAnUnlistedFileType is reported",
-  Effect.sync(() => {
+export const ungrantedDocumentsAreRefused = Task.make({
+  name: "a Markdown file without hasAnUnlistedFileType is reported",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
@@ -1027,7 +935,7 @@ export const ungrantedDocumentsAreRefused = Task.make(
       "notes.markdown: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
     ]);
   }),
-);
+});
 
 const patchGrantsOf = (paths: readonly string[]) =>
   paths.map((path): Parameters<typeof patchGrantViolations>[1][number] => ({
@@ -1043,9 +951,9 @@ const notGranted = (dependency: string, patchPath: string) =>
 const unlisted = (path: string) =>
   `oxlint.config.ts: error UnlistedPatchGranted: ${path} is granted patchesADependency, but package.json doesn't list it in patchedDependencies`;
 
-export const ungrantedPatchesAreRefused = Task.make(
-  "each dependency in patchedDependencies whose patch file oxlint.config.ts doesn't grant patchesADependency is PatchNotGranted, keyed by name and version or by name alone, and a grant path is matched literally rather than as a glob",
-  Effect.sync(() => {
+export const ungrantedPatchesAreRefused = Task.make({
+  name: "each dependency in patchedDependencies whose patch file oxlint.config.ts doesn't grant patchesADependency is PatchNotGranted, keyed by name and version or by name alone, and a grant path is matched literally rather than as a glob",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         patchGrantViolations(
@@ -1067,11 +975,11 @@ export const ungrantedPatchesAreRefused = Task.make(
       unlisted(".patches/effect@4.0.5.patch*"),
     ]);
   }),
-);
+});
 
-export const grantedPatchesPass = Task.make(
-  "patch files granted patchesADependency pass, a scoped package's %2F file name and a ./ prefix included, and a manifest without patchedDependencies needs no patch grant",
-  Effect.sync(() => {
+export const grantedPatchesPass = Task.make({
+  name: "patch files granted patchesADependency pass, a scoped package's %2F file name and a ./ prefix included, and a manifest without patchedDependencies needs no patch grant",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         patchGrantViolations(
@@ -1100,14 +1008,14 @@ export const grantedPatchesPass = Task.make(
       ),
     ).toEqual([]);
   }),
-);
+});
 
 const checkOrTaskPatched = (dependency: string, patchPath: string) =>
   `package.json: error CheckOrTaskPatched: patches ${dependency} with ${patchPath}; patches to @sshkeda/check or @sshkeda/task are forbidden even when granted`;
 
-export const checkAndTaskPatchesCannotBeGranted = Task.make(
-  "patches to check or task are refused with or without grants, for bare names and any version spec, while similarly named packages keep normal grant behavior",
-  Effect.sync(() => {
+export const checkAndTaskPatchesCannotBeGranted = Task.make({
+  name: "patches to check or task are refused with or without grants, for bare names and any version spec, while similarly named packages keep normal grant behavior",
+  run: Effect.sync(() => {
     const patchPath = ".patches/layout.patch";
     for (const name of ["@sshkeda/check", "@sshkeda/task"]) {
       for (const version of ["", "@0.34.1", "@^0.34.0", "@1.0.0-canary.1", "@*", "@latest"]) {
@@ -1134,11 +1042,11 @@ export const checkAndTaskPatchesCannotBeGranted = Task.make(
       expect(patchGrantViolations(manifest, patchGrantsOf([patchPath]))).toEqual([]);
     }
   }),
-);
+});
 
-export const patchGrantsOnUnlistedFilesAreRefused = Task.make(
-  "a patch grant on a file patchedDependencies doesn't list is UnlistedPatchGranted, with or without patchedDependencies, and a patchedDependencies that isn't an object of paths is PatchedDependenciesMalformed",
-  Effect.sync(() => {
+export const patchGrantsOnUnlistedFilesAreRefused = Task.make({
+  name: "a patch grant on a file patchedDependencies doesn't list is UnlistedPatchGranted, with or without patchedDependencies, and a patchedDependencies that isn't an object of paths is PatchedDependenciesMalformed",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         patchGrantViolations(
@@ -1162,7 +1070,7 @@ export const patchGrantsOnUnlistedFilesAreRefused = Task.make(
       "package.json: error PatchedDependenciesMalformed: has a patchedDependencies field that isn't an object of patch paths: Expected object",
     ]);
   }),
-);
+});
 
 const layoutViolationsIn = (directory: string) =>
   findFileLayoutViolations(directory).pipe(
@@ -1202,9 +1110,9 @@ const repositoryWithConfig = (
     return directory;
   });
 
-export const dependenciesAreJudgedFromTheRealRepositoryRoot = Task.make(
-  "a repository reached through a symlink judges package.json dependencies against its real root, so paths inside it pass and paths beside it are reported",
-  Effect.gen(function* () {
+export const dependenciesAreJudgedFromTheRealRepositoryRoot = Task.make({
+  name: "a repository reached through a symlink judges package.json dependencies against its real root, so paths inside it pass and paths beside it are reported",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* repositoryWithConfig(undefined, {
@@ -1218,11 +1126,11 @@ export const dependenciesAreJudgedFromTheRealRepositoryRoot = Task.make(
       outside("dependencies.sibling", "file:../sibling"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const directoriesOutsideAGitRepositoryFailLoudly = Task.make(
-  "the layout check of a directory outside any git repository fails with RepositoryRootNotFound instead of judging dependencies against a guessed root",
-  Effect.gen(function* () {
+export const directoriesOutsideAGitRepositoryFailLoudly = Task.make({
+  name: "the layout check of a directory outside any git repository fails with RepositoryRootNotFound instead of judging dependencies against a guessed root",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -1230,11 +1138,11 @@ export const directoriesOutsideAGitRepositoryFailLoudly = Task.make(
     const failure = yield* failureAsValue(findFileLayoutViolations(directory));
     expect(failure._tag).toBe("RepositoryRootNotFound");
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const rootGrantsMatchOnlyTheRootFile = Task.make(
-  "a grant for a root file read back from the config covers that file and not a nested file of the same name",
-  Effect.gen(function* () {
+export const rootGrantsMatchOnlyTheRootFile = Task.make({
+  name: "a grant for a root file read back from the config covers that file and not a nested file of the same name",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
       'export default lintConfig({ "notes.md": { allow: ["hasAnUnlistedFileType"] } });',
       {
@@ -1246,11 +1154,11 @@ export const rootGrantsMatchOnlyTheRootFile = Task.make(
       "docs/notes.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const patchesAreCheckedAgainstTheGrantsInTheConfig = Task.make(
-  "the layout check reads patchedDependencies from the root package.json and the patch grants from oxlint.config.ts, and one patchesADependency grant on each patch file or on the directory bun patch writes them to lets bun's own file names, a scoped package's %2F included, pass with no directory grant, while a patch file the manifest doesn't list is still held to kebab-case",
-  Effect.gen(function* () {
+export const patchesAreCheckedAgainstTheGrantsInTheConfig = Task.make({
+  name: "the layout check reads patchedDependencies from the root package.json and the patch grants from oxlint.config.ts, and one patchesADependency grant on each patch file or on the directory bun patch writes them to lets bun's own file names, a scoped package's %2F included, pass with no directory grant, while a patch file the manifest doesn't list is still held to kebab-case",
+  run: Effect.gen(function* () {
     const scopedPatch = "patches/@effect%2Fsql-sqlite-bun@4.1.0.patch";
     const manifest = yield* encodeJson({
       name: "patched",
@@ -1294,11 +1202,11 @@ export const patchesAreCheckedAgainstTheGrantsInTheConfig = Task.make(
     );
     expect(yield* layoutViolationsIn(unlistedDirectory)).toEqual([unlisted("patches")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyBunsOwnPatchFileNamesSkipKebabCase = Task.make(
-  "a listed and granted patch file skips kebab-case only when its name is the one bun patch writes for its patchedDependencies key",
-  Effect.gen(function* () {
+export const onlyBunsOwnPatchFileNamesSkipKebabCase = Task.make({
+  name: "a listed and granted patch file skips kebab-case only when its name is the one bun patch writes for its patchedDependencies key",
+  run: Effect.gen(function* () {
     const grant = 'export default lintConfig({ patches: { allow: ["patchesADependency"] } });';
     for (const [dependency, patchPath] of [
       ["effect@4.1.0", "patches/NOT_A_BUN_FILENAME.patch"],
@@ -1331,11 +1239,11 @@ export const onlyBunsOwnPatchFileNamesSkipKebabCase = Task.make(
       "pkg@github%3Auser%2Frepo#a1b2.patch",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const theLayoutCheckRefusesGrantedCheckAndTaskPatches = Task.make(
-  "the layout check refuses manifest patches to check and task even when oxlint.config.ts grants their shared patch file",
-  Effect.gen(function* () {
+export const theLayoutCheckRefusesGrantedCheckAndTaskPatches = Task.make({
+  name: "the layout check refuses manifest patches to check and task even when oxlint.config.ts grants their shared patch file",
+  run: Effect.gen(function* () {
     const patchPath = ".patches/layout.patch";
     const dependencies = ["@sshkeda/check@0.34.1", "@sshkeda/task"];
     const manifest = yield* encodeJson({
@@ -1352,7 +1260,7 @@ export const theLayoutCheckRefusesGrantedCheckAndTaskPatches = Task.make(
       dependencies.map((dependency) => checkOrTaskPatched(dependency, patchPath)),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const configViolationsIn = (directory: string) =>
   Effect.gen(function* () {
@@ -1365,9 +1273,9 @@ const configViolationsIn = (directory: string) =>
     );
   });
 
-export const configsOtherThanALiteralLintConfigCallAreReportedInsteadOfGrantedFiles = Task.make(
-  "a config that extends, spreads or binds lintConfig() is refused by the config loader while layout blames no granted file, and a missing config is reported",
-  Effect.gen(function* () {
+export const configsOtherThanALiteralLintConfigCallAreReportedInsteadOfGrantedFiles = Task.make({
+  name: "a config that extends, spreads or binds lintConfig() is refused by the config loader while layout blames no granted file, and a missing config is reported",
+  run: Effect.gen(function* () {
     const files = { "scripts/ci.ts": RUNNABLE, "scripts/forged.ts": RUNNABLE };
     const extended = yield* repositoryWithConfig(
       'export default { extends: [lintConfig({ "scripts/ci.ts": { allow: ["writesToTheTerminal"] } })], overrides: [{ files: ["./scripts/forged.ts"], rules: {} }] };',
@@ -1393,11 +1301,11 @@ export const configsOtherThanALiteralLintConfigCallAreReportedInsteadOfGrantedFi
     });
     expect(yield* configViolationsIn(nothingGranted)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const boundaryPathsAreVerifiedOnDisk = Task.make(
-  "directory and file keys and cannotImport targets must exist, and ordinary directories cannot receive file permissions",
-  Effect.gen(function* () {
+export const boundaryPathsAreVerifiedOnDisk = Task.make({
+  name: "directory and file keys and cannotImport targets must exist, and ordinary directories cannot receive file permissions",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
       `export default lintConfig({
   src: { cannotImport: ["src/gone", "lib/gone.ts"] },
@@ -1419,11 +1327,11 @@ export const boundaryPathsAreVerifiedOnDisk = Task.make(
       "oxlint.config.ts: error GrantedPathMissing: src/lib/worker is listed but is not a repository file or directory",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const bunTestNamesAreRefusedEverywhere = Task.make(
-  "*.test.ts and *.spec.ts names are refused everywhere, tests/ included",
-  Effect.sync(() => {
+export const bunTestNamesAreRefusedEverywhere = Task.make({
+  name: "*.test.ts and *.spec.ts names are refused everywhere, tests/ included",
+  run: Effect.sync(() => {
     for (const testPath of [
       "src/cache/cache.test.ts",
       "src/cache/cache.spec.ts",
@@ -1435,11 +1343,11 @@ export const bunTestNamesAreRefusedEverywhere = Task.make(
       ]);
     }
   }),
-);
+});
 
-export const packageScriptsAreBanned = Task.make(
-  "package.json files with a scripts field are reported",
-  Effect.gen(function* () {
+export const packageScriptsAreBanned = Task.make({
+  name: "package.json files with a scripts field are reported",
+  run: Effect.gen(function* () {
     expect(
       taggedViolations(
         yield* manifestViolations("package.json", '{ "name": "a" }', AT_REPOSITORY_ROOT),
@@ -1455,11 +1363,11 @@ export const packageScriptsAreBanned = Task.make(
       ),
     ).toEqual(['packages/a/package.json: error PackageScriptsField: has a "scripts" field']);
   }),
-);
+});
 
-export const dependenciesOutsideTheRepositoryAreReported = Task.make(
-  "file:, link:, bare relative and absolute dependencies that resolve outside the repository are reported in every dependency field and in overrides, while paths inside the repository and workspace: specifiers pass",
-  Effect.gen(function* () {
+export const dependenciesOutsideTheRepositoryAreReported = Task.make({
+  name: "file:, link:, bare relative and absolute dependencies that resolve outside the repository are reported in every dependency field and in overrides, while paths inside the repository and workspace: specifiers pass",
+  run: Effect.gen(function* () {
     const repository = { root: "/repository", packageDirectory: "/repository/packages/app" };
     const manifest = yield* encodeJson({
       dependencies: {
@@ -1473,7 +1381,7 @@ export const dependenciesOutsideTheRepositoryAreReported = Task.make(
       peerDependencies: { peer: "link:../../../peer" },
       optionalDependencies: { bare: "../../../bare", absolute: "/tmp/check.tgz" },
       overrides: {
-        "@sshkeda/task": "file:../../../task-dev",
+        "@sshkeda/task": "file:../../../task",
         nested: { deep: "file:../../../.." },
       },
     });
@@ -1485,15 +1393,15 @@ export const dependenciesOutsideTheRepositoryAreReported = Task.make(
       outside("peerDependencies.peer", "link:../../../peer"),
       outside("optionalDependencies.bare", "../../../bare"),
       outside("optionalDependencies.absolute", "/tmp/check.tgz"),
-      outside("overrides.@sshkeda/task", "file:../../../task-dev"),
+      outside("overrides.@sshkeda/task", "file:../../../task"),
       outside("overrides.nested.deep", "file:../../../.."),
     ]);
   }),
-);
+});
 
-export const rootDependenciesOnSiblingCheckoutsAreReported = Task.make(
-  "a root package.json that depends on a sibling checkout through devDependencies and overrides is reported for each",
-  Effect.gen(function* () {
+export const rootDependenciesOnSiblingCheckoutsAreReported = Task.make({
+  name: "a root package.json that depends on a sibling checkout through devDependencies and overrides is reported for each",
+  run: Effect.gen(function* () {
     const manifest = yield* encodeJson({
       devDependencies: { "@sshkeda/check": "file:../check-dev", inside: "file:./packages/x" },
       overrides: { "@sshkeda/check": "file:../check-dev" },
@@ -1505,11 +1413,11 @@ export const rootDependenciesOnSiblingCheckoutsAreReported = Task.make(
       outside("overrides.@sshkeda/check", "file:../check-dev"),
     ]);
   }),
-);
+});
 
-export const symlinksLeavingTheRepositoryAreOutOfScopeForTheLexicalCheck = Task.make(
-  "dependency paths are judged lexically without following symlinks, so a symlink inside the repository that points outside it passes and is out of scope for this rule",
-  Effect.scoped(
+export const symlinksLeavingTheRepositoryAreOutOfScopeForTheLexicalCheck = Task.make({
+  name: "dependency paths are judged lexically without following symlinks, so a symlink inside the repository that points outside it passes and is out of scope for this rule",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -1525,11 +1433,11 @@ export const symlinksLeavingTheRepositoryAreOutOfScopeForTheLexicalCheck = Task.
       ).toEqual([]);
     }),
   ),
-);
+});
 
-export const subdirectoryManifestPathsResolveFromTheirOwnDirectory = Task.make(
-  "a package.json in a subdirectory resolves its dependency paths from that subdirectory, so ../../../sibling leaves the repository and ../library does not",
-  Effect.gen(function* () {
+export const subdirectoryManifestPathsResolveFromTheirOwnDirectory = Task.make({
+  name: "a package.json in a subdirectory resolves its dependency paths from that subdirectory, so ../../../sibling leaves the repository and ../library does not",
+  run: Effect.gen(function* () {
     const manifest = yield* encodeJson({
       dependencies: { library: "file:../library", sibling: "file:../../../sibling" },
     });
@@ -1541,11 +1449,11 @@ export const subdirectoryManifestPathsResolveFromTheirOwnDirectory = Task.make(
       outside("dependencies.sibling", "file:../../../sibling", "packages/app/package.json"),
     ]);
   }),
-);
+});
 
-export const encodedAndBackslashPathsAreReadAsBunReadsThem = Task.make(
-  "percent-encoded file: paths stay encoded because bun install does not decode them, and backslashes are ordinary characters because paths are posix-only",
-  Effect.gen(function* () {
+export const encodedAndBackslashPathsAreReadAsBunReadsThem = Task.make({
+  name: "percent-encoded file: paths stay encoded because bun install does not decode them, and backslashes are ordinary characters because paths are posix-only",
+  run: Effect.gen(function* () {
     const manifest = yield* encodeJson({
       dependencies: { encoded: "file:%2e%2e/x", backslashed: "file:..\\x" },
     });
@@ -1553,11 +1461,11 @@ export const encodedAndBackslashPathsAreReadAsBunReadsThem = Task.make(
       taggedViolations(yield* manifestViolations("package.json", manifest, AT_REPOSITORY_ROOT)),
     ).toEqual([]);
   }),
-);
+});
 
-export const manifestParseFailuresAreToldApartFromWrongShapes = Task.make(
-  "a package.json that does not parse is reported as such, while valid JSON that is not an object is reported as not holding an object",
-  Effect.gen(function* () {
+export const manifestParseFailuresAreToldApartFromWrongShapes = Task.make({
+  name: "a package.json that does not parse is reported as such, while valid JSON that is not an object is reported as not holding an object",
+  run: Effect.gen(function* () {
     expect(
       taggedViolations(yield* manifestViolations("package.json", "{", AT_REPOSITORY_ROOT)),
     ).toEqual([
@@ -1571,11 +1479,11 @@ export const manifestParseFailuresAreToldApartFromWrongShapes = Task.make(
       ]);
     }
   }),
-);
+});
 
-export const layoutCheckListsGitFiles = Task.make(
-  "the layout check reads tracked and untracked files from git, skips ignored ones and reads permission grants from oxlint.config.ts",
-  Effect.scoped(
+export const layoutCheckListsGitFiles = Task.make({
+  name: "the layout check reads tracked and untracked files from git, skips ignored ones and reads permission grants from oxlint.config.ts",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -1628,7 +1536,7 @@ export const layoutCheckListsGitFiles = Task.make(
       );
       expect(found).toEqual([
         "NOTES.md: error NotKebabCase: NOTES.md is not kebab-case",
-        withoutMain("scripts/setup.ts"),
+        withoutDefaultExport("scripts/setup.ts"),
         "NOTES.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
       ]);
       yield* fileSystem.remove(path.join(directory, "scripts/release.ts"));
@@ -1649,11 +1557,11 @@ export const layoutCheckListsGitFiles = Task.make(
       );
     }),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const ignoredFilesDoNotKeepADirectoryFromHoldingOnlyADirectory = Task.make(
-  "ignored files are not part of the layout, so a directory whose other entries are all ignored still holds only its directory",
-  Effect.gen(function* () {
+export const ignoredFilesDoNotKeepADirectoryFromHoldingOnlyADirectory = Task.make({
+  name: "ignored files are not part of the layout, so a directory whose other entries are all ignored still holds only its directory",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(undefined, {
       ".gitignore": "node_modules\n*.log\n",
       "package.json": '{ "name": "a" }\n',
@@ -1662,11 +1570,11 @@ export const ignoredFilesDoNotKeepADirectoryFromHoldingOnlyADirectory = Task.mak
     });
     expect(yield* layoutViolationsIn(directory)).toEqual([holdsOnly("src", "lib")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aNestedPackageKeepsItsParentFromHoldingOnlyADirectory = Task.make(
-  "a nested package left out of the layout still counts as an entry, so src/shared/fixtures/ holding the package pkg/ and data/ passes",
-  Effect.gen(function* () {
+export const aNestedPackageKeepsItsParentFromHoldingOnlyADirectory = Task.make({
+  name: "a nested package left out of the layout still counts as an entry, so src/shared/fixtures/ holding the package pkg/ and data/ passes",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(undefined, {
       "package.json": '{ "name": "a" }\n',
       "src/index.ts": "export const MAIN = 1;\n",
@@ -1677,11 +1585,11 @@ export const aNestedPackageKeepsItsParentFromHoldingOnlyADirectory = Task.make(
     });
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const toolOwnedDotFilesPass = Task.make(
-  "tool-owned files such as .vscode/settings.json and .claude/settings.json pass only with exact directory grants",
-  Effect.gen(function* () {
+export const toolOwnedDotFilesPass = Task.make({
+  name: "tool-owned files such as .vscode/settings.json and .claude/settings.json pass only with exact directory grants",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
       'export default lintConfig({ ".vscode": { allow: ["isAnUnlistedDirectory"] }, ".claude": { allow: ["isAnUnlistedDirectory"] } });',
       {
@@ -1692,11 +1600,11 @@ export const toolOwnedDotFilesPass = Task.make(
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
-  "directory grants allow exceptional paths and their directory shape but do not exempt their files from naming rules",
-  Effect.gen(function* () {
+export const layoutRequiresGrantsForExceptionalDirectories = Task.make({
+  name: "directory grants allow exceptional paths and their directory shape but do not exempt their files from naming rules",
+  run: Effect.gen(function* () {
     const files = {
       ".github/workflows/CI.yml": "name: ci\n",
       ".claude/settings.json": "{}\n",
@@ -1719,11 +1627,11 @@ export const layoutRequiresGrantsForExceptionalDirectories = Task.make(
     );
     expect(yield* layoutViolationsIn(granted)).toEqual([notKebabCase]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const nestedPackagesDoNotHideDotDirectories = Task.make(
-  "nested packages leave their parent root directories visible and do not require grants for nested directories",
-  Effect.gen(function* () {
+export const nestedPackagesDoNotHideDotDirectories = Task.make({
+  name: "nested packages leave their parent root directories visible and do not require grants for nested directories",
+  run: Effect.gen(function* () {
     for (const parent of [".local-packages", "vendor"]) {
       const files = {
         "src/index.ts": "export const MAIN = 1;\n",
@@ -1742,27 +1650,27 @@ export const nestedPackagesDoNotHideDotDirectories = Task.make(
       expect(yield* layoutViolationsIn(granted)).toEqual([]);
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const PUBLISH_WORKFLOW = {
   ".github/workflows/publish.yml": "name: publish\non: push\njobs: {}\n",
   "src/index.ts": "export const MAIN = 1;\n",
 } as const;
 
-export const aGrantedDirectoryHoldingOnlyADirectoryPasses = Task.make(
-  "a granted .github holding only workflows/publish.yml passes, because the tool that reads it fixes its shape",
-  Effect.gen(function* () {
+export const aGrantedDirectoryHoldingOnlyADirectoryPasses = Task.make({
+  name: "a granted .github holding only workflows/publish.yml passes, because the tool that reads it fixes its shape",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
       'export default lintConfig({ ".github": { allow: ["isAnUnlistedDirectory"] }, ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] } });',
       PUBLISH_WORKFLOW,
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aGrantedDirectoryKeepsItsOwnModuleShape = Task.make(
-  "lib/, internal/ and shared/ inside a granted directory keep the shape their tool gave them, while the same files ungranted are reported",
-  Effect.gen(function* () {
+export const aGrantedDirectoryKeepsItsOwnModuleShape = Task.make({
+  name: "lib/, internal/ and shared/ inside a granted directory keep the shape their tool gave them, while the same files ungranted are reported",
+  run: Effect.gen(function* () {
     const files = {
       "vendor/acme/lib/internal/index.ts": "export const ACME = 1;\n",
       "vendor/acme/lib/internal/parse/read-acme.ts": "export const READ = 1;\n",
@@ -1784,11 +1692,11 @@ export const aGrantedDirectoryKeepsItsOwnModuleShape = Task.make(
     );
     expect(yield* layoutViolationsIn(granted)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anUngrantedDirectoryHoldingOnlyADirectoryStillFails = Task.make(
-  "a directory holding only a directory still fails when it is ungranted, inside the default layout, or a default directory given a directory grant",
-  Effect.gen(function* () {
+export const anUngrantedDirectoryHoldingOnlyADirectoryStillFails = Task.make({
+  name: "a directory holding only a directory still fails when it is ungranted, inside the default layout, or a default directory given a directory grant",
+  run: Effect.gen(function* () {
     const ungranted = yield* repositoryWithConfig(
       'export default lintConfig({ ".github/workflows/publish.yml": { allow: ["hasAnUnlistedFileType"] } });',
       PUBLISH_WORKFLOW,
@@ -1814,11 +1722,11 @@ export const anUngrantedDirectoryHoldingOnlyADirectoryStillFails = Task.make(
     );
     expect(yield* layoutViolationsIn(grantedDefault)).toEqual([holdsOnly("src", "lib")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const ignoredDotDirectoriesStayOutsideTheLayout = Task.make(
-  "ignored dot-directories need no grants, while a dot-directory whose name ends in .md can be granted as a directory",
-  Effect.gen(function* () {
+export const ignoredDotDirectoriesStayOutsideTheLayout = Task.make({
+  name: "ignored dot-directories need no grants, while a dot-directory whose name ends in .md can be granted as a directory",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
       'export default lintConfig({ ".tool.md": { allow: ["isAnUnlistedDirectory"] } });',
       {
@@ -1830,11 +1738,11 @@ export const ignoredDotDirectoriesStayOutsideTheLayout = Task.make(
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const documentsDirectoryHoldsOnlyMarkdown = Task.make(
-  "a non-markdown file in docs is MisplacedAtPackageRoot while directory placement belongs to the grant check",
-  Effect.sync(() => {
+export const documentsDirectoryHoldsOnlyMarkdown = Task.make({
+  name: "a non-markdown file in docs is MisplacedAtPackageRoot while directory placement belongs to the grant check",
+  run: Effect.sync(() => {
     expect(
       taggedViolations(
         packageRootViolations([
@@ -1862,11 +1770,11 @@ export const documentsDirectoryHoldsOnlyMarkdown = Task.make(
       ),
     ).toEqual(["docs/example.ts: error MisplacedAtPackageRoot: is not markdown but sits in docs/"]);
   }),
-);
+});
 
-export const sourceImplementationsBelongInInternalOrShared = Task.make(
-  "source and test surfaces are index.ts or index.tsx, while named implementations belong in internal/ or shared/",
-  Effect.sync(() => {
+export const sourceImplementationsBelongInInternalOrShared = Task.make({
+  name: "source and test surfaces are index.ts or index.tsx, while named implementations belong in internal/ or shared/",
+  run: Effect.sync(() => {
     for (const path of [
       "src/parser.ts",
       "src/parser/parse.ts",
@@ -1900,11 +1808,11 @@ export const sourceImplementationsBelongInInternalOrShared = Task.make(
       expect(taggedViolations(sourceViolations(path, RUNNABLE))).toEqual([]);
     }
   }),
-);
+});
 
-export const sourcePlacementUsesExistingFileScopeAndGrants = Task.make(
-  "source placement keeps assets, generated files, ignored files and nested packages outside its scope",
-  Effect.gen(function* () {
+export const sourcePlacementUsesExistingFileScopeAndGrants = Task.make({
+  name: "source placement keeps assets, generated files, ignored files and nested packages outside its scope",
+  run: Effect.gen(function* () {
     const directory = yield* repositoryWithConfig(
       'export default lintConfig({ "src/generated.ts": { allow: ["isGeneratedByATool"] } });',
       {
@@ -1921,11 +1829,11 @@ export const sourcePlacementUsesExistingFileScopeAndGrants = Task.make(
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([outsideImplementation("src/parser.ts")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const rootCodeBelongsInScriptsOrSource = Task.make(
-  "a root code file other than a named supported tool file is MisplacedAtPackageRoot, stated as a task script when it calls Task.main and as code otherwise",
-  Effect.sync(() => {
+export const rootCodeBelongsInScriptsOrSource = Task.make({
+  name: "a root code file other than a named supported tool file is MisplacedAtPackageRoot, stated as code whether or not it has a default export",
+  run: Effect.sync(() => {
     expect(
       taggedViolations([
         ...sourceViolations("deploy.ts", RUNNABLE),
@@ -1937,7 +1845,7 @@ export const rootCodeBelongsInScriptsOrSource = Task.make(
         ...sourceViolations(".eslintrc.cjs", "module.exports = {};\n"),
       ]),
     ).toEqual([
-      "deploy.ts: error MisplacedAtPackageRoot: is a task script at the package root",
+      "deploy.ts: error MisplacedAtPackageRoot: is code at the package root",
       "route-worker.ts: error MisplacedAtPackageRoot: is code at the package root",
       "vite.config.mts: error MisplacedAtPackageRoot: is code at the package root",
       ".prettierrc.ts: error MisplacedAtPackageRoot: is code at the package root",
@@ -1946,7 +1854,7 @@ export const rootCodeBelongsInScriptsOrSource = Task.make(
       ".eslintrc.cjs: error MisplacedAtPackageRoot: is code at the package root",
     ]);
   }),
-);
+});
 
 const exportViolationsOf = (exports: Schema.Json) =>
   Effect.gen(function* () {
@@ -1959,9 +1867,9 @@ const exportViolationsOf = (exports: Schema.Json) =>
 const mismatch = (field: string, target: string, index: string) =>
   `package.json: error ExportPathMismatch: ${field} points to ${target}, which is not ${index}`;
 
-export const exportsPointingAtTheIndexOfTheDirectoryTheyNamePass = Task.make(
-  "each exports subpath ./X pointing at lib/X/index in its source directory, and ./X/Y at lib/X/lib/Y/index, passes under every condition, as does . pointing at the root index, while non-code targets and null exclusions are not judged",
-  Effect.gen(function* () {
+export const exportsPointingAtTheIndexOfTheDirectoryTheyNamePass = Task.make({
+  name: "each exports subpath ./X pointing at lib/X/index in its source directory, and ./X/Y at lib/X/lib/Y/index, passes under every condition, as does . pointing at the root index, while non-code targets and null exclusions are not judged",
+  run: Effect.gen(function* () {
     const passing = [
       {
         "./dispatcher": "./src/lib/dispatcher/index.ts",
@@ -1990,11 +1898,11 @@ export const exportsPointingAtTheIndexOfTheDirectoryTheyNamePass = Task.make(
       expect(yield* exportViolationsOf(exports)).toEqual([]);
     }
   }),
-);
+});
 
-export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported = Task.make(
-  "an exports target that is not the index of the module in lib/ its subpath names is reported under each condition, including a directory outside lib/, a renamed directory, a non-index file, a nested subpath pointing a level off and a target with no source directory",
-  Effect.gen(function* () {
+export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported = Task.make({
+  name: "an exports target that is not the index of the module in lib/ its subpath names is reported under each condition, including a directory outside lib/, a renamed directory, a non-index file, a nested subpath pointing a level off and a target with no source directory",
+  run: Effect.gen(function* () {
     expect(
       yield* exportViolationsOf({
         ".": "./src/index.ts",
@@ -2071,14 +1979,14 @@ export const exportsPointingAnywhereButTheIndexOfTheDirectoryTheyNameAreReported
       mismatch("exports.default", "./src/cli.ts", "the root index"),
     ]);
   }),
-);
+});
 
 const notTypeScript = (field: string, target: string) =>
   `package.json: error PackageEntryNotTypeScript: ${field} points to ${target}, which is not a TypeScript source file`;
 
-export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make(
-  "a main, module, types, typings or exports target that is JavaScript, a declaration file or a file with no extension is PackageEntryNotTypeScript under every condition, and is not also judged as an export path, while a pattern with no extension, non-code targets and null exclusions pass",
-  Effect.gen(function* () {
+export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make({
+  name: "a main, module, types, typings or exports target that is JavaScript, a declaration file or a file with no extension is PackageEntryNotTypeScript under every condition, and is not also judged as an export path, while a pattern with no extension, non-code targets and null exclusions pass",
+  run: Effect.gen(function* () {
     const manifest = yield* encodeJson({
       name: "a",
       main: "./dist/index.js",
@@ -2116,84 +2024,4 @@ export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make(
       notTypeScript("exports.default", "./dist/cli.js"),
     ]);
   }),
-);
-
-export const taskNamespaceCallsHaveTheSameLayout = Task.make(
-  "named Task imports and aliases run scripts and identify root task scripts",
-  Effect.sync(() => {
-    for (const name of ["Task", "T"]) {
-      const runnable = guarded(
-        `import { Task as ${name} } from "@sshkeda/task";\nimport { build } from "./shared/build.ts";`,
-        `${name}.main(build)`,
-      );
-      expect(taggedViolations(sourceViolations("scripts/build.ts", runnable))).toEqual([]);
-      expect(taggedViolations(sourceViolations("build.ts", runnable))).toEqual([
-        "build.ts: error MisplacedAtPackageRoot: is a task script at the package root",
-      ]);
-    }
-  }),
-);
-
-export const taskBindingsThroughANestedPackageKeepTheirLayout = Task.make(
-  "layout follows task bindings through a nested package's re-exports and rejects an unrelated run binding",
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    for (const packageName of ["task-consumer", "@sshkeda/task"]) {
-      const directory = yield* fileSystem.makeTempDirectoryScoped();
-      yield* linkNodeModulesWithCheck(directory);
-      yield* writtenFiles(directory, {
-        "package.json": `{"name":"${packageName}"}`,
-        ".gitignore": "node_modules\n",
-        "oxlint.config.ts":
-          'import { lintConfig } from "@sshkeda/check"; export default lintConfig({ tools: { allow: ["isAnUnlistedDirectory"] } });',
-        "tools/package.json": '{"name":"task-tools"}',
-        "tools/index.ts": 'export { Task as T, Task as Tasks } from "./internal/task.ts";',
-        "tools/internal/task.ts": 'import { Task } from "@sshkeda/task"; export { Task };',
-        "scripts/ci.ts":
-          'import { T } from "../tools/index.ts";\n\nif (import.meta.main) {\n  T.main(work);\n}\n',
-        "scripts/unrelated.ts": 'import { run } from "../src/index.ts"; run(work);',
-        "src/index.ts": "export const run = (work: unknown) => work; export const make = run;",
-      });
-      yield* Task.exec("git", ["init", "--quiet"], { cwd: directory });
-      const found = yield* findFileLayoutViolations(directory).pipe(
-        Effect.as(new Array<string>()),
-        Effect.catchTag("FileLayoutViolations", (failure) =>
-          Effect.succeed(taggedViolations(failure.violations)),
-        ),
-      );
-      expect(found).toEqual([withoutMain("scripts/unrelated.ts")]);
-    }
-  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
-
-export const taskSelfImportsKeepTheirLayout = Task.make(
-  "task recognizes its public self imports before its declaration output is built, without treating unrelated relative imports as task API",
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    const directory = yield* fileSystem.makeTempDirectoryScoped();
-    yield* linkNodeModulesWithCheck(directory);
-    yield* writtenFiles(directory, {
-      "package.json":
-        '{"name":"@sshkeda/task","type":"module","exports":{"default":"./src/index.ts"}}',
-      ".gitignore": "node_modules\n",
-      "oxlint.config.ts":
-        'import { lintConfig } from "@sshkeda/check"; export default lintConfig({});',
-      "src/index.ts": 'export * as Task from "./lib/task/index.ts";',
-      "src/lib/task/index.ts": 'export { make, main } from "./internal/task.ts";',
-      "src/lib/task/internal/task.ts":
-        "export const make = (name: string, work: unknown) => work; export const main = (work: unknown) => work;",
-      "src/internal/unrelated.ts": "export const main = (work: unknown) => work;",
-      "scripts/ci.ts":
-        'import { Task } from "@sshkeda/task";\n\nif (import.meta.main) {\n  Task.main(work);\n}\n',
-      "scripts/unrelated.ts": 'import { main } from "../src/internal/unrelated.ts"; main(work);',
-    });
-    yield* Task.exec("git", ["init", "--quiet"], { cwd: directory });
-    const found = yield* findFileLayoutViolations(directory).pipe(
-      Effect.as(new Array<string>()),
-      Effect.catchTag("FileLayoutViolations", (failure) =>
-        Effect.succeed(taggedViolations(failure.violations)),
-      ),
-    );
-    expect(found).toEqual([withoutMain("scripts/unrelated.ts")]);
-  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

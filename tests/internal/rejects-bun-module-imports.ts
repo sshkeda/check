@@ -9,9 +9,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const bunNamedImportsCountAsBunMembers = Task.make(
-  "bun named, default and namespace imports count as the Bun members they reach, a literal import() of node:child_process is refused like its static import, and import {} is left to no-import-type-side-effects",
-  ruleTest("no-command-spawn", {
+export const bunNamedImportsCountAsBunMembers = Task.make({
+  name: "bun named, default and namespace imports count as the Bun members they reach, a literal import() of node:child_process is refused like its static import, and import {} is left to no-import-type-side-effects",
+  run: ruleTest("no-command-spawn", {
     valid: [
       'import { Glob } from "bun";',
       'import type { Subprocess } from "bun";',
@@ -38,11 +38,11 @@ export const bunNamedImportsCountAsBunMembers = Task.make(
       ].map((code) => ({ code, errors: [{ messageId: "bannedEvenWhenGranted" }] })),
     ],
   }),
-);
+});
 
-export const runtimeModuleImportsCountForEveryPermissionBan = Task.make(
-  "bun and node:process imports are refused for config, exit and SQL like the global members",
-  ruleTest("no-config-reads", {
+export const runtimeModuleImportsCountForEveryPermissionBan = Task.make({
+  name: "bun and node:process imports are refused for config, exit and SQL like the global members",
+  run: ruleTest("no-config-reads", {
     valid: ['import { cwd } from "node:process";', 'import { Glob } from "bun";'],
     invalid: [
       { code: 'import { env } from "bun";', errors: [{ messageId: "bannedEvenWhenGranted" }] },
@@ -54,11 +54,11 @@ export const runtimeModuleImportsCountForEveryPermissionBan = Task.make(
       ].map((code) => bannedUsage(code)),
     ],
   }),
-);
+});
 
-export const reExportsAreLeftToNoReExports = Task.make(
-  "re-exports of banned modules and names, Node built-ins included, are left to no-re-exports, which reports every re-export, so the site is reported once",
-  Effect.all(
+export const reExportsAreLeftToNoReExports = Task.make({
+  name: "re-exports of banned modules and names, Node built-ins included, are left to no-re-exports, which reports every re-export, so the site is reported once",
+  run: Effect.all(
     [
       ruleTest("no-command-spawn", {
         valid: [
@@ -101,4 +101,4 @@ export const reExportsAreLeftToNoReExports = Task.make(
     ],
     { discard: true },
   ),
-);
+});

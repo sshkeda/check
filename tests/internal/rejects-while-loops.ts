@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const whileLoopsAreBanned = Task.make(
-  "no-while reports while, do...while and every for statement, and leaves for...of, for...in, for await...of and loops inside template strings alone",
-  ruleTest("no-while", {
+export const whileLoopsAreBanned = Task.make({
+  name: "no-while reports while, do...while and every for statement, and leaves for...of, for...in, for await...of and loops inside template strings alone",
+  run: ruleTest("no-while", {
     valid: [
       "for (const item of items) {}",
       "for (const key in record) {}",
@@ -52,4 +52,4 @@ export const whileLoopsAreBanned = Task.make(
       },
     ],
   }),
-);
+});

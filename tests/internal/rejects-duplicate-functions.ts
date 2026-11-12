@@ -19,9 +19,9 @@ const printedViolations = (sources: Readonly<Record<string, string>>) =>
     ({ location, message }) => `${location}: ${message}`,
   );
 
-export const copiedNamedFunctionsAreReportedOncePerGroup = Task.make(
-  "a named function copied exactly into src/, scripts/ or tests/ is reported once, at its first copy, with every other copy named, even when whitespace and comments differ",
-  Effect.sync(() => {
+export const copiedNamedFunctionsAreReportedOncePerGroup = Task.make({
+  name: "a named function copied exactly into src/, scripts/ or tests/ is reported once, at its first copy, with every other copy named, even when whitespace and comments differ",
+  run: Effect.sync(() => {
     expect(
       printedViolations({
         "scripts/build.ts":
@@ -40,11 +40,11 @@ export const copiedNamedFunctionsAreReportedOncePerGroup = Task.make(
       "src/internal/a.ts:3: sinceOf has an exact copy in src/internal/b.ts:1",
     ]);
   }),
-);
+});
 
-export const copiesMatchAcrossScriptTypesAndParentheses = Task.make(
-  "a copy in a JavaScript file matches its TypeScript twin, and a function assigned in parentheses is still a named function",
-  Effect.sync(() => {
+export const copiesMatchAcrossScriptTypesAndParentheses = Task.make({
+  name: "a copy in a JavaScript file matches its TypeScript twin, and a function assigned in parentheses is still a named function",
+  run: Effect.sync(() => {
     expect(
       printedViolations({
         "scripts/a.ts": "export const read = () => 1;\nexport const wrapped = (() => 2);\n",
@@ -56,11 +56,11 @@ export const copiesMatchAcrossScriptTypesAndParentheses = Task.make(
       "scripts/a.ts:2: wrapped has an exact copy in scripts/c.mjs:1",
     ]);
   }),
-);
+});
 
-export const onlyExactNamedCopiesCount = Task.make(
-  "functions with another name, other code, another quote style or another declaration form, inline callbacks, object properties, methods and bodiless declarations are not copies",
-  Effect.sync(() => {
+export const onlyExactNamedCopiesCount = Task.make({
+  name: "functions with another name, other code, another quote style or another declaration form, inline callbacks, object properties, methods and bodiless declarations are not copies",
+  run: Effect.sync(() => {
     expect(
       printedViolations({
         "src/internal/a.ts": [
@@ -88,11 +88,11 @@ export const onlyExactNamedCopiesCount = Task.make(
       }),
     ).toEqual([]);
   }),
-);
+});
 
-export const copiesInsideCopiesAreReportedOnlyAtTheOutermostCopy = Task.make(
-  "a named function inside two copies of an outer function is reported only through the outer copy, unless it also stands as a copy elsewhere",
-  Effect.sync(() => {
+export const copiesInsideCopiesAreReportedOnlyAtTheOutermostCopy = Task.make({
+  name: "a named function inside two copies of an outer function is reported only through the outer copy, unless it also stands as a copy elsewhere",
+  run: Effect.sync(() => {
     const outer =
       "export const walk = (nodes: number[]) => {\n  const visit = (node: number) => node * 2;\n  return nodes.map(visit);\n};\n";
     expect(printedViolations({ "src/internal/a.ts": outer, "src/internal/b.ts": outer })).toEqual([
@@ -109,11 +109,11 @@ export const copiesInsideCopiesAreReportedOnlyAtTheOutermostCopy = Task.make(
       "src/internal/a.ts:2: visit has exact copies in src/internal/b.ts:2 and src/internal/c.ts:1",
     ]);
   }),
-);
+});
 
-export const closuresOverAnEnclosingFunctionAreNotCopies = Task.make(
-  "a named function that reads a parameter or local of a function around it is not a copy, while one that reads only its own bindings, its own name, property names and module-level bindings is",
-  Effect.sync(() => {
+export const closuresOverAnEnclosingFunctionAreNotCopies = Task.make({
+  name: "a named function that reads a parameter or local of a function around it is not a copy, while one that reads only its own bindings, its own name, property names and module-level bindings is",
+  run: Effect.sync(() => {
     const closures = [
       "export const first = (members: string[], owner: string) => {",
       "  const ownedBy = (name: string) => members.includes(name);",
@@ -135,7 +135,7 @@ export const closuresOverAnEnclosingFunctionAreNotCopies = Task.make(
       "tests/internal/a.ts:6: walk has an exact copy in tests/internal/b.ts:6",
     ]);
   }),
-);
+});
 
 const scopesFixture = (outer: string) =>
   [
@@ -170,9 +170,9 @@ const tagsFixture = (outer: string) =>
     "",
   ].join("\n");
 
-export const eachReadIsResolvedInTheScopeWhereItIsWritten = Task.make(
-  "a read is a capture only when its name resolves to a binding of a function around the named function: a shadowing parameter, a hoisted var, the implicit arguments and this, a let in another switch case, a local enum and a JSX component tag count, while type names, a class expression's own name, a function's own this, enum member and accessor names and intrinsic JSX tags do not",
-  Effect.sync(() => {
+export const eachReadIsResolvedInTheScopeWhereItIsWritten = Task.make({
+  name: "a read is a capture only when its name resolves to a binding of a function around the named function: a shadowing parameter, a hoisted var, the implicit arguments and this, a let in another switch case, a local enum and a JSX component tag count, while type names, a class expression's own name, a function's own this, enum member and accessor names and intrinsic JSX tags do not",
+  run: Effect.sync(() => {
     expect(
       printedViolations({
         "tests/internal/a.ts": scopesFixture("outerA"),
@@ -191,11 +191,11 @@ export const eachReadIsResolvedInTheScopeWhereItIsWritten = Task.make(
       "tests/internal/c.tsx:4: custom has an exact copy in tests/internal/d.tsx:4",
     ]);
   }),
-);
+});
 
-export const theCheckReadsEveryOwnedScriptOfThePackage = Task.make(
-  "the duplicate-function check reads the package's tracked and untracked scripts, skips ignored and generated files, leaves a nested package's files to that package and names the other copies from where Check runs",
-  Effect.gen(function* () {
+export const theCheckReadsEveryOwnedScriptOfThePackage = Task.make({
+  name: "the duplicate-function check reads the package's tracked and untracked scripts, skips ignored and generated files, leaves a nested package's files to that package and names the other copies from where Check runs",
+  run: Effect.gen(function* () {
     const copied = "export const sinceOf = (day: number) => day - 1;\n";
     const { directory } = yield* makeProject(
       {
@@ -223,4 +223,4 @@ export const theCheckReadsEveryOwnedScriptOfThePackage = Task.make(
       "scripts/b.ts:1: error DuplicateFunction: sinceOf has an exact copy in packages/lib/src/internal/a.ts:1",
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

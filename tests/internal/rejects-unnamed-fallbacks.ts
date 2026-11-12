@@ -12,9 +12,9 @@ const fallback = (member: string) => ({
   message: `${member} is given a fallback for failures it does not name`,
 });
 
-export const namedRecoveriesTakeNoFallback = Task.make(
-  "no-unnamed-fallbacks refuses the fallback argument of catchTag, catchTags, catchReason and catchReasons in Effect, Stream and Channel, data-first and data-last, spread or ambiguous, and leaves the named handlers alone, written inline or held in a local constant",
-  ruleTest("no-unnamed-fallbacks", {
+export const namedRecoveriesTakeNoFallback = Task.make({
+  name: "no-unnamed-fallbacks refuses the fallback argument of catchTag, catchTags, catchReason and catchReasons in Effect, Stream and Channel, data-first and data-last, spread or ambiguous, and leaves the named handlers alone, written inline or held in a local constant",
+  run: ruleTest("no-unnamed-fallbacks", {
     valid: [
       'import { Effect } from "effect"; work.pipe(Effect.catchTag("Missing", () => Effect.void));',
       'import { Effect } from "effect"; Effect.catchTag(work, "Missing", () => Effect.void);',
@@ -103,4 +103,4 @@ export const namedRecoveriesTakeNoFallback = Task.make(
       },
     ],
   }),
-);
+});

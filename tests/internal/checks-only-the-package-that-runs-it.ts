@@ -130,9 +130,9 @@ const workspaceWithNestedPackages = (extraFiles: Readonly<Record<string, string>
     return { root, taskStateDirectory: yield* fileSystem.makeTempDirectoryScoped() };
   });
 
-export const rootPackageChecksEachNestedPackageFromItsOwnRoot = Task.make(
-  "the check command run on the workspace root checks each nested package, at any depth, as its own package: its files are judged from its own root with its own config files, and each report names the file from the root",
-  Effect.gen(function* () {
+export const rootPackageChecksEachNestedPackageFromItsOwnRoot = Task.make({
+  name: "the check command run on the workspace root checks each nested package, at any depth, as its own package: its files are judged from its own root with its own config files, and each report names the file from the root",
+  run: Effect.gen(function* () {
     const printed = yield* runCheck(yield* workspaceWithNestedPackages(), ".");
     expect(printed).not.toContain("left out nested packages");
     expect(printed).toContain(
@@ -147,11 +147,11 @@ export const rootPackageChecksEachNestedPackageFromItsOwnRoot = Task.make(
     expect(printed).not.toContain("packages/app/src/");
     expect(printed).not.toContain(" src/index.ts");
   }).pipe(Effect.scoped),
-);
+});
 
-export const nestedPackageNeedsItsOwnConfigFiles = Task.make(
-  "the check command run on the workspace root reports each config file a nested package lacks at that package's root, instead of leaving the package unchecked",
-  Effect.gen(function* () {
+export const nestedPackageNeedsItsOwnConfigFiles = Task.make({
+  name: "the check command run on the workspace root reports each config file a nested package lacks at that package's root, instead of leaving the package unchecked",
+  run: Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "packages/bare/package.json": '{ "name": "bare", "type": "module" }\n',
@@ -167,11 +167,11 @@ export const nestedPackageNeedsItsOwnConfigFiles = Task.make(
       expect(printed).toContain(missing);
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make(
-  "the check command run on the workspace root names a tsconfig that a nested package references outside itself by its path from the root",
-  Effect.gen(function* () {
+export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make({
+  name: "the check command run on the workspace root names a tsconfig that a nested package references outside itself by its path from the root",
+  run: Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "packages/app/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/**/*.ts"], references: [{ path: "../library" }] })}\n`,
@@ -184,11 +184,11 @@ export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make(
     );
     expect(printed).not.toContain("packages/app/packages/library");
   }).pipe(Effect.scoped),
-);
+});
 
-export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make(
-  "the check command run on the workspace root names a tsconfig that a nested package references inside itself by its path from the root, even when that path repeats the package's directory",
-  Effect.gen(function* () {
+export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make({
+  name: "the check command run on the workspace root names a tsconfig that a nested package references inside itself by its path from the root, even when that path repeats the package's directory",
+  run: Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "packages/library/tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/**/*.ts"], references: [{ path: "./packages/library" }] })}\n`,
@@ -204,11 +204,11 @@ export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make(
       "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const projectCheckedByTwoPackagesIsReportedOnce = Task.make(
-  "the check command run on the workspace root reports a tsconfig problem once when the root references a nested package that is also checked on its own",
-  Effect.gen(function* () {
+export const projectCheckedByTwoPackagesIsReportedOnce = Task.make({
+  name: "the check command run on the workspace root reports a tsconfig problem once when the root references a nested package that is also checked on its own",
+  run: Effect.gen(function* () {
     const printed = yield* runCheck(
       yield* workspaceWithNestedPackages({
         "tsconfig.json": `${yield* encodeIndentedJson({ compilerOptions: PACKAGE_COMPILER_OPTIONS, include: ["src/index.ts"], references: [{ path: "./packages/library" }] })}\n`,
@@ -226,11 +226,11 @@ export const projectCheckedByTwoPackagesIsReportedOnce = Task.make(
         ),
     ).toHaveLength(1);
   }).pipe(Effect.scoped),
-);
+});
 
-export const packageCheckReportsPathsFromItsDirectory = Task.make(
-  "the check command started in a workspace package's directory reports paths from that package and reruns when a declaration file of an imported sibling package changes",
-  Effect.gen(function* () {
+export const packageCheckReportsPathsFromItsDirectory = Task.make({
+  name: "the check command started in a workspace package's directory reports paths from that package and reruns when a declaration file of an imported sibling package changes",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const workspace = yield* workspaceWithTwoPackages;
@@ -243,11 +243,11 @@ export const packageCheckReportsPathsFromItsDirectory = Task.make(
     expect(printed).toContain("[type-check] src/index.ts:3:31: error TS2551");
     expect(printed).not.toContain("lowercaseConstant");
   }).pipe(Effect.scoped),
-);
+});
 
-export const passesWithTrackedFilesMissingFromTheWorkingTree = Task.make(
-  "a tracked symbolic link whose target is gone and a file that sparse checkout leaves out of the working tree are not listed, so every task passes",
-  Effect.gen(function* () {
+export const passesWithTrackedFilesMissingFromTheWorkingTree = Task.make({
+  name: "a tracked symbolic link whose target is gone and a file that sparse checkout leaves out of the working tree are not listed, so every task passes",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -278,11 +278,11 @@ export const passesWithTrackedFilesMissingFromTheWorkingTree = Task.make(
     expect(printed).not.toContain(" error ");
     expect(printed).toContain("passed: ");
   }).pipe(Effect.scoped),
-);
+});
 
-export const packageFilesStopAtNestedPackages = Task.make(
-  "the listed and compiled files of a package leave out directories whose package.json names a package, but not directories whose package.json only marks a module type",
-  Effect.gen(function* () {
+export const packageFilesStopAtNestedPackages = Task.make({
+  name: "the listed and compiled files of a package leave out directories whose package.json names a package, but not directories whose package.json only marks a module type",
+  run: Effect.gen(function* () {
     const { directory, tsconfigFile } = yield* makeProject({
       "package.json": '{ "name": "outer" }\n',
       "main.ts":
@@ -312,11 +312,11 @@ export const packageFilesStopAtNestedPackages = Task.make(
       "oxlint.config.ts",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const packageFilesReadNestedManifestsLikeTheOtherChecks = Task.make(
-  'the listed files of a package read a directory named package.json as no package.json, a nested package.json with no name as no package, and one that starts with a UTF-8 byte order mark as Node and oxc read it, while one whose name is no string, such as { "name": 5 }, one that is no JSON and one that cannot be read fail the listing with PackageManifestUnreadable naming it and why on one line, in the same words as the import-boundary check and no-re-exports',
-  Effect.gen(function* () {
+export const packageFilesReadNestedManifestsLikeTheOtherChecks = Task.make({
+  name: 'the listed files of a package read a directory named package.json as no package.json, a nested package.json with no name as no package, and one that starts with a UTF-8 byte order mark as Node and oxc read it, while one whose name is no string, such as { "name": 5 }, one that is no JSON and one that cannot be read fail the listing with PackageManifestUnreadable naming it and why on one line, in the same words as the import-boundary check and no-re-exports',
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const listingOf = (files: Readonly<Record<string, string>>) =>
@@ -387,11 +387,11 @@ export const packageFilesReadNestedManifestsLikeTheOtherChecks = Task.make(
       ]);
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const resolvesToolBinariesFromTheCheckedPackage = Task.make(
-  "tool binaries resolve from the checked package, a string bin names the package's own binary, and a missing bin or package is a named failure",
-  Effect.gen(function* () {
+export const resolvesToolBinariesFromTheCheckedPackage = Task.make({
+  name: "tool binaries resolve from the checked package, a string bin names the package's own binary, and a missing bin or package is a named failure",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -424,4 +424,4 @@ export const resolvesToolBinariesFromTheCheckedPackage = Task.make(
     );
     expect(notInstalled.message).toStartWith(`missing-tool does not resolve from ${directory}: `);
   }).pipe(Effect.scoped),
-);
+});

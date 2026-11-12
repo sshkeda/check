@@ -81,20 +81,20 @@ const spansInTheTraceOfACheckWith = (imports: number) =>
     return trace.split('"spanId":').length;
   });
 
-export const tracesNoSpanPerImport = Task.make(
-  "a check run's trace holds about as many spans when a file imports a module 1,000 times as when it imports it once",
-  Effect.scoped(
+export const tracesNoSpanPerImport = Task.make({
+  name: "a check run's trace holds about as many spans when a file imports a module 1,000 times as when it imports it once",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const spansWithOneImport = yield* spansInTheTraceOfACheckWith(1);
       const spansWithManyImports = yield* spansInTheTraceOfACheckWith(IMPORTS_OF_ONE_MODULE);
       expect(spansWithManyImports - spansWithOneImport).toBeLessThan(MOST_SPANS_THE_IMPORTS_ADD);
     }),
   ),
-);
+});
 
-export const ignoredProjectConfigsAreRead = Task.make(
-  "every source check can read valid gitignored root and referenced tsconfig files",
-  Effect.gen(function* () {
+export const ignoredProjectConfigsAreRead = Task.make({
+  name: "every source check can read valid gitignored root and referenced tsconfig files",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -143,11 +143,11 @@ export const ignoredProjectConfigsAreRead = Task.make(
       expect(output).toContain(`[${name}] passed`);
     }
   }).pipe(Effect.scoped),
-);
+});
 
-export const rerunsChecksAfterSourceChanges = Task.make(
-  "exported check tasks run in a consumer, and every run checks the source again",
-  Effect.scoped(
+export const rerunsChecksAfterSourceChanges = Task.make({
+  name: "check runs in a consumer, and every run checks the source again",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -164,11 +164,11 @@ export const rerunsChecksAfterSourceChanges = Task.make(
       expect(failure.message).toContain("not assignable");
     }),
   ),
-);
+});
 
-export const rerunsChecksWhenAnIgnoredImportGoesMissing = Task.make(
-  "removing a gitignored file that source imports makes the next check report ImportOfMissingIgnoredFile",
-  Effect.scoped(
+export const rerunsChecksWhenAnIgnoredImportGoesMissing = Task.make({
+  name: "removing a gitignored file that source imports makes the next check report ImportOfMissingIgnoredFile",
+  run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -200,7 +200,7 @@ export const rerunsChecksWhenAnIgnoredImportGoesMissing = Task.make(
       );
     }),
   ),
-);
+});
 
 const checkWithAConditionedFactory = (factory: {
   readonly inactiveTarget: string;
@@ -255,9 +255,9 @@ const ORPHAN_TEST =
 const factoryUsedOnlyByTheEntry = (name: string) =>
   `[checker-queries] src/internal/factory.ts:1: error export-placement UnusedExport: export ${name} is used only by unreached code, such as src/internal/entry.ts`;
 
-export const aConditionalImportIsNeverATaskImport = Task.make(
-  "a default export that calls make on a binding from a conditional #import is not a task default export, so export placement still reports an orphan test and the unused default export when the inactive condition points at a package whose manifest does not decode, and when it points at @sshkeda/task",
-  Effect.gen(function* () {
+export const aConditionalImportIsNeverATaskImport = Task.make({
+  name: "a default export that calls make on a binding from a conditional #import is not a task default export, so export placement still reports an orphan test and the unused default export when the inactive condition points at a package whose manifest does not decode, and when it points at @sshkeda/task",
+  run: Effect.gen(function* () {
     const unresolvableWhenInactive = yield* checkWithAConditionedFactory({
       inactiveTarget: "bad",
       name: "Factory",
@@ -273,11 +273,11 @@ export const aConditionalImportIsNeverATaskImport = Task.make(
     expect(taskWhenInactive).toContain(UNUSED_ENTRY);
     expect(taskWhenInactive).toContain(factoryUsedOnlyByTheEntry("Task"));
   }),
-);
+});
 
-export const theLayoutCheckFollowsOnlyMakeAndMainCalls = Task.make(
-  "a script directly in scripts/ whose default export calls Task.make with Factory.all() from a conditional #import passes the layout check, which does not follow Factory into the package its inactive condition names, whose package.json does not decode",
-  Effect.gen(function* () {
+export const theLayoutCheckReadsNoImports = Task.make({
+  name: "a script directly in scripts/ whose default export calls Task.make with Factory.all() from a conditional #import passes the layout check, which reads no import, even one whose inactive condition names a package whose package.json does not decode",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const directory = yield* fileSystem.makeTempDirectoryScoped();
@@ -308,7 +308,7 @@ export const theLayoutCheckFollowsOnlyMakeAndMainCalls = Task.make(
       "scripts/internal/factory.ts":
         'import { Effect } from "effect";\n\nexport const Factory = { all: () => Effect.void };\n',
       "scripts/ci.ts":
-        'import { Task } from "@sshkeda/task";\nimport { Factory } from "#factory";\n\nexport default Task.make("ci", Factory.all());\n',
+        'import { Task } from "@sshkeda/task";\nimport { Factory } from "#factory";\n\nexport default Task.make({ name: "ci", run: Factory.all() });\n',
     });
     yield* Task.exec("bun", ["fmt", "."], { cwd: directory });
     const output = yield* runCheckIn(directory, taskStateDirectory).pipe(
@@ -317,4 +317,4 @@ export const theLayoutCheckFollowsOnlyMakeAndMainCalls = Task.make(
     expect(output).not.toContain("ModuleRequestUnresolvable");
     expect(output).toContain("[layout] passed");
   }).pipe(Effect.scoped),
-);
+});

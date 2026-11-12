@@ -19,9 +19,9 @@ const withEffect = (code: string) => `${EFFECT_IMPORT}\n${TAGGED_ERRORS}\n${code
 
 const plainError = (name: string) => ({ messageId: "plainError", data: { name } });
 
-export const refusesGlobalErrorInFailureTypes = Task.make(
-  "no-plain-error-failures rejects Effect, Stream and Layer types that fail with the global Error, and accepts tagged errors and never",
-  ruleTest("no-plain-error-failures", {
+export const refusesGlobalErrorInFailureTypes = Task.make({
+  name: "no-plain-error-failures rejects Effect, Stream and Layer types that fail with the global Error, and accepts tagged errors and never",
+  run: ruleTest("no-plain-error-failures", {
     valid: [
       withEffect("export const read = (): Effect.Effect<string, Missing> => Effect.succeed('');"),
       withEffect(
@@ -135,4 +135,4 @@ export const refusesGlobalErrorInFailureTypes = Task.make(
       },
     ],
   }),
-);
+});

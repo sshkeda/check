@@ -58,9 +58,9 @@ const violationsIn = (sources: Readonly<Record<string, string>>) =>
     );
   });
 
-export const moduleUrlsAreWrittenInline = Task.make(
-  'production code may use import.meta.url only as the base of new URL("literal", import.meta.url), and may not build module paths from import.meta.dir or import.meta.dirname, while tests and test helpers may do anything',
-  Effect.gen(function* () {
+export const moduleUrlsAreWrittenInline = Task.make({
+  name: 'production code may use import.meta.url only as the base of new URL("literal", import.meta.url), and may not build module paths from import.meta.dir or import.meta.dirname, while tests and test helpers may do anything',
+  run: Effect.gen(function* () {
     expect(
       yield* violationsIn({
         "src/misuses.ts": MISUSES,
@@ -86,4 +86,4 @@ export const moduleUrlsAreWrittenInline = Task.make(
     );
     expect(yield* violationsIn({ "src/inline.ts": INLINE_USES })).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

@@ -32,9 +32,9 @@ const violationsOf = (sources: Readonly<Record<string, string>>) =>
     );
   }).pipe(Effect.scoped);
 
-export const separateLayers = Task.make(
-  "separate layer values, factories and private helpers are allowed",
-  Effect.gen(function* () {
+export const separateLayers = Task.make({
+  name: "separate layer values, factories and private helpers are allowed",
+  run: Effect.gen(function* () {
     expect(
       yield* violationsOf({
         "live.ts": `${IMPORTS}${STORE}export const StoreLive = ${IMPLEMENTATION};`,
@@ -52,11 +52,11 @@ export const separateLayers = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const staticLayers = Task.make(
-  "static layer fields, getters, methods and external assignments are refused by type",
-  Effect.gen(function* () {
+export const staticLayers = Task.make({
+  name: "static layer fields, getters, methods and external assignments are refused by type",
+  run: Effect.gen(function* () {
     const cases = [
       "static layer = Layer.succeed(Store, {});",
       "static implementation = Layer.succeed(Store, {});",
@@ -89,11 +89,11 @@ export const staticLayers = Task.make(
     expect(observed.every(({ tag }) => tag === "ServiceLayerNotSeparate")).toBe(true);
     expect(observed.every(({ service }) => service === "Store")).toBe(true);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const unrestrictedNames = Task.make(
-  "module layer names and visibility are unrestricted",
-  Effect.gen(function* () {
+export const unrestrictedNames = Task.make({
+  name: "module layer names and visibility are unrestricted",
+  run: Effect.gen(function* () {
     const cases = [
       `const layer = ${IMPLEMENTATION};`,
       `export const layer = ${IMPLEMENTATION};`,
@@ -113,11 +113,11 @@ export const unrestrictedNames = Task.make(
     );
     expect(observed).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const logicalAssignments = Task.make(
-  "logical assignments to imported service keys are refused without relying on their field declarations",
-  Effect.gen(function* () {
+export const logicalAssignments = Task.make({
+  name: "logical assignments to imported service keys are refused without relying on their field declarations",
+  run: Effect.gen(function* () {
     const operators = ["=", "??=", "||=", "&&="];
     const assignments = Object.fromEntries(
       operators.map((operator, index) => [
@@ -143,4 +143,4 @@ export const logicalAssignments = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

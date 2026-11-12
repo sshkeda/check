@@ -1,6 +1,6 @@
 {
   "name": "@sshkeda/check",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "homepage": "https://github.com/sshkeda/check#readme",
   "bugs": {
     "url": "https://github.com/sshkeda/check/issues"
@@ -30,7 +30,7 @@
     "@effect/platform-bun": "4.1.0",
     "@effect/tsgo": "0.67.4",
     "@oxlint/plugins": "1.88.0",
-    "@sshkeda/task": "1.0.2",
+    "@sshkeda/task": "2.0.0",
     "oxc-parser": "0.153.0",
     "oxc-resolver": "11.24.2",
     "oxlint": "1.88.0",

@@ -10,9 +10,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
 
 const unnamed = (usage: string) => ({ message: `${usage} handles failures it does not name` });
 
-export const unnamedRecoveriesNeedAGrant = Task.make(
-  "no-unnamed-recovery refuses every operation that turns a failure it does not name into a success, a boolean or a value, in Effect, Stream, Channel, Layer, Sink, Fiber and Pull, whatever the handler returns and however it is imported, wrapped or aliased, and leaves recovery by name, mapping, tapping, observing and other modules alone",
-  ruleTest("no-unnamed-recovery", {
+export const unnamedRecoveriesNeedAGrant = Task.make({
+  name: "no-unnamed-recovery refuses every operation that turns a failure it does not name into a success, a boolean or a value, in Effect, Stream, Channel, Layer, Sink, Fiber and Pull, whatever the handler returns and however it is imported, wrapped or aliased, and leaves recovery by name, mapping, tapping, observing and other modules alone",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Effect } from "effect"; work.pipe(Effect.catchTag("NotFound", () => Effect.succeed(null)));',
       'import { Effect } from "effect"; work.pipe(Effect.catchTags({ NotFound: () => Effect.void }));',
@@ -126,11 +126,11 @@ export const unnamedRecoveriesNeedAGrant = Task.make(
       },
     ],
   }),
-);
+});
 
-export const unnamedRecoveriesInStreamsChannelsLayersAndSinks = Task.make(
-  "no-unnamed-recovery refuses catch-alls and predicate recoveries in Stream, Channel, Layer and Sink, imported directly, by namespace or spread into a call",
-  ruleTest("no-unnamed-recovery", {
+export const unnamedRecoveriesInStreamsChannelsLayersAndSinks = Task.make({
+  name: "no-unnamed-recovery refuses catch-alls and predicate recoveries in Stream, Channel, Layer and Sink, imported directly, by namespace or spread into a call",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Stream } from "effect"; work.pipe(Stream.catchTags({ NotFound: () => Stream.empty }));',
     ],
@@ -200,11 +200,11 @@ export const unnamedRecoveriesInStreamsChannelsLayersAndSinks = Task.make(
       },
     ],
   }),
-);
+});
 
-export const failuresAsResultsNeedAGrant = Task.make(
-  "no-failures-as-results refuses Effect.all collecting failures as results and Effect.all given options it can't read, and leaves the default mode, other options and other modules alone",
-  ruleTest("no-failures-as-results", {
+export const failuresAsResultsNeedAGrant = Task.make({
+  name: "no-failures-as-results refuses Effect.all collecting failures as results and Effect.all given options it can't read, and leaves the default mode, other options and other modules alone",
+  run: ruleTest("no-failures-as-results", {
     valid: [
       'import { Effect } from "effect"; Effect.all(works);',
       'import { Effect } from "effect"; Effect.all(works, { concurrency: "unbounded", discard: true });',
@@ -236,11 +236,11 @@ export const failuresAsResultsNeedAGrant = Task.make(
       },
     ],
   }),
-);
+});
 
-export const failureBearingValuesNeedAGrant = Task.make(
-  "no-unnamed-recovery refuses every operation that turns a failure into an outcome value, however that value is used afterwards, and leaves the first-to-finish races and the Result helpers alone, since only a refused operation can turn a failure into a Result",
-  ruleTest("no-unnamed-recovery", {
+export const failureBearingValuesNeedAGrant = Task.make({
+  name: "no-unnamed-recovery refuses every operation that turns a failure into an outcome value, however that value is used afterwards, and leaves the first-to-finish races and the Result helpers alone, since only a refused operation can turn a failure into a Result",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Effect } from "effect"; export const raced = Effect.raceFirst(Effect.fail("failure"), Effect.void);',
       'import { Effect } from "effect"; export const raced = Effect.raceAllFirst([Effect.fail("failure"), Effect.void]);',
@@ -301,11 +301,11 @@ export const failureBearingValuesNeedAGrant = Task.make(
       },
     ],
   }),
-);
+});
 
-export const timeoutsPassWithoutAGrant = Task.make(
-  "no-unnamed-recovery leaves timeouts alone, since they handle only the deadline and keep every failure",
-  ruleTest("no-unnamed-recovery", {
+export const timeoutsPassWithoutAGrant = Task.make({
+  name: "no-unnamed-recovery leaves timeouts alone, since they handle only the deadline and keep every failure",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Effect } from "effect"; export const bounded = (work) => work.pipe(Effect.timeout("1 second"));',
       'import { Effect } from "effect"; export const bounded = (work) => work.pipe(Effect.timeoutOption("1 second"));',
@@ -315,11 +315,11 @@ export const timeoutsPassWithoutAGrant = Task.make(
     ],
     invalid: [],
   }),
-);
+});
 
-export const failuresStoredOrObservedNeedAGrant = Task.make(
-  "no-unnamed-recovery refuses every operation that runs work and stores or hands over its outcome, so a failure ends up in a Deferred, a Queue, a PubSub, an observer or a polled Exit instead of failing the caller, including a fiber's or runtime's outcome members read through any receiver or destructured",
-  ruleTest("no-unnamed-recovery", {
+export const failuresStoredOrObservedNeedAGrant = Task.make({
+  name: "no-unnamed-recovery refuses every operation that runs work and stores or hands over its outcome, so a failure ends up in a Deferred, a Queue, a PubSub, an observer or a polled Exit instead of failing the caller, including a fiber's or runtime's outcome members read through any receiver or destructured",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Deferred, Effect } from "effect"; export const settled = (deferred) => Effect.flatMap(Deferred.await(deferred), Effect.succeed);',
       'import { Deferred } from "effect"; export const finished = (deferred) => Deferred.succeed(deferred, 1);',
@@ -388,11 +388,11 @@ export const failuresStoredOrObservedNeedAGrant = Task.make(
       },
     ],
   }),
-);
+});
 
-export const failuresLeavingTheCallerNeedAGrant = Task.make(
-  "no-unnamed-recovery refuses forking work, whose failure no longer fails the caller, and every runner that hands a failure to JavaScript as a rejection, a throw or an observed fiber, including a runtime's runner members and the fiber collections' runners, and leaves observers of work that still fails its caller alone",
-  ruleTest("no-unnamed-recovery", {
+export const failuresLeavingTheCallerNeedAGrant = Task.make({
+  name: "no-unnamed-recovery refuses forking work, whose failure no longer fails the caller, and every runner that hands a failure to JavaScript as a rejection, a throw or an observed fiber, including a runtime's runner members and the fiber collections' runners, and leaves observers of work that still fails its caller alone",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Deferred, Effect } from "effect"; export const signalled = (done, work) => work.pipe(Effect.onExit((exit) => Deferred.succeed(done, exit)));',
       'import { Deferred, Effect } from "effect"; export const signalled = (done, work) => work.pipe(Effect.tapCause(() => Deferred.succeed(done, "fallback")));',
@@ -457,11 +457,11 @@ export const failuresLeavingTheCallerNeedAGrant = Task.make(
       },
     ],
   }),
-);
+});
 
-export const workRunApartFromItsCallerNeedsAGrant = Task.make(
-  "no-unnamed-recovery refuses every operation that runs work apart from its caller, so the work's failure reaches the caller only if nothing ends the run first: stream and channel callbacks, pools that acquire in the background, conversions of a stream into a JavaScript iterable or readable stream, and main runners, however a runner is imported or reached, and leaves observers of work that still fails its caller alone",
-  ruleTest("no-unnamed-recovery", {
+export const workRunApartFromItsCallerNeedsAGrant = Task.make({
+  name: "no-unnamed-recovery refuses every operation that runs work apart from its caller, so the work's failure reaches the caller only if nothing ends the run first: stream and channel callbacks, pools that acquire in the background, conversions of a stream into a JavaScript iterable or readable stream, and main runners, however a runner is imported or reached, and leaves observers of work that still fails its caller alone",
+  run: ruleTest("no-unnamed-recovery", {
     valid: [
       'import { Effect } from "effect"; export const observed = (report) => Effect.fail("failure").pipe(Effect.onExit(report), Effect.tapCause(report), Effect.tapError(report), Effect.ensuring(Effect.void));',
       'import { Layer } from "effect"; export const launched = (layer) => Layer.launch(layer);',
@@ -518,4 +518,4 @@ export const workRunApartFromItsCallerNeedsAGrant = Task.make(
       },
     ],
   }),
-);
+});

@@ -242,7 +242,7 @@ export const noFixedFallbacks = defineRule({
     type: "problem",
     messages: {
       fixed:
-        "{{operation}} answers {{failure}} with the fixed value {{value}} and never reads the failure. Name the reason you expect, or fail",
+        "{{operation}} answers {{failure}} with the fixed value {{value}} and never reads the failure",
       unusedGrant: unusedGrantMessage(FIXED_FALLBACKS),
     },
     schema: ruleOptionsJsonSchema(FIXED_FALLBACK_OPTIONS),

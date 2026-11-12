@@ -31,9 +31,9 @@ const lintOutput = (source: string) =>
     );
   }).pipe(Effect.scoped);
 
-export const requireFormsAreRefused = Task.make(
-  "import = require, require() and import.meta.require cannot reach banned modules",
-  Effect.gen(function* () {
+export const requireFormsAreRefused = Task.make({
+  name: "import = require, require() and import.meta.require cannot reach banned modules",
+  run: Effect.gen(function* () {
     const output = yield* lintOutput(`import childProcess = require("node:child_process");
 const fileSystem = require("node:fs");
 export const loaded = [childProcess, fileSystem, import.meta.require("bun")];
@@ -44,11 +44,11 @@ export const loaded = [childProcess, fileSystem, import.meta.require("bun")];
       "main.ts:3:50: error sshkeda(no-dynamic-import): import.meta.require loads code in a way no file may",
     );
   }),
-);
+});
 
-export const importMetaRequireNeedsDynamicImports = Task.make(
-  "import.meta.require is refused in every file, even one granted importsDynamically",
-  ruleTest("no-dynamic-import", {
+export const importMetaRequireNeedsDynamicImports = Task.make({
+  name: "import.meta.require is refused in every file, even one granted importsDynamically",
+  run: ruleTest("no-dynamic-import", {
     valid: ["import.meta.url;", "import.meta.resolve;"],
     invalid: ['import.meta.require("node:fs");', 'import.meta["require"]("bun");'].flatMap(
       (code) => [
@@ -61,11 +61,11 @@ export const importMetaRequireNeedsDynamicImports = Task.make(
       ],
     ),
   }),
-);
+});
 
-export const selfIsRefusedLikeGlobalThis = Task.make(
-  "self is refused like globalThis, so self.Bun and self.process reach nothing, and a shorthand { self } is reported once",
-  Effect.gen(function* () {
+export const selfIsRefusedLikeGlobalThis = Task.make({
+  name: "self is refused like globalThis, so self.Bun and self.process reach nothing, and a shorthand { self } is reported once",
+  run: Effect.gen(function* () {
     const output = yield* lintOutput(`export const spawned = () => self.Bun.spawn(["git"]);
 export const home = self.process.env.HOME;
 export const shorthand = { self };
@@ -74,4 +74,4 @@ export const shorthand = { self };
     expect(output).toContain("main.ts:2:21: error sshkeda(no-global-object): global self is used");
     expect(output.match(/main\.ts:3:\d+: error sshkeda\(no-global-object\)/gu)?.length).toBe(1);
   }),
-);
+});

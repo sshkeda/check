@@ -81,20 +81,20 @@ const PICKED_RULES = {
 
 const UNPICKED_RULES = ["unicorn/prefer-native-coercion-functions"] as const;
 
-export const lintConfigTurnsOnThePickedRules = Task.make(
-  "lintConfig turns on each picked rule at error with its options, and leaves off prefer-native-coercion-functions, which would demand .map(Number) where no-namespace-aliases refuses it",
-  Effect.sync(() => {
+export const lintConfigTurnsOnThePickedRules = Task.make({
+  name: "lintConfig turns on each picked rule at error with its options, and leaves off prefer-native-coercion-functions, which would demand .map(Number) where no-namespace-aliases refuses it",
+  run: Effect.sync(() => {
     const { rules } = lintConfig({});
     expect(
       Object.fromEntries(Object.keys(PICKED_RULES).map((rule) => [rule, rules[rule]])),
     ).toEqual(PICKED_RULES);
     expect(UNPICKED_RULES.filter((rule) => rule in rules)).toEqual([]);
   }),
-);
+});
 
-export const ruleOptionsRejectInvalidValues = Task.make(
-  "rule options decode valid values and reject invalid and excess properties",
-  Effect.sync(() => {
+export const ruleOptionsRejectInvalidValues = Task.make({
+  name: "rule options decode valid values and reject invalid and excess properties",
+  run: Effect.sync(() => {
     const options = Schema.Struct({ name: Schema.String });
     expect(decodeRuleOptions(options, [])).toBeUndefined();
     expect(decodeRuleOptions(options, [{ name: "value" }])).toEqual({ name: "value" });
@@ -103,7 +103,7 @@ export const ruleOptionsRejectInvalidValues = Task.make(
       Schema.SchemaError,
     );
   }),
-);
+});
 
 const OPTION_RULE_TAGS = [
   "eslint(class-methods-use-this)",
@@ -116,9 +116,9 @@ const OPTION_RULE_TAGS = [
   "typescript(no-invalid-void-type)",
 ] as const;
 
-export const pickedOptionsDecideWhatIsReported = Task.make(
-  "class-methods-use-this skips override methods, no-duplicate-imports allows a separate import type, consistent-type-specifier-style wants import type, no-use-before-define reports a use inside a function that runs later, no-void allows void as a statement only, no-empty-function allows an empty private constructor only, no-magic-numbers allows a number that indexes a type, and no-invalid-void-type stays off",
-  Effect.gen(function* () {
+export const pickedOptionsDecideWhatIsReported = Task.make({
+  name: "class-methods-use-this skips override methods, no-duplicate-imports allows a separate import type, consistent-type-specifier-style wants import type, no-use-before-define reports a use inside a function that runs later, no-void allows void as a statement only, no-empty-function allows an empty private constructor only, no-magic-numbers allows a number that indexes a type, and no-invalid-void-type stays off",
+  run: Effect.gen(function* () {
     const cases = [
       [
         'export class Greeter {\n  public greet() {\n    return "hi";\n  }\n}',
@@ -173,4 +173,4 @@ export const pickedOptionsDecideWhatIsReported = Task.make(
       })),
     ).toEqual(cases.map(([code, tags]) => ({ code, tags: [...tags] })));
   }),
-);
+});

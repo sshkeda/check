@@ -19,34 +19,32 @@ const SHARED_WITH_TESTS = {
     'import { Task } from "@sshkeda/task";',
     'import { Effect } from "effect";',
     'import { VALUE } from "../../scripts/shared/value.ts";',
-    'export const test = Task.make("test", Effect.succeed(VALUE));',
+    'export const test = Task.make({ name: "test", run: Effect.log(VALUE) });',
     "",
   ].join("\n"),
 };
 
-export const refusesScriptHelpersOutsideTheModuleLayout = Task.make(
-  "a scripts helper module outside lib/ is reported with its destination, and shared helpers used by only the scripts root or one child module are reported",
-  Effect.gen(function* () {
+export const refusesScriptHelpersOutsideTheModuleLayout = Task.make({
+  name: "a scripts helper module outside lib/ is reported with its destination, and shared helpers used by only the scripts root or one child module are reported",
+  run: Effect.gen(function* () {
     const { directory, tsconfigFile } = yield* makeProject(
       REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
       {
         ...SHARED_WITH_TESTS,
         "scripts/build.ts": [
-          'import { Task } from "@sshkeda/task";',
           'import { build } from "./platform/index.ts";',
-          "if (import.meta.main) { Task.main(build); }",
+          "export default build;",
           "",
         ].join("\n"),
         "scripts/ci.ts": [
-          'import { Task } from "@sshkeda/task";',
           'import { ci } from "./shared/run-tests.ts";',
-          "if (import.meta.main) { Task.main(ci); }",
+          "export default ci;",
           "",
         ].join("\n"),
         "scripts/shared/run-tests.ts": [
           'import { Task } from "@sshkeda/task";',
           'import { test } from "../../tests/index.ts";',
-          'export const ci = Task.make("ci", test);',
+          'export const ci = Task.make({ name: "ci", run: test });',
           "",
         ].join("\n"),
         "scripts/platform/index.ts": 'export { build } from "./internal/build.ts";\n',
@@ -55,7 +53,7 @@ export const refusesScriptHelpersOutsideTheModuleLayout = Task.make(
           'import { Effect } from "effect";',
           'import { VALUE } from "../../shared/value.ts";',
           'import { ONLY } from "../../shared/only.ts";',
-          'export const build = Task.make("build", Effect.succeed([VALUE, ONLY]));',
+          'export const build = Task.make({ name: "build", run: Effect.log(VALUE, ONLY) });',
           "",
         ].join("\n"),
         "scripts/shared/only.ts": "export const ONLY = 2;\n",
@@ -84,31 +82,29 @@ export const refusesScriptHelpersOutsideTheModuleLayout = Task.make(
       "scripts/shared/run-tests.ts: error SharedFileWithOneUser: is in scripts/shared/, but no submodule of scripts/ uses it outside tests and unreached code",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const acceptsScriptHelpersInTheModuleLayout = Task.make(
-  "runnable scripts, internal helpers, child modules in lib/ and helpers shared with tests pass without a scripts/index.ts",
-  Effect.gen(function* () {
+export const acceptsScriptHelpersInTheModuleLayout = Task.make({
+  name: "runnable scripts, internal helpers, child modules in lib/ and helpers shared with tests pass without a scripts/index.ts",
+  run: Effect.gen(function* () {
     const { directory, tsconfigFile } = yield* makeProject(
       REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
       {
         ...SHARED_WITH_TESTS,
         "scripts/build.ts": [
-          'import { Task } from "@sshkeda/task";',
           'import { build } from "./lib/platform/index.ts";',
-          "if (import.meta.main) { Task.main(build); }",
+          "export default build;",
           "",
         ].join("\n"),
         "scripts/ci.ts": [
-          'import { Task } from "@sshkeda/task";',
           'import { ci } from "./internal/run-tests.ts";',
-          "if (import.meta.main) { Task.main(ci); }",
+          "export default ci;",
           "",
         ].join("\n"),
         "scripts/internal/run-tests.ts": [
           'import { Task } from "@sshkeda/task";',
           'import { test } from "../../tests/index.ts";',
-          'export const ci = Task.make("ci", test);',
+          'export const ci = Task.make({ name: "ci", run: test });',
           "",
         ].join("\n"),
         "scripts/lib/platform/index.ts": 'export { build } from "./internal/build.ts";\n',
@@ -117,7 +113,7 @@ export const acceptsScriptHelpersInTheModuleLayout = Task.make(
           'import { Effect } from "effect";',
           'import { VALUE } from "../../../shared/value.ts";',
           'import { ONLY } from "./only.ts";',
-          'export const build = Task.make("build", Effect.succeed([VALUE, ONLY]));',
+          'export const build = Task.make({ name: "build", run: Effect.log(VALUE, ONLY) });',
           "",
         ].join("\n"),
         "scripts/lib/platform/internal/only.ts": "export const ONLY = 2;\n",
@@ -126,4 +122,4 @@ export const acceptsScriptHelpersInTheModuleLayout = Task.make(
     yield* findFileLayoutViolations(directory);
     yield* findExportPlacementViolations(tsconfigFile, openTypeScriptProjects(tsconfigFile));
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

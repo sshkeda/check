@@ -55,9 +55,9 @@ const violations = (sources: Readonly<Record<string, string>>) =>
     );
   }).pipe(Effect.scoped);
 
-export const importedServices = Task.make(
-  "imported services yielded twice through renamed and namespace imports are reported",
-  Effect.gen(function* () {
+export const importedServices = Task.make({
+  name: "imported services yielded twice through renamed and namespace imports are reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "imported.ts": `import { Effect } from "effect";
@@ -75,11 +75,11 @@ export const program = Effect.gen(function* () {
       "imported.ts:7:18: error RepeatedServiceYield: service WorkerPool was already yielded at 5:17",
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const builtInServices = Task.make(
-  "built-in services yielded twice are reported",
-  Effect.gen(function* () {
+export const builtInServices = Task.make({
+  name: "built-in services yielded twice are reported",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "built-in.ts": `import { Effect, FileSystem, Path } from "effect";
@@ -96,11 +96,11 @@ export const program = Effect.gen(function* () {
       "built-in.ts:6:17: error RepeatedServiceYield: service FileSystem was already yielded at 4:22",
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const separateScopes = Task.make(
-  "services in nested generators and repeated non-service yieldables pass",
-  Effect.gen(function* () {
+export const separateScopes = Task.make({
+  name: "services in nested generators and repeated non-service yieldables pass",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "nested.ts": `import { Effect } from "effect";
@@ -119,11 +119,11 @@ export const program = Effect.gen(function* () {
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const cleanProject = Task.make(
-  "clean projects pass the typed service yield check",
-  Effect.gen(function* () {
+export const cleanProject = Task.make({
+  name: "clean projects pass the typed service yield check",
+  run: Effect.gen(function* () {
     expect(
       yield* violations({
         "clean.ts": `import { Effect } from "effect";
@@ -137,4 +137,4 @@ export const program = Effect.gen(function* () {
       }),
     ).toEqual([]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

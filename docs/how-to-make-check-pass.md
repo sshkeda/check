@@ -6,40 +6,12 @@ Check may not catch every violation of these principles. Review your code agains
 
 ## Meet the requirement behind the error
 
-- Use a grant only for an unavoidable exception.
+- Use a grant only for an unavoidable exception. [How to Grant a Permission](how-to-grant-a-permission.md) lists each grant and what it allows.
 - Move the code that needs a grant into its own small file and grant that file. A grant covers the whole file, so Check stops reporting that ban for everything else in it.
 - Design for the current requirement as if you were starting fresh. Delete code the new design doesn't need.
 - Handle a forked effect's failure before the fork, or keep the fiber and join it.
+- Return a fixed value only for the one failure you expect, such as a file that isn't there. Let every other failure fail.
 - Grant `isGeneratedByATool` only to a file a tool generates.
-
-## Grant a permission
-
-Grant a permission to one file or directory in `oxlint.config.ts`. The key is the path from the folder that holds `oxlint.config.ts`, with no glob. Each name in `allow` lifts one ban for that path only.
-
-```ts
-export default lintConfig({
-  "src/config.ts": { allow: ["readsConfig"] },
-  "src/internal/run-all-checks.ts": { allow: ["handlesEveryFailure"] },
-});
-```
-
-- `readsConfig`: Allows Effect `Config`, `process.env` and `process.argv`.
-- `spawnsCommands`: Allows Effect `ChildProcess`, `Bun.spawn` and `spawn` from `node:child_process`.
-- `locksFiles`: Allows `open` from `node:fs/promises` and `constants` from `node:fs`.
-- `importsDynamically`: Allows `import()` and `createRequire(…).resolve`.
-- `exitsTheProcess`: Allows `process.exit`.
-- `usesSqlDatabases`: Allows Effect SQL.
-- `writesToTheTerminal`: Allows Effect `Stdio`.
-- `usesAbbreviations`: Allows abbreviations in variable, function, type and other declared names.
-- `pollsWithADeadline`: Allows `Effect.repeat` and `Effect.retry` with `Schedule.spaced` or `Schedule.exponential`, under a deadline. `Schedule.exponential` may be wrapped in or piped through `Schedule.jittered`.
-- `waitsOnTimers`: Allows `Effect.sleep`, `Effect.delay`, `Clock.sleep` and the Stream operations that wait on a timer, such as `Stream.tick`.
-- `hasAnUnlistedFileType`: Allows a file type Check doesn't list, such as Markdown.
-- `isAnUnlistedDirectory`: Allows a directory Check doesn't list, such as `.github`. Check doesn't apply its directory-shape rules inside it, but files there still need their own `hasAnUnlistedFileType` grant.
-- `patchesADependency`: Allows a patch file from `bun patch`.
-- `trustsUnverifiedTypes`: Allows trusting a value's type without checking it, through `Schema.declare`.
-- `handlesEveryFailure`: Allows catching every error, through `Effect.catch`, `Effect.exit`, a forked fiber or `Effect.runPromise`.
-- `fallsBackToFixedValues`: Allows answering every failure, or a whole library error such as `PlatformError`, with a fixed value that never reads the failure.
-- `isGeneratedByATool`: Check skips this path, so it can't have any other permission.
 
 ## Make the code explain itself
 
@@ -54,7 +26,8 @@ export default lintConfig({
 ## Make program output clear
 
 - Follow Git and uv's style. Say what failed, name the affected file or value and explain the cause.
-- Give the reader enough context to choose a fix. In a CLI people run by hand, add a hint only for a known command they can paste and run.
+- Give the reader enough context to choose a fix.
+- Put a fix in the message only when it is concrete and takes no thought, such as a command to paste and run or the exact code to write. Leave out any fix that needs a decision.
 - Report each cause once. Put the main failure first, supporting details below it and internal debugging details in the trace.
 - Preserve useful messages from underlying tools, including error codes and exact names.
 - Write short, full sentences. Use periods instead of semicolons between sentences.

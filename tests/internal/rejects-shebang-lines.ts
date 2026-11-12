@@ -23,8 +23,8 @@ const LAUNCHER = `${SHEBANG}import { Effect } from "effect";\n\nif (import.meta.
 const shebangOutsideBin = (path: string) =>
   `${path}:1: error ShebangOutsideBin: starts with a shebang line, but package.json does not list it under bin`;
 
-const WITHOUT_MAIN =
-  "error TopLevelScriptWithoutMain: sits directly in scripts/ and neither calls Task.main imported from @sshkeda/task nor has a default export";
+const WITHOUT_DEFAULT_EXPORT =
+  "error TopLevelScriptWithoutDefaultExport: sits directly in scripts/ and has no default export";
 
 const writtenRepository = (files: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
@@ -48,9 +48,9 @@ const NOT_SHEBANGS = {
   "src/internal/private-field.ts": "export const PRIVATE_FIELD = class { #value = 1; };\n",
 } as const;
 
-export const onlyTheFilesPackageJsonListsUnderBinMayStartWithAShebang = Task.make(
-  "a shebang line is reported in each given file except those package.json lists under bin, wherever they live, and not in a file merely named like one, while hash text that is not a shebang is left alone",
-  Effect.gen(function* () {
+export const onlyTheFilesPackageJsonListsUnderBinMayStartWithAShebang = Task.make({
+  name: "a shebang line is reported in each given file except those package.json lists under bin, wherever they live, and not in a file merely named like one, while hash text that is not a shebang is left alone",
+  run: Effect.gen(function* () {
     const files = {
       ".gitignore": "node_modules\n",
       "package.json": yield* encodeJson({
@@ -80,11 +80,11 @@ export const onlyTheFilesPackageJsonListsUnderBinMayStartWithAShebang = Task.mak
       ),
     );
   }).pipe(Effect.scoped),
-);
+});
 
-export const aBinTargetInScriptsNeedNotBeATaskScript = Task.make(
-  "the layout check holds a file directly in scripts/ to the Task script shape unless package.json lists it under bin",
-  Effect.gen(function* () {
+export const aBinTargetInScriptsNeedNotBeATaskScript = Task.make({
+  name: "the layout check holds a file directly in scripts/ to the Task script shape unless package.json lists it under bin",
+  run: Effect.gen(function* () {
     const directory = yield* writtenRepository({
       ".gitignore": "node_modules\n",
       "package.json": yield* encodeJson({ name: "tool", bin: { tool: "./scripts/tool.ts" } }),
@@ -97,13 +97,13 @@ export const aBinTargetInScriptsNeedNotBeATaskScript = Task.make(
         Effect.succeed(taggedViolations(failure.violations)),
       ),
     );
-    expect(found).toEqual([`scripts/check.ts: ${WITHOUT_MAIN}`]);
+    expect(found).toEqual([`scripts/check.ts: ${WITHOUT_DEFAULT_EXPORT}`]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aShebangInAnIgnoredImportedFileIsReported = Task.make(
-  "a shebang in a gitignored source file that compiled code imports is reported, as in every file the lint sees",
-  Effect.gen(function* () {
+export const aShebangInAnIgnoredImportedFileIsReported = Task.make({
+  name: "a shebang in a gitignored source file that compiled code imports is reported, as in every file the lint sees",
+  run: Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* makeProject({
       ".gitignore": "node_modules\nsrc/internal/value.ts\n",
       "src/index.ts":
@@ -120,4 +120,4 @@ export const aShebangInAnIgnoredImportedFileIsReported = Task.make(
         .filter((line) => line.includes("src/internal/value.ts") && line.includes("shebang")),
     ).toEqual([`[oxlint] ${shebangOutsideBin("src/internal/value.ts")}`]);
   }).pipe(Effect.scoped),
-);
+});

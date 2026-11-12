@@ -8,7 +8,6 @@ import {
   PERMISSION_BANS,
   READS_CONFIG,
   RULES_EACH_PERMISSION_LIFTS,
-  SCRIPT,
   SHORT_NAMES,
   TRUSTS_UNVERIFIED_TYPES,
   UNUSED_GRANT_REPORTED,
@@ -62,7 +61,7 @@ export const PERMISSION_NAMES = [
 
 const RETIRED_PERMISSIONS = new Map([
   ["errors", "error classes may be declared in any file"],
-  [SCRIPT, `files directly in ${SCRIPTS_DIRECTORY}/ run tasks`],
+  ["script", `files directly in ${SCRIPTS_DIRECTORY}/ run tasks`],
 ]);
 
 export const isMarkdown = (path: string) =>
@@ -363,7 +362,6 @@ export const rulesACodeGrantChanges = (
 const SCRIPTS_OVERRIDE = {
   files: [`./${SCRIPTS_DIRECTORY}/*`],
   rules: {
-    [permissionBanRuleId(SCRIPT)]: "off",
     "sshkeda/no-re-exports": ["error", { defaultExportOfAnImport: "allowed" }],
   },
 } as const;

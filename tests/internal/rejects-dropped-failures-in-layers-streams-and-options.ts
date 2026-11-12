@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const droppedFailuresOutsideEffect = Task.make(
-  "no-dropped-failures reports dying in Layer, Stream and Channel and reading an Option or Result by throwing, and leaves recoveries, type-only imports and other modules to other rules",
-  ruleTest("no-dropped-failures", {
+export const droppedFailuresOutsideEffect = Task.make({
+  name: "no-dropped-failures reports dying in Layer, Stream and Channel and reading an Option or Result by throwing, and leaves recoveries, type-only imports and other modules to other rules",
+  run: ruleTest("no-dropped-failures", {
     valid: [
       'import { Layer } from "effect"; const live = Layer.succeed(Service, value);',
       'import { Stream } from "effect"; work.pipe(Stream.catchTag("NotFound", () => Stream.empty));',
@@ -73,4 +73,4 @@ export const droppedFailuresOutsideEffect = Task.make(
       },
     ],
   }),
-);
+});

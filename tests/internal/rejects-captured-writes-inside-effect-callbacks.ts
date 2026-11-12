@@ -14,9 +14,9 @@ const captured = (name: string, operation: string) => ({
   message: `${name} is written inside a function passed to ${operation}, which can run it concurrently or later; hold that state in a Ref`,
 });
 
-export const capturedWritesAreRefs = Task.make(
-  "no-shared-holders reports a const object literal written inside a function passed to an Effect, Stream or Layer operation when the literal is declared outside that function, and leaves writes in plain functions, literals declared inside the callback, parameters, other values, globals and look-alike modules alone",
-  ruleTest("no-shared-holders", {
+export const capturedWritesAreRefs = Task.make({
+  name: "no-shared-holders reports a const object literal written inside a function passed to an Effect, Stream or Layer operation when the literal is declared outside that function, and leaves writes in plain functions, literals declared inside the callback, parameters, other values, globals and look-alike modules alone",
+  run: ruleTest("no-shared-holders", {
     valid: [
       "const build = () => { const total = { count: 0 }; [1, 2].map((item) => { total.count += item; }); return total; };",
       `${IMPORTS}export const made = Effect.sync(() => { const total = { count: 0 }; total.count += 1; return total; });`,
@@ -88,4 +88,4 @@ export const capturedWritesAreRefs = Task.make(
       },
     ],
   }),
-);
+});

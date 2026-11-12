@@ -12,20 +12,20 @@ import { makeProject as makeProjectWith } from "../shared/checked-project.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
-export const testsUseThePackageRoot = Task.make(
-  "test modules live at the package root and nested modules keep their test role",
-  Effect.sync(() => {
+export const testsUseThePackageRoot = Task.make({
+  name: "test modules live at the package root and nested modules keep their test role",
+  run: Effect.sync(() => {
     expect(packageRootViolations(["tests/case.ts"])).toEqual([]);
     expect(isTestEntryFile("tests/case.ts")).toBe(true);
     expect(isTestEntryFile("tests/nested/case.ts")).toBe(true);
     expect(isTestEntryFile("tests/case.d.ts")).toBe(false);
     expect(isTestEntryFile("scripts/tests/case.ts")).toBe(false);
   }),
-);
+});
 
-export const importsTestsOnlyFromScripts = Task.make(
-  "only scripts and tests can import test modules, in every supported literal form",
-  Effect.gen(function* () {
+export const importsTestsOnlyFromScripts = Task.make({
+  name: "only scripts and tests can import test modules, in every supported literal form",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       ".gitignore": "node_modules\n",
       "tests/case.ts": 'import { Effect } from "effect"; export const test = Effect.void;',
@@ -74,4 +74,4 @@ export const importsTestsOnlyFromScripts = Task.make(
       "tools/dynamic.ts:1: tests/case.ts",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

@@ -8,9 +8,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
 });
 
-export const everyVariableIsConst = Task.make(
-  "no-let reports every let, for...of and for...in headers included, leaves the let that starts a for statement to no-while, and names the bindings it declares without their types",
-  ruleTest("no-let", {
+export const everyVariableIsConst = Task.make({
+  name: "no-let reports every let, for...of and for...in headers included, leaves the let that starts a for statement to no-while, and names the bindings it declares without their types",
+  run: ruleTest("no-let", {
     valid: [
       "const total = 1;",
       "for (const item of items) {}",
@@ -41,11 +41,11 @@ export const everyVariableIsConst = Task.make(
       },
     ],
   }),
-);
+});
 
-export const mutableRefIsBanned = Task.make(
-  "no-mutable-ref reports MutableRef from effect however it is imported, and leaves Ref, types and local names alone",
-  ruleTest("no-mutable-ref", {
+export const mutableRefIsBanned = Task.make({
+  name: "no-mutable-ref reports MutableRef from effect however it is imported, and leaves Ref, types and local names alone",
+  run: ruleTest("no-mutable-ref", {
     valid: [
       'import { Ref } from "effect"; const counter = Ref.make(0);',
       'import type { MutableRef } from "effect"; type Counter = MutableRef.MutableRef<number>;',
@@ -66,4 +66,4 @@ export const mutableRefIsBanned = Task.make(
       },
     ],
   }),
-);
+});

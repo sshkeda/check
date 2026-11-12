@@ -12,9 +12,9 @@ const joinedWith = (operator: string, testKind: "if" | "ternary" = "if") => ({
   message: `${testKind} condition joins checks with ${operator} without a name`,
 });
 
-export const compoundConditionsNeedANamedConst = Task.make(
-  "no-unnamed-compound-conditions reports an if or ternary condition that joins checks with && or ||, negated, nested or in an else if, and leaves named conditions, single checks, calls, loops and ternary branches alone",
-  ruleTest("no-unnamed-compound-conditions", {
+export const compoundConditionsNeedANamedConst = Task.make({
+  name: "no-unnamed-compound-conditions reports an if or ternary condition that joins checks with && or ||, negated, nested or in an else if, and leaves named conditions, single checks, calls, loops and ternary branches alone",
+  run: ruleTest("no-unnamed-compound-conditions", {
     valid: [
       "const hasFullLocation = line !== undefined && column !== undefined; if (hasFullLocation) {}",
       "if (ready) {}",
@@ -73,4 +73,4 @@ export const compoundConditionsNeedANamedConst = Task.make(
       },
     ],
   }),
-);
+});

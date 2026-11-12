@@ -66,9 +66,9 @@ const reportsAtLine = (reports: readonly string[], file: string, line: number) =
 const reportsTagged = (reports: readonly string[], tags: readonly string[]) =>
   reports.filter((report) => tags.some((tag) => report.includes(` ${tag}`))).toSorted();
 
-export const forStatementStartingWithLetIsNoWhileAlone = Task.make(
-  "no-let skips the let that starts a for statement, so that for statement is no-while alone",
-  Effect.gen(function* () {
+export const forStatementStartingWithLetIsNoWhileAlone = Task.make({
+  name: "no-let skips the let that starts a for statement, so that for statement is no-while alone",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({
       "main.ts": [
         "export const first = (items: ReadonlyArray<number>) => {",
@@ -84,7 +84,7 @@ export const forStatementStartingWithLetIsNoWhileAlone = Task.make(
       "main.ts:2:3: for loops on a condition or counter that outside state must change [Error/sshkeda(no-while)]",
     ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const MISSING_FILE_IMPORT =
   "ImportResolvesToNoFile: imports ./missing.ts, which resolves to no file";
@@ -96,9 +96,9 @@ const requireCall = (file: string, line: number, column: number) =>
 const missingFileImport = (file: string, line: number) =>
   `${file}:${line}: error ${MISSING_FILE_IMPORT}`;
 
-export const requireOfAMissingFileIsReportedOnce = Task.make(
-  "require() of a missing file is reported once: the global require and import = require as typescript/no-require-imports alone, also in a .js file outside the TypeScript project, and a createRequire function, also one named require, as ImportResolvesToNoFile alone",
-  Effect.gen(function* () {
+export const requireOfAMissingFileIsReportedOnce = Task.make({
+  name: "require() of a missing file is reported once: the global require and import = require as typescript/no-require-imports alone, also in a .js file outside the TypeScript project, and a createRequire function, also one named require, as ImportResolvesToNoFile alone",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({
       "src/global.ts": 'require("./missing.ts");\n',
       "src/import-equals.ts":
@@ -136,14 +136,14 @@ export const requireOfAMissingFileIsReportedOnce = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const TEST_IMPORT_TAGS = ["CannotImportCrossed", "TestImported"] as const;
 const SAMPLE_TEST = { "tests/sample.ts": "export const SAMPLE = 1;\n" } as const;
 
-export const sourceImportingATestIsReportedOnce = Task.make(
-  "src importing a test in any form is reported once as TestImported",
-  Effect.gen(function* () {
+export const sourceImportingATestIsReportedOnce = Task.make({
+  name: "src importing a test in any form is reported once as TestImported",
+  run: Effect.gen(function* () {
     const sources = {
       "src/static.ts":
         'import { SAMPLE } from "../tests/sample.ts";\nexport const USED = SAMPLE;\n',
@@ -163,11 +163,11 @@ export const sourceImportingATestIsReportedOnce = Task.make(
         .toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const testImportCrossingAUserBanIsAlsoTestImported = Task.make(
-  "a test import crossing an explicit user ban reports both the user ban and the test boundary",
-  Effect.gen(function* () {
+export const testImportCrossingAUserBanIsAlsoTestImported = Task.make({
+  name: "a test import crossing an explicit user ban reports both the user ban and the test boundary",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf(
       {
         "lib2/user-ban.ts":
@@ -183,7 +183,7 @@ export const testImportCrossingAUserBanIsAlsoTestImported = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const NAME_TAGS = [
   "NotKebabCase",
@@ -192,9 +192,9 @@ const NAME_TAGS = [
   "MisplacedAtPackageRoot",
 ] as const;
 
-export const nonScriptPlacementIsReportedOnce = Task.make(
-  "a non-script directly in scripts/ has one placement error, while an uppercase extension has a separate naming error",
-  Effect.gen(function* () {
+export const nonScriptPlacementIsReportedOnce = Task.make({
+  name: "a non-script directly in scripts/ has one placement error, while an uppercase extension has a separate naming error",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({
       "scripts/deploy.sh": "echo deploy\n",
       "scripts/release.SH": "echo release\n",
@@ -215,11 +215,11 @@ export const nonScriptPlacementIsReportedOnce = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const foreignSourceNamingIsCheckedIndependently = Task.make(
-  "foreign source files follow the same kebab-case rules as every other file",
-  Effect.gen(function* () {
+export const foreignSourceNamingIsCheckedIndependently = Task.make({
+  name: "foreign source files follow the same kebab-case rules as every other file",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({
       "src/probes/upper.SH": "echo upper\n",
       "src/probes/lower.sh": "echo lower\n",
@@ -236,11 +236,11 @@ export const foreignSourceNamingIsCheckedIndependently = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const nonMarkdownPlacementInDocsIsReportedOnce = Task.make(
-  "each non-markdown file in docs/ has one placement error and naming errors stay separate",
-  Effect.gen(function* () {
+export const nonMarkdownPlacementInDocsIsReportedOnce = Task.make({
+  name: "each non-markdown file in docs/ has one placement error and naming errors stay separate",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({
       "docs/setup.sh": "echo setup\n",
       "docs/report.PY": "print(1)\n",
@@ -255,11 +255,11 @@ export const nonMarkdownPlacementInDocsIsReportedOnce = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const bunTestFileNameIsOnlyAFileBunRunsAsATest = Task.make(
-  "BunTestFileName is a .test or .spec name in any case with a JavaScript or TypeScript extension in any case, so a .test or .spec shell, Python, markdown or .d.ts file is not BunTestFileName, and a _test or _spec name is NotKebabCase alone",
-  Effect.gen(function* () {
+export const bunTestFileNameIsOnlyAFileBunRunsAsATest = Task.make({
+  name: "BunTestFileName is a .test or .spec name in any case with a JavaScript or TypeScript extension in any case, so a .test or .spec shell, Python, markdown or .d.ts file is not BunTestFileName, and a _test or _spec name is NotKebabCase alone",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({
       "src/run.test.sh": "echo run\n",
       "src/run.spec.py": "print(1)\n",
@@ -288,7 +288,7 @@ export const bunTestFileNameIsOnlyAFileBunRunsAsATest = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const notKebabCaseReportsOf = (reports: readonly string[]) =>
   reports.filter((report) => report.includes(" NotKebabCase")).toSorted();
@@ -305,9 +305,9 @@ const MISNAMED_SCRIPT_FILE_NAMES = [
   "_foo.ts",
 ] as const;
 
-export const notKebabCaseReportsEveryMisnamedScriptFile = Task.make(
-  "NotKebabCase reports every script file name that is not kebab-case, whether or not unicorn/filename-case also reports it",
-  Effect.gen(function* () {
+export const notKebabCaseReportsEveryMisnamedScriptFile = Task.make({
+  name: "NotKebabCase reports every script file name that is not kebab-case, whether or not unicorn/filename-case also reports it",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf(
       Object.fromEntries(
         MISNAMED_SCRIPT_FILE_NAMES.map((fileName) => [
@@ -320,20 +320,20 @@ export const notKebabCaseReportsEveryMisnamedScriptFile = Task.make(
       MISNAMED_SCRIPT_FILE_NAMES.map((fileName) => notKebabCase("src", fileName)).toSorted(),
     );
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const notKebabCaseReportsEveryMisnamedPartAtOnce = Task.make(
-  "NotKebabCase on a file name names the whole name, so a name misnamed before and after its first dot is reported in full, not one part per rename",
-  Effect.gen(function* () {
+export const notKebabCaseReportsEveryMisnamedPartAtOnce = Task.make({
+  name: "NotKebabCase on a file name names the whole name, so a name misnamed before and after its first dot is reported in full, not one part per rename",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({ "src/Foo.Bar.ts": "export const NAME = 1;\n" });
     expect(notKebabCaseReportsOf(reports)).toEqual([notKebabCase("src", "Foo.Bar.ts")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const notKebabCaseReportsAFileOxlintCannotParse = Task.make(
-  "NotKebabCase reports a misnamed script file that has a syntax error, which oxlint does not lint",
-  Effect.gen(function* () {
+export const notKebabCaseReportsAFileOxlintCannotParse = Task.make({
+  name: "NotKebabCase reports a misnamed script file that has a syntax error, which oxlint does not lint",
+  run: Effect.gen(function* () {
     const reports = yield* reportsOf({ "src/HomePage.ts": "export const = ;\n" });
     expect(notKebabCaseReportsOf(reports)).toEqual([notKebabCase("src", "HomePage.ts")]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});

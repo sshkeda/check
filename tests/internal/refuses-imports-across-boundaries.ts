@@ -88,9 +88,9 @@ const isBoundaryViolation = (violation: { readonly _tag: string }) =>
 const crossed = (location: string, imported: string, owner: string, target: string) =>
   `${location}: error CannotImportCrossed: imports ${imported}, and ${owner} cannot import ${target}`;
 
-export const importsAcrossBoundariesAreRefused = Task.make(
-  "static, type, re-exported, literal dynamic, aliased, directory-index, symlinked, JSON and side-effect script imports across a boundary are refused, unresolvable relative imports are reported, and overlapping bans add up",
-  Effect.gen(function* () {
+export const importsAcrossBoundariesAreRefused = Task.make({
+  name: "static, type, re-exported, literal dynamic, aliased, directory-index, symlinked, JSON and side-effect script imports across a boundary are refused, unresolvable relative imports are reported, and overlapping bans add up",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, tsconfigFile } = yield* makeProject(SOURCES, BOUNDARIES, PROJECT_FIELDS);
@@ -149,11 +149,11 @@ export const importsAcrossBoundariesAreRefused = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const crossingTheBuiltInBanIsReportedOnce = Task.make(
-  "a src/ file importing a file deep inside scripts/ is reported once, as the built-in CannotImportCrossed, not also as PlainDirectoryImported or for a src/ grant's cannotImport within scripts/",
-  Effect.gen(function* () {
+export const crossingTheBuiltInBanIsReportedOnce = Task.make({
+  name: "a src/ file importing a file deep inside scripts/ is reported once, as the built-in CannotImportCrossed, not also as PlainDirectoryImported or for a src/ grant's cannotImport within scripts/",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "src/reader.ts":
@@ -173,11 +173,11 @@ export const crossingTheBuiltInBanIsReportedOnce = Task.make(
       crossed("src/reader.ts:1", "scripts/shared/helper.ts", "src", "scripts"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const projectsWithoutBoundariesPass = Task.make(
-  "apart from the built-in module and internal-directory rules and the built-in ban on src/ importing scripts/, a config without cannotImport reports only unresolvable relative imports, and imports that stay inside their own banned directory pass",
-  Effect.gen(function* () {
+export const projectsWithoutBoundariesPass = Task.make({
+  name: "apart from the built-in module and internal-directory rules and the built-in ban on src/ importing scripts/, a config without cannotImport reports only unresolvable relative imports, and imports that stay inside their own banned directory pass",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(SOURCES, "lintConfig({})", PROJECT_FIELDS);
     const violations = yield* findImportBoundaryViolations(tsconfigFile).pipe(
       Effect.as(new Array<string>()),
@@ -201,11 +201,11 @@ export const projectsWithoutBoundariesPass = Task.make(
     );
     yield* findImportBoundaryViolations(insideTarget.tsconfigFile);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sourceImportsOfDevOnlyPackagesAreRefused = Task.make(
-  "a src/ file importing a package that package.json lists only in devDependencies is refused, while peer, optional and runtime dependencies and imports from scripts/ pass",
-  Effect.gen(function* () {
+export const sourceImportsOfDevOnlyPackagesAreRefused = Task.make({
+  name: "a src/ file importing a package that package.json lists only in devDependencies is refused, while peer, optional and runtime dependencies and imports from scripts/ pass",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": yield* encodeJson({
         name: "checked",
@@ -253,11 +253,11 @@ export const sourceImportsOfDevOnlyPackagesAreRefused = Task.make(
       ),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const localModulesNamedLikeDevOnlyPackagesPass = Task.make(
-  "a src/ file importing a name that package.json lists only in devDependencies passes when tsconfig paths resolve that name to a file in the package",
-  Effect.gen(function* () {
+export const localModulesNamedLikeDevOnlyPackagesPass = Task.make({
+  name: "a src/ file importing a name that package.json lists only in devDependencies passes when tsconfig paths resolve that name to a file in the package",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": yield* encodeJson({
@@ -278,11 +278,11 @@ export const localModulesNamedLikeDevOnlyPackagesPass = Task.make(
     );
     yield* findImportBoundaryViolations(tsconfigFile);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const dependencyAliasesUseTheirManifestKeys = Task.make(
-  "development and runtime npm aliases use their dependency keys instead of the installed package name",
-  Effect.gen(function* () {
+export const dependencyAliasesUseTheirManifestKeys = Task.make({
+  name: "development and runtime npm aliases use their dependency keys instead of the installed package name",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject({
       "package.json": yield* encodeJson({
         name: "checked",
@@ -332,11 +332,11 @@ export const dependencyAliasesUseTheirManifestKeys = Task.make(
       ),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sourceFilesAreCheckedTogether = Task.make(
-  "the import-boundary check reads its source files at the same time instead of one after another, and finds the real path of a file many files import once",
-  Effect.gen(function* () {
+export const sourceFilesAreCheckedTogether = Task.make({
+  name: "the import-boundary check reads its source files at the same time instead of one after another, and finds the real path of a file many files import once",
+  run: Effect.gen(function* () {
     const importers = ["src/first.ts", "src/second.ts", "src/third.ts"];
     const { directory, tsconfigFile } = yield* makeProject({
       ...Object.fromEntries(
@@ -374,4 +374,4 @@ export const sourceFilesAreCheckedTogether = Task.make(
     expect(lookups.mostReadingAtOnce).toBeGreaterThan(1);
     expect(lookups.realPathsOfTheSharedFile).toBeLessThan(importers.length);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

@@ -11,7 +11,6 @@ import type { Checker, Symbol as TypeScriptSymbol } from "typescript/unstable/as
 import {
   TASK_NAMESPACE_EXPORT,
   TASK_PACKAGE,
-  TASK_MAIN_MEMBER,
   TASK_MAKE_MEMBER,
 } from "../../../../../shared/bans-each-permission-lifts.ts";
 import {
@@ -94,7 +93,7 @@ const PROGRAM_STARTS = [
     isPackage: isTaskPackage,
     module: PACKAGE_ROOT,
     exports: [TASK_NAMESPACE_EXPORT],
-    members: [TASK_MAIN_MEMBER, TASK_MAKE_MEMBER],
+    members: [TASK_MAKE_MEMBER],
     returnedBySignature: DIRECT_CALLS,
   },
 ] as const;

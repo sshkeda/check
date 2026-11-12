@@ -10,9 +10,9 @@ const ruleTest = ruleTestWith(({ reported, expected }) => {
 
 const ALLOWED_WITH_DEADLINE = [{ timedSchedules: "allowedWithDeadline" }] as const;
 
-export const rejectsEveryScheduleUsage = Task.make(
-  "no-schedules rejects every timed Schedule usage and scheduled retries outside files allowed pollsWithADeadline, and allows a count-only Schedule.recurs(n)",
-  ruleTest("no-schedules", {
+export const rejectsEveryScheduleUsage = Task.make({
+  name: "no-schedules rejects every timed Schedule usage and scheduled retries outside files allowed pollsWithADeadline, and allows a count-only Schedule.recurs(n)",
+  run: ruleTest("no-schedules", {
     valid: [
       'import { Effect } from "effect"; Effect.retry(work, { times: 3 });',
       'import { Schedule } from "effect"; Schedule.recurs(3);',
@@ -86,11 +86,11 @@ export const rejectsEveryScheduleUsage = Task.make(
       },
     ],
   }),
-);
+});
 
-export const requiresDeadlinesInScheduleFiles = Task.make(
-  "no-schedules in files allowed pollsWithADeadline accepts repeating or retrying with Schedule.spaced or a possibly jittered Schedule.exponential when a timeout bounds it",
-  ruleTest("no-schedules", {
+export const requiresDeadlinesInScheduleFiles = Task.make({
+  name: "no-schedules in files allowed pollsWithADeadline accepts repeating or retrying with Schedule.spaced or a possibly jittered Schedule.exponential when a timeout bounds it",
+  run: ruleTest("no-schedules", {
     valid: [
       'import { Effect, Schedule } from "effect"; work.pipe(Effect.repeat({ until, schedule: Schedule.spaced("50 millis") }), Effect.timeout("10 seconds"));',
       'import { Effect, Schedule } from "effect"; Effect.timeout(Effect.repeat(work, Schedule.spaced("1 second")), "30 seconds");',
@@ -181,4 +181,4 @@ export const requiresDeadlinesInScheduleFiles = Task.make(
       },
     ],
   }),
-);
+});

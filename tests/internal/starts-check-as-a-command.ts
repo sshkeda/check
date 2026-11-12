@@ -12,6 +12,10 @@ const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_O
 
 const MISNAMED_FILE = "[layout] Bad_Name.ts: error NotKebabCase: Bad_Name.ts is not kebab-case";
 
+const TASKS_RUN_BY_LAYOUT = 2;
+
+const TASKS_RUN_BY_TYPED_CHECKS = 3;
+
 const commandOutcome = (
   directory: string,
   taskStateDirectory: string,
@@ -39,9 +43,9 @@ const reportedLines = (printed: string) =>
     .map((line) => line.replace(/\[[\d.]+ms\]$/u, ""))
     .toSorted();
 
-export const checksTheDirectoryItIsStartedIn = Task.make(
-  "the check command checks the directory it is started in and locates each report from it, even when the variable that carries the project directory to its tasks already names another directory",
-  Effect.gen(function* () {
+export const checksTheDirectoryItIsStartedIn = Task.make({
+  name: "the check command checks the directory it is started in and locates each report from it, even when the variable that carries the project directory to its tasks already names another directory",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const { directory, taskStateDirectory } = yield* makeProject({
       ".gitignore": "node_modules\n",
@@ -61,11 +65,11 @@ export const checksTheDirectoryItIsStartedIn = Task.make(
     );
     expect(started.printed.split("\n").filter((line) => /^\[[\w-]+\] \//u.test(line))).toEqual([]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const keepsPathsThatOnlyContainTheProjectPath = Task.make(
-  "the check command leaves alone a path outside the project that merely contains the project's path, so two imports of different outside files stay two findings that name each file",
-  Effect.gen(function* () {
+export const keepsPathsThatOnlyContainTheProjectPath = Task.make({
+  name: "the check command leaves alone a path outside the project that merely contains the project's path, so two imports of different outside files stay two findings that name each file",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const parent = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
@@ -93,11 +97,11 @@ export const keepsPathsThatOnlyContainTheProjectPath = Task.make(
       namingEach(besideIt).filter((line) => !line.includes(containingTheProjectPath)),
     ).not.toEqual([]);
   }).pipe(Effect.scoped),
-);
+});
 
-export const refusesToRunWithoutAProjectToCheck = Task.make(
-  "the check command fails with one line naming why, and runs no other check, when it is given an argument, when its directory has no package.json and when its directory is outside a git repository",
-  Effect.gen(function* () {
+export const refusesToRunWithoutAProjectToCheck = Task.make({
+  name: "the check command fails with one line naming why, and runs no other check, when it is given a flag no task reads, when its directory has no package.json and when its directory is outside a git repository, where start-directory names why and check names only the task it awaited",
+  run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { directory, taskStateDirectory } = yield* makeProject({
@@ -107,26 +111,86 @@ export const refusesToRunWithoutAProjectToCheck = Task.make(
     const bare = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
     const unversioned = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
     yield* fileSystem.writeFileString(path.join(unversioned, "package.json"), "{}\n");
-    for (const [startedIn, givenArguments, refusal] of [
-      [
-        directory,
-        " --help",
-        "ArgumentsNotAccepted: check takes no arguments, and was given --help",
-      ],
-      [bare, "", `PackageManifestMissing: ${bare} has no package.json`],
-      [unversioned, "", `RepositoryNotFound: ${unversioned} is not inside a git repository`],
+    const givenAFlag = yield* commandOutcome(directory, taskStateDirectory, {}, " --fix");
+    expect(givenAFlag.code).toBe(1);
+    expect(givenAFlag.printed.split("\n").filter((line) => line.includes("error "))).toEqual([
+      "error FlagNotRead: the flag --fix is not read by any task",
+    ]);
+    expect(givenAFlag.printed).not.toContain("[check]");
+    for (const [startedIn, refusal] of [
+      [bare, `PackageManifestMissing: ${bare} has no package.json`],
+      [unversioned, `RepositoryNotFound: ${unversioned} is not inside a git repository`],
     ] as const) {
-      const { code, printed } = yield* commandOutcome(
-        startedIn,
-        taskStateDirectory,
-        {},
-        givenArguments,
-      );
+      const { code, printed } = yield* commandOutcome(startedIn, taskStateDirectory);
       expect(code).toBe(1);
       expect(printed.split("\n").filter((line) => line.includes(" error "))).toEqual([
-        `[check] error ${refusal}`,
+        `[start-directory] error ${refusal}`,
+        "[check] error AwaitedTaskFailed: start-directory failed",
       ]);
-      expect(printed).toContain("failed: check (1 of 1 task)");
+      expect(printed).toContain("failed: start-directory (1 of 2 tasks)");
     }
   }).pipe(Effect.scoped),
-);
+});
+
+export const refusesToStartOneCheckWithoutAProjectToCheck = Task.make({
+  name: "a check started by name fails with the same line naming why as the check command, and runs no check, when its directory has no package.json and when its directory is outside a git repository",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const bare = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
+    const unversioned = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
+    const taskStateDirectory = yield* fileSystem.makeTempDirectoryScoped();
+    yield* fileSystem.writeFileString(path.join(unversioned, "package.json"), "{}\n");
+    for (const [startedIn, refusal] of [
+      [bare, `PackageManifestMissing: ${bare} has no package.json`],
+      [unversioned, `RepositoryNotFound: ${unversioned} is not inside a git repository`],
+    ] as const) {
+      for (const [startedTask, awaitingLines, taskCount] of [
+        [
+          "layout",
+          ["[layout] error AwaitedTaskFailed: start-directory failed"],
+          TASKS_RUN_BY_LAYOUT,
+        ],
+        [
+          "typed-checks",
+          [
+            "[typescript-config] error AwaitedTaskFailed: start-directory failed",
+            "[typed-checks] error AwaitedTaskFailed: typescript-config failed",
+          ],
+          TASKS_RUN_BY_TYPED_CHECKS,
+        ],
+      ] as const) {
+        const { code, printed } = yield* commandOutcome(
+          startedIn,
+          taskStateDirectory,
+          {},
+          ` ${startedTask}`,
+        );
+        expect(code).toBe(1);
+        expect(printed.split("\n").filter((line) => line.includes(" error "))).toEqual([
+          `[start-directory] error ${refusal}`,
+          ...awaitingLines,
+        ]);
+        expect(printed).toContain(`failed: start-directory (1 of ${taskCount} tasks)`);
+      }
+    }
+  }).pipe(Effect.scoped),
+});
+
+export const startsOneCheckByName = Task.make({
+  name: "a check started by name in a project runs that check and no other, and does not point at the guide",
+  run: Effect.gen(function* () {
+    const { directory, taskStateDirectory } = yield* makeProject({
+      ".gitignore": "node_modules\n",
+      "index.ts": "export const COUNT = 1;\n",
+      "Bad_Name.ts": "export const BAD = 1;\n",
+    });
+    const { code, printed } = yield* commandOutcome(directory, taskStateDirectory, {}, " layout");
+    expect(code).toBe(1);
+    expect(printed).toContain(MISNAMED_FILE);
+    expect(reportedLines(printed).filter((line) => !line.startsWith("[layout] "))).toEqual([]);
+    expect(printed).toContain("[start-directory] passed");
+    expect(printed).toContain("failed: layout (1 of 2 tasks)");
+    expect(printed).not.toContain("how-to-make-check-pass.md");
+  }).pipe(Effect.scoped),
+});

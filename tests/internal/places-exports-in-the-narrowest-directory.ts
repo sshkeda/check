@@ -84,9 +84,9 @@ const sharedByOne = (path: string, module: string, part?: string) =>
     ? `${path}: error SharedFileWithOneUser: is in ${module}/shared/, but no submodule of ${module}/ uses it ${UNCOUNTED_USERS}`
     : `${path}: error SharedFileWithOneUser: is in ${module}/shared/, but only ${part}/ uses it ${UNCOUNTED_USERS}`;
 
-export const scriptHelpersMayServeOnlyTests = Task.make(
-  "scripts may export reusable test helpers while unused script exports and test-only production exports remain errors",
-  Effect.gen(function* () {
+export const scriptHelpersMayServeOnlyTests = Task.make({
+  name: "scripts may export reusable test helpers while unused script exports and test-only production exports remain errors",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": "export const MAIN = 1;\n",
@@ -101,11 +101,11 @@ export const scriptHelpersMayServeOnlyTests = Task.make(
       testOnly("src/internal/only.ts:1", "SOURCE"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sourceExportsOnlyScriptsUseAreReported = Task.make(
-  "an export in src/ that only scripts, or only tests and scripts, use is ScriptOnlyExport, while a script that uses what src/index.ts exports, as an app's entry point does, or builds a src/ file passes, and a src/ user still counts",
-  Effect.gen(function* () {
+export const sourceExportsOnlyScriptsUseAreReported = Task.make({
+  name: "an export in src/ that only scripts, or only tests and scripts, use is ScriptOnlyExport, while a script that uses what src/index.ts exports, as an app's entry point does, or builds a src/ file passes, and a src/ user still counts",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json": '{ "name": "placement", "type": "module" }\n',
@@ -144,11 +144,11 @@ export const sourceExportsOnlyScriptsUseAreReported = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const unusedAndTestOnlyExportsAreReported = Task.make(
-  "an export nothing uses is UnusedExport, a default export included, one only tests use is TestOnlyExport, and package entries, scripts with their default exports and root tool configs are pinned",
-  Effect.gen(function* () {
+export const unusedAndTestOnlyExportsAreReported = Task.make({
+  name: "an export nothing uses is UnusedExport, a default export included, one only tests use is TestOnlyExport, and package entries, scripts with their default exports and root tool configs are pinned",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts":
@@ -177,65 +177,65 @@ export const unusedAndTestOnlyExportsAreReported = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const TASK_IMPORTS = 'import { Task } from "@sshkeda/task";\nimport { Effect } from "effect";\n';
 
-export const aDefaultExportThatMakesTasksIsRunFromOutside = Task.make(
-  "a default export that calls Task.make, Task.all or Task.allSettled on a Task imported from the literal @sshkeda/task, by name, renamed or through a namespace, is used in src/, scripts/ and tests/ and makes its file reached, while a default export that calls anything else, Task.main, a local Task or a Task re-exported through a local module or another package stays unused",
-  Effect.gen(function* () {
+export const aDefaultExportThatMakesTasksIsRunFromOutside = Task.make({
+  name: "a default export that calls Task.make, Task.all or Task.allSettled on a Task imported from the literal @sshkeda/task, by name, renamed or through a namespace, is used in src/, scripts/ and tests/ and makes its file reached, while a default export that calls anything else, such as Task.exec, a local Task or a Task re-exported through a local module or another package stays unused",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         ".gitignore": "node_modules\n",
         "src/index.ts": "export const MAIN = 1;\n",
-        "src/internal/warm.ts": `${TASK_IMPORTS}export default Task.make("warm", Effect.void);\n`,
+        "src/internal/warm.ts": `${TASK_IMPORTS}export default Task.make({ name: "warm", run: Effect.void });\n`,
         "src/internal/helper.ts": "export const HELPER = 1;\n",
         "src/internal/tested.ts": "export const TESTED = 1;\n",
         "src/internal/batch.ts": [
           'import { Task as Tasks } from "@sshkeda/task";',
           'import { Effect } from "effect";',
           'import { HELPER } from "./helper.ts";',
-          'const first = Tasks.make("first", Effect.succeed(HELPER));',
+          'const first = Tasks.make({ name: "first", run: Effect.log(HELPER) });',
           "export default Tasks.all([first]);",
           "",
         ].join("\n"),
         "scripts/internal/release.ts": [
           'import * as TaskModule from "@sshkeda/task";',
           'import { Effect } from "effect";',
-          'const release = TaskModule.Task.make("release", Effect.void);',
+          'const release = TaskModule.Task.make({ name: "release", run: Effect.void });',
           "export default TaskModule.Task.allSettled([release]);",
           "",
         ].join("\n"),
         "tests/suite.ts": [
           `${TASK_IMPORTS}import { TESTED } from "../src/internal/tested.ts";`,
-          'const tested = Task.make("tested", Effect.succeed(TESTED));',
+          'const tested = Task.make({ name: "tested", run: Effect.log(TESTED) });',
           "export default Task.all([tested]);",
           "",
         ].join("\n"),
         "src/internal/plain.ts": "const make = () => 1;\nexport default make();\n",
-        "src/internal/main.ts": `${TASK_IMPORTS}export default Task.main(Task.make("main", Effect.void));\n`,
+        "src/internal/command.ts": `${TASK_IMPORTS}export default Task.exec("git", ["status"]);\n`,
         "src/internal/local.ts":
-          'const Task = { make: (name: string) => name };\nexport default Task.make("local");\n',
+          'const Task = { make: (definition: { readonly name: string }) => definition.name };\nexport default Task.make({ name: "local" });\n',
         "src/internal/task-again.ts": 'export { Task } from "@sshkeda/task";\n',
         "src/internal/via-local.ts":
-          'import { Effect } from "effect";\nimport { Task } from "./task-again.ts";\nexport default Task.make("via local", Effect.void);\n',
+          'import { Effect } from "effect";\nimport { Task } from "./task-again.ts";\nexport default Task.make({ name: "via local", run: Effect.void });\n',
         "node_modules/barrel/package.json":
           '{ "name": "barrel", "type": "module", "main": "index.js" }\n',
         "node_modules/barrel/index.js": 'export * from "@sshkeda/task";\n',
         "src/internal/via-barrel.ts":
-          'import { Effect } from "effect";\nimport { Task } from "barrel";\nexport default Task.make("via barrel", Effect.void);\n',
+          'import { Effect } from "effect";\nimport { Task } from "barrel";\nexport default Task.make({ name: "via barrel", run: Effect.void });\n',
         "node_modules/impostor/package.json":
           '{ "name": "impostor", "type": "module", "main": "index.js" }\n',
         "node_modules/impostor/index.js":
           'export * from "@sshkeda/task";\nexport const Task = { make: () => 1 };\n',
         "src/internal/via-impostor.ts":
-          'import { Task } from "impostor";\nexport default Task.make("via impostor");\n',
+          'import { Task } from "impostor";\nexport default Task.make({ name: "via impostor" });\n',
       }),
     ).toEqual(
       [
         testOnly("src/internal/tested.ts:1", "TESTED"),
         unused("src/internal/plain.ts:2", "default"),
-        unused("src/internal/main.ts:3", "default"),
+        unused("src/internal/command.ts:3", "default"),
         unused("src/internal/local.ts:2", "default"),
         deadUsed("src/internal/task-again.ts:1", "Task", "src/internal/via-local.ts"),
         unused("src/internal/via-local.ts:3", "default"),
@@ -244,25 +244,25 @@ export const aDefaultExportThatMakesTasksIsRunFromOutside = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aTaskDefaultExportIsRecognisedThroughTransparentWrappers = Task.make(
-  "a default export that calls Task.make is used when parentheses or satisfies wrap the call, or parentheses wrap its callee",
-  Effect.gen(function* () {
+export const aTaskDefaultExportIsRecognisedThroughTransparentWrappers = Task.make({
+  name: "a default export that calls Task.make is used when parentheses or satisfies wrap the call, or parentheses wrap its callee",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": "export const MAIN = 1;\n",
-        "src/internal/satisfied.ts": `${TASK_IMPORTS}export default Task.make("satisfied", Effect.void) satisfies Task.Task<void>;\n`,
-        "src/internal/parenthesized.ts": `${TASK_IMPORTS}export default (Task.make("parenthesized", Effect.void));\n`,
-        "src/internal/parenthesized-callee.ts": `${TASK_IMPORTS}export default (Task.make)("parenthesized callee", Effect.void);\n`,
+        "src/internal/satisfied.ts": `${TASK_IMPORTS}export default Task.make({ name: "satisfied", run: Effect.void }) satisfies Task.Task<void>;\n`,
+        "src/internal/parenthesized.ts": `${TASK_IMPORTS}export default (Task.make({ name: "parenthesized", run: Effect.void }));\n`,
+        "src/internal/parenthesized-callee.ts": `${TASK_IMPORTS}export default (Task.make)({ name: "parenthesized callee", run: Effect.void });\n`,
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aTaskDefaultExportIsRecognisedWhenAnotherImportCannotBeFollowed = Task.make(
-  "a default export that calls Task.make on a Task imported from the literal @sshkeda/task stays used when another import of its file comes from a package whose own re-export cannot be resolved",
-  Effect.gen(function* () {
+export const aTaskDefaultExportIsRecognisedWhenAnotherImportCannotBeFollowed = Task.make({
+  name: "a default export that calls Task.make on a Task imported from the literal @sshkeda/task stays used when another import of its file comes from a package whose own re-export cannot be resolved",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         ".gitignore": "node_modules\n",
@@ -276,55 +276,56 @@ export const aTaskDefaultExportIsRecognisedWhenAnotherImportCannotBeFollowed = T
           'import { Task } from "@sshkeda/task";',
           'import { Effect } from "effect";',
           'import { Factory } from "bridge";',
-          'export default Task.make("bridged", Effect.succeed(Factory.make()));',
+          'export default Task.make({ name: "bridged", run: Effect.log(Factory.make()) });',
           "",
         ].join("\n"),
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const tasksOwnPackageRecognisesItsTaskImportedByName = Task.make(
-  "in the @sshkeda/task package itself, a default export that calls Task.make on a Task imported by the package's own name is used",
-  Effect.gen(function* () {
+export const tasksOwnPackageRecognisesItsTaskImportedByName = Task.make({
+  name: "in the @sshkeda/task package itself, a default export that calls Task.make on a Task imported by the package's own name is used",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
           '{ "name": "@sshkeda/task", "type": "module", "main": "./src/index.ts", "exports": { ".": "./src/index.ts" } }\n',
-        "src/index.ts": "export const Task = { make: (name: string) => name };\n",
+        "src/index.ts":
+          "export const Task = { make: (definition: { readonly name: string }) => definition.name };\n",
         "src/internal/demo.ts":
-          'import { Task } from "@sshkeda/task";\nexport default Task.make("demo");\n',
+          'import { Task } from "@sshkeda/task";\nexport default Task.make({ name: "demo" });\n',
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anExportOnlyATaskDefaultExportReferencesIsUnused = Task.make(
-  "an export that only a task default export of its own file references, inline, through an unexported binding, beside another declarator or destructured beside a binding it defaults to, is used by nothing like any export used only in its own file",
-  Effect.gen(function* () {
+export const anExportOnlyATaskDefaultExportReferencesIsUnused = Task.make({
+  name: "an export that only a task default export of its own file references, inline, through an unexported binding, beside another declarator or destructured beside a binding it defaults to, is used by nothing like any export used only in its own file",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": "export const MAIN = 1;\n",
         "src/internal/inline.ts": [
-          `${TASK_IMPORTS}export const child = Task.make("inline child", Effect.void);`,
-          'export default Task.make("inline parent", Task.all([child]));',
+          `${TASK_IMPORTS}export const child = Task.make({ name: "inline child", run: Effect.void });`,
+          'export default Task.make({ name: "inline parent", run: Task.all([child]) });',
           "",
         ].join("\n"),
         "src/internal/local.ts": [
-          `${TASK_IMPORTS}export const child = Task.make("local child", Effect.void);`,
+          `${TASK_IMPORTS}export const child = Task.make({ name: "local child", run: Effect.void });`,
           "const body = Task.all([child]);",
-          'export default Task.make("local parent", body);',
+          'export default Task.make({ name: "local parent", run: body });',
           "",
         ].join("\n"),
         "src/internal/mates.ts": [
-          `${TASK_IMPORTS}export const child = Task.make("mates child", Effect.void), UNUSED = 1;`,
-          'export default Task.make("mates parent", child);',
+          `${TASK_IMPORTS}export const child = Task.make({ name: "mates child", run: Effect.void }), UNUSED = 1;`,
+          'export default Task.make({ name: "mates parent", run: child });',
           "",
         ].join("\n"),
         "src/internal/destructured.ts": [
           `${TASK_IMPORTS}const pair = { a: 1, b: undefined };`,
           "export const { a, b = a } = pair;",
-          'export default Task.make("destructured", Effect.succeed(b));',
+          'export default Task.make({ name: "destructured", run: Effect.log(b) });',
           "",
         ].join("\n"),
       }),
@@ -339,11 +340,11 @@ export const anExportOnlyATaskDefaultExportReferencesIsUnused = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const exportsOfALargeFileArePlacedInLinearTime = Task.make(
-  "export placement reports each of 20,000 unused exports in one file, each with its line, in under 30 seconds",
-  Effect.gen(function* () {
+export const exportsOfALargeFileArePlacedInLinearTime = Task.make({
+  name: "export placement reports each of 20,000 unused exports in one file, each with its line, in under 30 seconds",
+  run: Effect.gen(function* () {
     const [elapsed, violations] = yield* Effect.timed(
       placementViolationsIn({
         "src/index.ts":
@@ -365,11 +366,11 @@ export const exportsOfALargeFileArePlacedInLinearTime = Task.make(
       MOST_MILLISECONDS_TO_PLACE_EXPORTS_OF_A_LARGE_FILE,
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sharedFilesUsedByOneChildModuleAreReported = Task.make(
-  "a shared/ file whose production users all sit in one child module is SharedFileWithOneUser naming that module, a file used more widely is not reported even when some exports serve one child, and a user in the same shared/ passes on its own users",
-  Effect.gen(function* () {
+export const sharedFilesUsedByOneChildModuleAreReported = Task.make({
+  name: "a shared/ file whose production users all sit in one child module is SharedFileWithOneUser naming that module, a file used more widely is not reported even when some exports serve one child, and a user in the same shared/ passes on its own users",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -423,11 +424,11 @@ export const sharedFilesUsedByOneChildModuleAreReported = Task.make(
       }),
     ).toEqual([sharedByOne("src/shared/moved.ts", "src", "src/tasks")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sameFileUsersKeepExportsInPlace = Task.make(
-  "an export referenced by non-exported code in its own file counts the file as a user, an export referenced inside another export inherits that export's users, as an RPC schema does from its group, and an unreached file keeps nothing alive",
-  Effect.gen(function* () {
+export const sameFileUsersKeepExportsInPlace = Task.make({
+  name: "an export referenced by non-exported code in its own file counts the file as a user, an export referenced inside another export inherits that export's users, as an RPC schema does from its group, and an unreached file keeps nothing alive",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -461,11 +462,11 @@ export const sameFileUsersKeepExportsInPlace = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const everyKindOfImportCountsAsUse = Task.make(
-  "namespace, type, dynamic, require, import type and new URL imports all count as uses",
-  Effect.gen(function* () {
+export const everyKindOfImportCountsAsUse = Task.make({
+  name: "namespace, type, dynamic, require, import type and new URL imports all count as uses",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -487,11 +488,11 @@ export const everyKindOfImportCountsAsUse = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aQualifiedImportTypeUsesOnlyTheExportItNames = Task.make(
-  'an import type with a qualifier, such as import("./a.ts").Shape or import("./a.ts").Shapes.Circle, uses only the export its qualifier starts with, while typeof import("./a.ts") uses every export',
-  Effect.gen(function* () {
+export const aQualifiedImportTypeUsesOnlyTheExportItNames = Task.make({
+  name: 'an import type with a qualifier, such as import("./a.ts").Shape or import("./a.ts").Shapes.Circle, uses only the export its qualifier starts with, while typeof import("./a.ts") uses every export',
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -512,11 +513,11 @@ export const aQualifiedImportTypeUsesOnlyTheExportItNames = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aNewUrlUsesEveryExportAndAWorkerNone = Task.make(
-  "a new URL target that nothing launches may be handed to a tool that reads its exports, so its default export counts as used, while a Worker started from a URL uses none of its target's exports",
-  Effect.gen(function* () {
+export const aNewUrlUsesEveryExportAndAWorkerNone = Task.make({
+  name: "a new URL target that nothing launches may be handed to a tool that reads its exports, so its default export counts as used, while a Worker started from a URL uses none of its target's exports",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -529,11 +530,11 @@ export const aNewUrlUsesEveryExportAndAWorkerNone = Task.make(
       }),
     ).toEqual([unused("src/internal/thread.ts:1", "THREAD_EXPORT")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyRecognizedLoadsAreReached = Task.make(
-  "reaching starts from package.json main, module and exports (wildcards too, minus null exclusions) and bunfig preload and test preload read as TOML, not from a package.json bin, and follows literal import(), new URL and template literals without substitutions; a path written as a plain string loads nothing",
-  Effect.gen(function* () {
+export const onlyRecognizedLoadsAreReached = Task.make({
+  name: "reaching starts from package.json main, module and exports (wildcards too, minus null exclusions) and bunfig preload and test preload read as TOML, not from a package.json bin, and follows literal import(), new URL and template literals without substitutions; a path written as a plain string loads nothing",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn(
         {
@@ -578,11 +579,11 @@ export const onlyRecognizedLoadsAreReached = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aBinTargetAnywhereUsesWhatItImports = Task.make(
-  "a file package.json lists under bin, wherever it lives, counts as a user of what it imports, while its own exports stay unused",
-  Effect.gen(function* () {
+export const aBinTargetAnywhereUsesWhatItImports = Task.make({
+  name: "a file package.json lists under bin, wherever it lives, counts as a user of what it imports, while its own exports stay unused",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
@@ -594,11 +595,11 @@ export const aBinTargetAnywhereUsesWhatItImports = Task.make(
       }),
     ).toEqual([unused("src/internal/cli.ts:3", "PRINTED")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const shadowedNamesAreNotSameFileUses = Task.make(
-  "a same-file reference counts only when it resolves to the top-level export, so a shadowing parameter, local, catch binding or generic type parameter does not keep an export in use, while production use in its own file counts even when tests also import it",
-  Effect.gen(function* () {
+export const shadowedNamesAreNotSameFileUses = Task.make({
+  name: "a same-file reference counts only when it resolves to the top-level export, so a shadowing parameter, local, catch binding or generic type parameter does not keep an export in use, while production use in its own file counts even when tests also import it",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": 'import { RUN } from "./internal/tools.ts";\nexport const MAIN = RUN;\n',
@@ -624,11 +625,11 @@ export const shadowedNamesAreNotSameFileUses = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const jsxElementsAreSameFileUses = Task.make(
-  "a component rendered as JSX in its own .tsx file counts that file as a user",
-  Effect.gen(function* () {
+export const jsxElementsAreSameFileUses = Task.make({
+  name: "a component rendered as JSX in its own .tsx file counts that file as a user",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "placement", "type": "module", "main": "./src/index.tsx" }\n',
@@ -655,11 +656,11 @@ export const jsxElementsAreSameFileUses = Task.make(
     );
     yield* findExportPlacementViolations(tsconfigFile, openTypeScriptProjects(tsconfigFile));
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyInternalSharedDirectoriesFold = Task.make(
-  "a shared/ directory counts as its parent's scope even when it holds an index.ts, and an index.ts in a directory nested in it makes no module either, so a file in it used only from that directory is SharedFileWithOneUser with no submodule as its user",
-  Effect.gen(function* () {
+export const onlyInternalSharedDirectoriesFold = Task.make({
+  name: "a shared/ directory counts as its parent's scope even when it holds an index.ts, and an index.ts in a directory nested in it makes no module either, so a file in it used only from that directory is SharedFileWithOneUser with no submodule as its user",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts":
@@ -672,11 +673,11 @@ export const onlyInternalSharedDirectoriesFold = Task.make(
       }),
     ).toEqual([sharedByOne("src/shared/util.ts", "src")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const packageEntriesNameCompiledSourceFiles = Task.make(
-  "package.json entries that name TypeScript source files are pinned, a types entry counts as one, and an entry naming no compiled file, even beside a tsconfig whose outDir and rootDir would map it, is PackageEntryWithoutSource",
-  Effect.gen(function* () {
+export const packageEntriesNameCompiledSourceFiles = Task.make({
+  name: "package.json entries that name TypeScript source files are pinned, a types entry counts as one, and an entry naming no compiled file, even beside a tsconfig whose outDir and rootDir would map it, is PackageEntryWithoutSource",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
@@ -690,22 +691,22 @@ export const packageEntriesNameCompiledSourceFiles = Task.make(
       "package.json: error PackageEntryWithoutSource: lists the entry ./src/lib/gone/index.ts, which names no file the TypeScript project compiles",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const resolverFailuresAreLeftToTheImportBoundaryCheck = Task.make(
-  "an import the resolver fails on, such as an empty path, resolves to no file here and is reported only by the import-boundary check",
-  Effect.gen(function* () {
+export const resolverFailuresAreLeftToTheImportBoundaryCheck = Task.make({
+  name: "an import the resolver fails on, such as an empty path, resolves to no file here and is reported only by the import-boundary check",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": 'export const LOAD = () => import("");\n',
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const unparsableFilesAreReported = Task.make(
-  "a source file that does not parse is SourceFileUnparsable at the line of its first parse error instead of being skipped",
-  Effect.gen(function* () {
+export const unparsableFilesAreReported = Task.make({
+  name: "a source file that does not parse is SourceFileUnparsable at the line of its first parse error instead of being skipped",
+  run: Effect.gen(function* () {
     const failure = yield* placementViolationsIn({
       "src/index.ts": 'export const GREETING = "hello";\n\nexport const FAREWELL = ;\n',
     }).pipe(failureAsValue);
@@ -713,7 +714,7 @@ export const unparsableFilesAreReported = Task.make(
       "src/index.ts:3: error SourceFileUnparsable: does not parse: Unexpected token",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const OUTSIDE_IMPORT_MAP =
   '{ "name": "placement", "type": "module", "main": "./src/index.ts", "imports": { "#a": "./src/../../a.ts" } }\n';
@@ -743,9 +744,9 @@ const placementAndBoundaryFailuresOf = (source: string) =>
     return { placement, boundary };
   });
 
-export const unresolvableImportsLeaveNoUnusedExport = Task.make(
-  'a request the resolver fails on, such as "#a" mapped by package.json imports to a target outside the package, leaves no UnusedExport for its target: an import fails the import-boundary check with ModuleRequestUnresolvable and is left to it, and a URL the import-boundary check skips fails this check with ModuleRequestUnresolvable',
-  Effect.gen(function* () {
+export const unresolvableImportsLeaveNoUnusedExport = Task.make({
+  name: 'a request the resolver fails on, such as "#a" mapped by package.json imports to a target outside the package, leaves no UnusedExport for its target: an import fails the import-boundary check with ModuleRequestUnresolvable and is left to it, and a URL the import-boundary check skips fails this check with ModuleRequestUnresolvable',
+  run: Effect.gen(function* () {
     expect(
       yield* placementAndBoundaryFailuresOf('import { A } from "#a";\nexport const MAIN = A;\n'),
     ).toEqual({ placement: "no failure", boundary: "ModuleRequestUnresolvable" });
@@ -755,11 +756,11 @@ export const unresolvableImportsLeaveNoUnusedExport = Task.make(
       ),
     ).toEqual({ placement: "ModuleRequestUnresolvable", boundary: "no failure" });
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const filesOutsideTheProgramAreChecked = Task.make(
-  "tracked source files outside the tsconfig include are checked, and declaration files count as users without being reported",
-  Effect.gen(function* () {
+export const filesOutsideTheProgramAreChecked = Task.make({
+  name: "tracked source files outside the tsconfig include are checked, and declaration files count as users without being reported",
+  run: Effect.gen(function* () {
     const { tsconfigFile } = yield* makeProject(
       {
         "package.json": '{ "name": "placement", "type": "module", "main": "./src/index.ts" }\n',
@@ -788,11 +789,11 @@ export const filesOutsideTheProgramAreChecked = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const looseFilesUsedOnlyUnderASubmoduleAreOutsideTheLayout = Task.make(
-  "a loose file in a module used only under one of its submodules is FileOutsideModuleLayout naming the module it sits in, and its users' directory is not reported",
-  Effect.gen(function* () {
+export const looseFilesUsedOnlyUnderASubmoduleAreOutsideTheLayout = Task.make({
+  name: "a loose file in a module used only under one of its submodules is FileOutsideModuleLayout naming the module it sits in, and its users' directory is not reported",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts":
@@ -820,11 +821,11 @@ export const looseFilesUsedOnlyUnderASubmoduleAreOutsideTheLayout = Task.make(
       outsideModuleLayout("src/step.ts", "src"),
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const aSharedFileUsedOnlyByAWorkerFileInASubmoduleHasOneUser = Task.make(
-  "a shared/ file whose only user is a Worker's file sitting in a submodule is SharedFileWithOneUser like any other",
-  Effect.gen(function* () {
+export const aSharedFileUsedOnlyByAWorkerFileInASubmoduleHasOneUser = Task.make({
+  name: "a shared/ file whose only user is a Worker's file sitting in a submodule is SharedFileWithOneUser like any other",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -843,11 +844,11 @@ export const aSharedFileUsedOnlyByAWorkerFileInASubmoduleHasOneUser = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const onlyReachableUsersCount = Task.make(
-  "files that only use or dynamically import each other and that are not reached do not keep each other's exports alive",
-  Effect.gen(function* () {
+export const onlyReachableUsersCount = Task.make({
+  name: "files that only use or dynamically import each other and that are not reached do not keep each other's exports alive",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": 'import { LIVE } from "./internal/live.ts";\nexport const MAIN = LIVE;\n',
@@ -869,11 +870,11 @@ export const onlyReachableUsersCount = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const bunBuildEntrypointsUseTheirFiles = Task.make(
-  "a literal Bun.build entrypoint, resolved from the package root, uses every export of that file",
-  Effect.gen(function* () {
+export const bunBuildEntrypointsUseTheirFiles = Task.make({
+  name: "a literal Bun.build entrypoint, resolved from the package root, uses every export of that file",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": "export const MAIN = 1;\n",
@@ -890,11 +891,11 @@ export const bunBuildEntrypointsUseTheirFiles = Task.make(
       }),
     ).toEqual([unused("apps/edge/unbuilt.ts:1", "UNBUILT")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const ownFileProductionUseIsProductionUse = Task.make(
-  "an export that production code in its own file uses is not TestOnlyExport when tests use it too",
-  Effect.gen(function* () {
+export const ownFileProductionUseIsProductionUse = Task.make({
+  name: "an export that production code in its own file uses is not TestOnlyExport when tests use it too",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts":
@@ -910,11 +911,11 @@ export const ownFileProductionUseIsProductionUse = Task.make(
       }),
     ).toEqual([testOnly("src/internal/service.ts:3", "tested")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const urlBuildEntriesAndConfigFilesAreExact = Task.make(
-  "a Bun.build entry built inline from new URL is checked like any file, and only a named tool file such as vite.config.ts has its exports read from outside, so another *.config.ts is checked at the package root or nested unless new URL names it",
-  Effect.gen(function* () {
+export const urlBuildEntriesAndConfigFilesAreExact = Task.make({
+  name: "a Bun.build entry built inline from new URL is checked like any file, and only a named tool file such as vite.config.ts has its exports read from outside, so another *.config.ts is checked at the package root or nested unless new URL names it",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -937,11 +938,11 @@ export const urlBuildEntriesAndConfigFilesAreExact = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const shorthandAndRenamedBindingsResolveToTheirValues = Task.make(
-  "a shorthand property uses the export it names, including in an exported default object, and a renamed destructured export is found by its binding name, not its property key",
-  Effect.gen(function* () {
+export const shorthandAndRenamedBindingsResolveToTheirValues = Task.make({
+  name: "a shorthand property uses the export it names, including in an exported default object, and a renamed destructured export is found by its binding name, not its property key",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -965,11 +966,11 @@ export const shorthandAndRenamedBindingsResolveToTheirValues = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const exportMapKeysMatchLikeNode = Task.make(
-  "an exports subpath is matched by its exact key or else the pattern with the longest prefix, so a more specific pattern exposes files that a broader null pattern hides",
-  Effect.gen(function* () {
+export const exportMapKeysMatchLikeNode = Task.make({
+  name: "an exports subpath is matched by its exact key or else the pattern with the longest prefix, so a more specific pattern exposes files that a broader null pattern hides",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
@@ -980,11 +981,11 @@ export const exportMapKeysMatchLikeNode = Task.make(
       }),
     ).toEqual([unused("src/public/secret.ts:1", "SECRET")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const exportsKeysFollowNodeRules = Task.make(
-  "an exports key with more than one * is not a pattern, and an exports object that mixes subpath and condition keys fails with PackageExportsMixKeys",
-  Effect.gen(function* () {
+export const exportsKeysFollowNodeRules = Task.make({
+  name: "an exports key with more than one * is not a pattern, and an exports object that mixes subpath and condition keys fails with PackageExportsMixKeys",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
@@ -1000,11 +1001,11 @@ export const exportsKeysFollowNodeRules = Task.make(
     }).pipe(failureAsValue);
     expect(failure._tag).toBe("PackageExportsMixKeys");
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const filesInImportCyclesArePlacedLikeAnyOther = Task.make(
-  "a file in an import cycle is reported like any other file, here as FileOutsideModuleLayout, and the cycle itself is left to the import/no-cycle lint rule",
-  Effect.gen(function* () {
+export const filesInImportCyclesArePlacedLikeAnyOther = Task.make({
+  name: "a file in an import cycle is reported like any other file, here as FileOutsideModuleLayout, and the cycle itself is left to the import/no-cycle lint rule",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1020,11 +1021,11 @@ export const filesInImportCyclesArePlacedLikeAnyOther = Task.make(
       }),
     ).toEqual([outsideModuleLayout("src/a.ts", "src")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const workerPreloadsAreReached = Task.make(
-  "a Worker preload named in a const options object or spread in from a parenthesized conditional options object is reached, so what it imports is used",
-  Effect.gen(function* () {
+export const workerPreloadsAreReached = Task.make({
+  name: "a Worker preload named in a const options object or spread in from a parenthesized conditional options object is reached, so what it imports is used",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1050,11 +1051,11 @@ export const workerPreloadsAreReached = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const looseFilesInAModuleAreOutsideTheLayout = Task.make(
-  "a used file directly in a module directory, or in a directory without an index.ts inside a module, is FileOutsideModuleLayout naming that module, while index files, declaration files, files in shared/ with two users pass, while a scripts/shared/ file used only directly in scripts/ belongs in scripts/internal/",
-  Effect.gen(function* () {
+export const looseFilesInAModuleAreOutsideTheLayout = Task.make({
+  name: "a used file directly in a module directory, or in a directory without an index.ts inside a module, is FileOutsideModuleLayout naming that module, while index files, declaration files, files in shared/ with two users pass, while a scripts/shared/ file used only directly in scripts/ belongs in scripts/internal/",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1112,11 +1113,11 @@ export const looseFilesInAModuleAreOutsideTheLayout = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const looseFilesWithoutUsedExportsAreStillOutsideTheLayout = Task.make(
-  "a file with no exports directly in a module directory, or in a directory without an index.ts inside a module, is still FileOutsideModuleLayout, a file nothing imports whose exports are unused is reported once, as UnusedExport, and declaration files pass",
-  Effect.gen(function* () {
+export const looseFilesWithoutUsedExportsAreStillOutsideTheLayout = Task.make({
+  name: "a file with no exports directly in a module directory, or in a directory without an index.ts inside a module, is still FileOutsideModuleLayout, a file nothing imports whose exports are unused is reported once, as UnusedExport, and declaration files pass",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1144,11 +1145,11 @@ export const looseFilesWithoutUsedExportsAreStillOutsideTheLayout = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sharedFilesNeedTwoUsers = Task.make(
-  "a shared/ file needs two distinct parts of its parent as users: two child modules, or the module itself and one child, pass, one child or the module alone is SharedFileWithOneUser naming that one part, users through another file of the same shared/ count, a nested module's shared/ counts its own parts, and a shared/ file nothing or only tests use is reported once, as UnusedExport or TestOnlyExport",
-  Effect.gen(function* () {
+export const sharedFilesNeedTwoUsers = Task.make({
+  name: "a shared/ file needs two distinct parts of its parent as users: two child modules, or the module itself and one child, pass, one child or the module alone is SharedFileWithOneUser naming that one part, users through another file of the same shared/ count, a nested module's shared/ counts its own parts, and a shared/ file nothing or only tests use is reported once, as UnusedExport or TestOnlyExport",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1214,13 +1215,13 @@ export const sharedFilesNeedTwoUsers = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const DECLARES_A_TEST = "export const PASSES = 1;\n";
 
-export const everyTestIsImportedByAScript = Task.make(
-  "a test that no script in scripts/ reaches through its imports is TestNotRun, while tests imported statically, by a literal import(), without their extension, through package.json imports, through tsconfig paths or by the package's own name pass, and a test imported only for its types is still TestNotRun",
-  Effect.gen(function* () {
+export const everyTestIsImportedByAScript = Task.make({
+  name: "a test that no script in scripts/ reaches through its imports is TestNotRun, while tests imported statically, by a literal import(), without their extension, through package.json imports, through tsconfig paths or by the package's own name pass, and a test imported only for its types is still TestNotRun",
+  run: Effect.gen(function* () {
     const violations = yield* everyPlacementViolationIn({
       "package.json":
         '{ "name": "probe", "type": "module", "imports": { "#tests/*": "./tests/*" }, "exports": { "./tests/*": "./tests/*" } }\n',
@@ -1255,11 +1256,11 @@ export const everyTestIsImportedByAScript = Task.make(
       ),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const looseFilesUsedThroughSharedCountItsUsers = Task.make(
-  "a loose file in a module whose only user is a file in the module's shared/ is FileOutsideModuleLayout whatever that file's users are, and a shared/ file that only the module itself uses is SharedFileWithOneUser",
-  Effect.gen(function* () {
+export const looseFilesUsedThroughSharedCountItsUsers = Task.make({
+  name: "a loose file in a module whose only user is a file in the module's shared/ is FileOutsideModuleLayout whatever that file's users are, and a shared/ file that only the module itself uses is SharedFileWithOneUser",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1285,11 +1286,11 @@ export const looseFilesUsedThroughSharedCountItsUsers = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const eachCauseIsReportedOnce = Task.make(
-  "a loose file nothing reaches is not FileOutsideModuleLayout",
-  Effect.gen(function* () {
+export const eachCauseIsReportedOnce = Task.make({
+  name: "a loose file nothing reaches is not FileOutsideModuleLayout",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": "export const MAIN = 1;\n",
@@ -1298,11 +1299,11 @@ export const eachCauseIsReportedOnce = Task.make(
       }),
     ).toEqual([unused("src/orphan.ts:1", "ORPHAN")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const sharedFilesNameTheOnePartThatUsesThem = Task.make(
-  "a shared/ file used only by one child module is SharedFileWithOneUser naming that child, counting users through the child's own shared/ as the child's",
-  Effect.gen(function* () {
+export const sharedFilesNameTheOnePartThatUsesThem = Task.make({
+  name: "a shared/ file used only by one child module is SharedFileWithOneUser naming that child, counting users through the child's own shared/ as the child's",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1331,11 +1332,11 @@ export const sharedFilesNameTheOnePartThatUsesThem = Task.make(
       }),
     ).toEqual([sharedByOne("src/main/shared/state.ts", "src/main", "src/main/workers")]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const directoriesWithoutIndexOutsideModulesKeepTheirLayout = Task.make(
-  "outside any module, a file is not placed by where its users sit and a shared/ file whose users sit in its own scope passes, while inside a module a directory without an index.ts is FileOutsideModuleLayout",
-  Effect.gen(function* () {
+export const directoriesWithoutIndexOutsideModulesKeepTheirLayout = Task.make({
+  name: "outside any module, a file is not placed by where its users sit and a shared/ file whose users sit in its own scope passes, while inside a module a directory without an index.ts is FileOutsideModuleLayout",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "package.json":
@@ -1357,11 +1358,11 @@ export const directoriesWithoutIndexOutsideModulesKeepTheirLayout = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make(
-  "outside every module, a file directly in a directory that has subdirectories holding code is FileBesideSubdirectories, while a shared/ file used only under one subdirectory passes, and a scripts/shared/ file used only directly in scripts/ belongs in scripts/internal/",
-  Effect.gen(function* () {
+export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make({
+  name: "outside every module, a file directly in a directory that has subdirectories holding code is FileBesideSubdirectories, while a shared/ file used only under one subdirectory passes, and a scripts/shared/ file used only directly in scripts/ belongs in scripts/internal/",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": "export const MAIN = 1;\n",
@@ -1391,7 +1392,7 @@ export const filesBesideSubdirectoriesOutsideModulesAreReported = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
 const TOOLS_SOURCES = {
   "src/index.ts": "export const MAIN = 1;\n",
@@ -1402,9 +1403,9 @@ const TOOLS_SOURCES = {
   "tools/gen/make.ts": "export const MAKE = 1;\n",
 };
 
-export const aNestedPackageJsonIsPlacedByItsName = Task.make(
-  'a directory whose package.json has no name, such as { "type": "module" }, or that holds a directory named package.json, is placed like one with no package.json, so a file in it beside subdirectories that hold code is FileBesideSubdirectories, while a package.json whose name is no string, such as { "name": 5 }, fails the check with PackageManifestUnreadable instead of counting as unnamed',
-  Effect.gen(function* () {
+export const aNestedPackageJsonIsPlacedByItsName = Task.make({
+  name: 'a directory whose package.json has no name, such as { "type": "module" }, or that holds a directory named package.json, is placed like one with no package.json, so a file in it beside subdirectories that hold code is FileBesideSubdirectories, while a package.json whose name is no string, such as { "name": 5 }, fails the check with PackageManifestUnreadable instead of counting as unnamed',
+  run: Effect.gen(function* () {
     for (const manifest of ['{ "type": "module" }\n', '{ "sideEffects": false }\n']) {
       expect(
         yield* placementViolationsIn({ ...TOOLS_SOURCES, "tools/package.json": manifest }),
@@ -1422,11 +1423,11 @@ export const aNestedPackageJsonIsPlacedByItsName = Task.make(
     );
     expect(failure).toBe("PackageManifestUnreadable");
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const subdivisionDependsOnSubdirectoriesAlone = Task.make(
-  "whether a directory has subdirectories that hold code depends only on those subdirectories, not on a package.json among the paths it is given, since those paths already leave out every directory whose package.json has a string name",
-  Effect.sync(() => {
+export const subdivisionDependsOnSubdirectoriesAlone = Task.make({
+  name: "whether a directory has subdirectories that hold code depends only on those subdirectories, not on a package.json among the paths it is given, since those paths already leave out every directory whose package.json has a string name",
+  run: Effect.sync(() => {
     const isSubdivided = isSubdividedAmong([
       "tools/package.json",
       "tools/run.ts",
@@ -1434,11 +1435,11 @@ export const subdivisionDependsOnSubdirectoriesAlone = Task.make(
     ]);
     expect(isSubdivided("tools")).toBe(true);
   }),
-);
+});
 
-export const anIndexInSharedDoesNotMakeAModule = Task.make(
-  "an index.ts directly in shared/ or internal/ is left to IndexInInternalOrShared and does not make that directory a module, so the files beside it are placed as files of that shared/ or internal/",
-  Effect.gen(function* () {
+export const anIndexInSharedDoesNotMakeAModule = Task.make({
+  name: "an index.ts directly in shared/ or internal/ is left to IndexInInternalOrShared and does not make that directory a module, so the files beside it are placed as files of that shared/ or internal/",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1455,11 +1456,11 @@ export const anIndexInSharedDoesNotMakeAModule = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
-  "an index.ts in a directory nested in an internal/ or shared/, at any depth, makes no module, so the files beside it are files nested in that internal/ or shared/, which are not placed",
-  Effect.gen(function* () {
+export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make({
+  name: "an index.ts in a directory nested in an internal/ or shared/, at any depth, makes no module, so the files beside it are files nested in that internal/ or shared/, which are not placed",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": 'import { A } from "./a/index.ts";\nexport const MAIN = A;\n',
@@ -1483,11 +1484,11 @@ export const anIndexNestedInInternalOrSharedMakesNoModule = Task.make(
       }),
     ).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const hiddenSourceDirectoriesSubdivideTheirParents = Task.make(
-  "a hidden directory holding sources subdivides its parent just like a visible directory",
-  Effect.gen(function* () {
+export const hiddenSourceDirectoriesSubdivideTheirParents = Task.make({
+  name: "a hidden directory holding sources subdivides its parent just like a visible directory",
+  run: Effect.gen(function* () {
     const violations = yield* placementViolationsIn({
       "src/index.ts": 'import { RUN } from "../tools/run.ts";\nexport const MAIN = RUN;\n',
       "tools/run.ts": 'import { STUB } from "./.generated/stub.ts";\nexport const RUN = STUB;\n',
@@ -1501,11 +1502,11 @@ export const hiddenSourceDirectoriesSubdivideTheirParents = Task.make(
     ]);
     expect(isSubdividedAmong(["tools/.child/index.ts"])("tools")).toBe(true);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const testNamedDirectoriesAreNeverSubdivided = Task.make(
-  "a directory named tests does not count as holding a subdirectory of source files, even when it holds one, while __tests__ and test count like any other name",
-  Effect.gen(function* () {
+export const testNamedDirectoriesAreNeverSubdivided = Task.make({
+  name: "a directory named tests does not count as holding a subdirectory of source files, even when it holds one, while __tests__ and test count like any other name",
+  run: Effect.gen(function* () {
     const violations = yield* placementViolationsIn({
       "src/index.ts": 'import { CASE } from "./suite/tests/case.ts";\nexport const MAIN = CASE;\n',
       "src/suite/tests/case.ts":
@@ -1521,11 +1522,11 @@ export const testNamedDirectoriesAreNeverSubdivided = Task.make(
       );
     }
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const modulesInLibraryDirectoriesArePlacedLikeAnyModule = Task.make(
-  "a module in a lib/ is a part of its parent, so a parent shared/ file used by two of them passes and one used by one of them is SharedFileWithOneUser naming it, while a file directly in a lib/ is FileOutsideModuleLayout naming the module that holds the lib/",
-  Effect.gen(function* () {
+export const modulesInLibraryDirectoriesArePlacedLikeAnyModule = Task.make({
+  name: "a module in a lib/ is a part of its parent, so a parent shared/ file used by two of them passes and one used by one of them is SharedFileWithOneUser naming it, while a file directly in a lib/ is FileOutsideModuleLayout naming the module that holds the lib/",
+  run: Effect.gen(function* () {
     expect(
       yield* placementViolationsIn({
         "src/index.ts": [
@@ -1559,4 +1560,4 @@ export const modulesInLibraryDirectoriesArePlacedLikeAnyModule = Task.make(
       ].toSorted(),
     );
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
-);
+});

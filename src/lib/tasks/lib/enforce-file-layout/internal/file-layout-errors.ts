@@ -1,10 +1,6 @@
 import { Effect, Schema } from "effect";
 
-import {
-  TASK_MAIN_MEMBER,
-  TASK_NAMESPACE_EXPORT,
-  TASK_PACKAGE,
-} from "../../../../../shared/bans-each-permission-lifts.ts";
+import { TASK_PACKAGE } from "../../../../../shared/bans-each-permission-lifts.ts";
 import { LINT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
 import { listedViolations } from "../../../../../shared/format-reported-failures.ts";
 import {
@@ -68,37 +64,21 @@ export class TopLevelNonScript extends Schema.TaggedError<TopLevelNonScript>()(
   }
 }
 
-export class TopLevelScriptWithoutMain extends Schema.TaggedError<TopLevelScriptWithoutMain>()(
-  "TopLevelScriptWithoutMain",
+export class TopLevelScriptWithoutDefaultExport extends Schema.TaggedError<TopLevelScriptWithoutDefaultExport>()(
+  "TopLevelScriptWithoutDefaultExport",
   { location: Schema.String },
 ) {
   public override get message() {
-    return `sits directly in ${SCRIPTS_DIRECTORY}/ and neither calls ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER} imported from ${TASK_PACKAGE} nor has a default export`;
+    return `sits directly in ${SCRIPTS_DIRECTORY}/ and has no default export`;
   }
 }
-
-const SCRIPT_ENTRY_POINTS = ["main-guard", "default-export"] as const;
-
-const STATEMENTS_A_SCRIPT_MAY_HOLD = {
-  "main-guard": `an import and if (import.meta.main) { ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER}(task); }`,
-  "default-export": "an import and export default task",
-} satisfies Record<(typeof SCRIPT_ENTRY_POINTS)[number], string>;
 
 export class TopLevelScriptHoldsOtherStatement extends Schema.TaggedError<TopLevelScriptHoldsOtherStatement>()(
   "TopLevelScriptHoldsOtherStatement",
-  { location: Schema.String, entryPoint: Schema.Literals(SCRIPT_ENTRY_POINTS) },
-) {
-  public override get message() {
-    return `holds a statement other than ${STATEMENTS_A_SCRIPT_MAY_HOLD[this.entryPoint]}`;
-  }
-}
-
-export class TopLevelScriptWithMainAndDefaultExport extends Schema.TaggedError<TopLevelScriptWithMainAndDefaultExport>()(
-  "TopLevelScriptWithMainAndDefaultExport",
   { location: Schema.String },
 ) {
   public override get message() {
-    return `calls ${TASK_NAMESPACE_EXPORT}.${TASK_MAIN_MEMBER} and also has a default export. Keep one of them`;
+    return "holds a statement other than an import and export default task";
   }
 }
 
@@ -376,10 +356,9 @@ export class DirectoryGrantedPermissions extends Schema.TaggedError<DirectoryGra
   }
 }
 
-const MISPLACEMENT_PLACES = ["root-task-script", "root-code-file", "docs-non-markdown"] as const;
+const MISPLACEMENT_PLACES = ["root-code-file", "docs-non-markdown"] as const;
 
 const MISPLACEMENTS = {
-  "root-task-script": "is a task script at the package root",
   "root-code-file": "is code at the package root",
   "docs-non-markdown": `is not markdown but sits in ${DOCS_DIRECTORY}/`,
 } satisfies Record<(typeof MISPLACEMENT_PLACES)[number], string>;
@@ -402,9 +381,8 @@ export class FileLayoutViolations extends Schema.TaggedError<FileLayoutViolation
         MisplacedToolFile,
         BunTestFileName,
         TopLevelNonScript,
-        TopLevelScriptWithoutMain,
+        TopLevelScriptWithoutDefaultExport,
         TopLevelScriptHoldsOtherStatement,
-        TopLevelScriptWithMainAndDefaultExport,
         LibraryDirectory,
         DirectoryOutsideModuleLayout,
         ModuleWithoutIndex,

@@ -1,8 +1,9 @@
 import { Task } from "@sshkeda/task";
-import { Effect, Path } from "effect";
+import { Effect, Path, Schema } from "effect";
 
 import { projectDirectory } from "../../../../project-directory/index.ts";
 import { inEachPackage, packageDirectoriesIn } from "../../../shared/check-each-nested-package.ts";
+import { startDirectory } from "../../../shared/declare-start-directory-task.ts";
 import { ownedFilesAmong } from "../../../shared/list-owned-files.ts";
 import { listedPackageFiles } from "../../../shared/list-package-files.ts";
 import { quietViolations } from "../../../shared/print-failures-and-keep-detail-in-the-trace.ts";
@@ -20,9 +21,19 @@ const ownedFilesOfPackage = (checkedProject: string, packageDirectory: string) =
     return { directory: packageDirectory, files: yield* ownedFilesAmong(directory, packageFiles) };
   });
 
-const formatterFiles = Task.make(
-  "formatter-files",
-  Effect.gen(function* () {
+const FilesOfEachPackage = Schema.Struct({
+  checkedProject: Schema.String,
+  filesOfEachPackage: Schema.Array(
+    Schema.Struct({ directory: Schema.String, files: Schema.Array(Schema.String) }),
+  ),
+  packageFiles: Schema.Array(Schema.String),
+});
+
+const formatterFiles = Task.make({
+  name: "formatter-files",
+  output: FilesOfEachPackage,
+  run: Effect.gen(function* () {
+    yield* startDirectory;
     const path = yield* Path.Path;
     const checkedProject = yield* projectDirectory;
     const filesOfEachPackage = yield* Effect.forEach(
@@ -42,11 +53,11 @@ const formatterFiles = Task.make(
     locatedFromTheProject,
     Effect.provide(ProjectQueryCachesLive),
   ),
-);
+});
 
-const formatInputs = Task.make(
-  "format-inputs",
-  Effect.flatMap(formatterFiles, ({ filesOfEachPackage }) =>
+const formatInputs = Task.make({
+  name: "format-inputs",
+  run: Effect.flatMap(formatterFiles, ({ filesOfEachPackage }) =>
     inEachPackage("format-inputs", (packageDirectory, packageDirectoryFromTheProject) =>
       checkedFormatInputsIn(
         packageDirectory,
@@ -55,11 +66,11 @@ const formatInputs = Task.make(
       ).pipe(quietViolations("format-inputs")),
     ),
   ),
-);
+});
 
-const unformattedFiles = Task.make(
-  "bun-fmt",
-  Effect.andThen(
+const unformattedFiles = Task.make({
+  name: "bun-fmt",
+  run: Effect.andThen(
     inEachPackage("bun-fmt", (packageDirectory) =>
       checkedFormatConfigIn(packageDirectory).pipe(quietViolations("bun-fmt")),
     ),
@@ -67,9 +78,9 @@ const unformattedFiles = Task.make(
       unformattedFilesAmong(checkedProject, packageFiles),
     ),
   ).pipe(Effect.provide(ProjectQueryCachesLive)),
-);
+});
 
-export const formatting = Task.make(
-  "formatting",
-  Task.allSettled([formatInputs, unformattedFiles]),
-);
+export const formatting = Task.make({
+  name: "formatting",
+  run: Task.allSettled([formatInputs, unformattedFiles]),
+});
