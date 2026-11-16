@@ -3,10 +3,12 @@ import { Array as Arrays, Result, Schema, SchemaIssue } from "effect";
 import {
   BANS_NO_GRANT_LIFTS,
   bansNoGrantLifts,
+  CONSOLE_METHODS,
   GRANTABLE_BAN_NAMES,
   HANDLES_EVERY_FAILURE,
   PERMISSION_BANS,
   READS_CONFIG,
+  REPLACES_THE_CONSOLE,
   RULES_EACH_PERMISSION_LIFTS,
   SHORT_NAMES,
   TRUSTS_UNVERIFIED_TYPES,
@@ -29,6 +31,9 @@ export const UNNAMED_FALLBACKS_RULE = "no-unnamed-fallbacks";
 export const FIXED_FALLBACKS = "fallsBackToFixedValues";
 export const FIXED_FALLBACKS_RULE = "no-fixed-fallbacks";
 export const FIXED_FALLBACKS_GRANTED = "granted";
+export const NO_CONSOLE_RULE = "eslint/no-console";
+export const NODE_CONSOLE_RULE = "no-node-console";
+export const CONSOLE_REPLACED = "replaced";
 const SCHEDULES = "pollsWithADeadline";
 const TIMERS = "waitsOnTimers";
 export const SCHEDULES_RULE = "no-schedules";
@@ -56,6 +61,7 @@ export const PERMISSION_NAMES = [
   TRUSTS_UNVERIFIED_TYPES,
   HANDLES_EVERY_FAILURE,
   FIXED_FALLBACKS,
+  REPLACES_THE_CONSOLE,
   GENERATED,
 ] as const;
 
@@ -87,7 +93,7 @@ const severityOnceGranted = (permission: keyof typeof PERMISSION_BANS) =>
 
 const ruleSeverities = (
   severities: Readonly<
-    Record<string, readonly ["error", Readonly<Record<string, string>>] | "off">
+    Record<string, readonly ["error", Readonly<Record<string, string[] | string>>] | "off">
   >,
 ) => Object.entries(severities);
 
@@ -127,6 +133,12 @@ const rulesGrantedBy = (permission: (typeof PERMISSION_NAMES)[number]) => {
       [`sshkeda/${FIXED_FALLBACKS_RULE}`]: ["error", { fixedFallbacks: FIXED_FALLBACKS_GRANTED }],
     } as const);
   }
+  if (permission === REPLACES_THE_CONSOLE) {
+    return ruleSeverities({
+      [`sshkeda/${NODE_CONSOLE_RULE}`]: ["error", { console: CONSOLE_REPLACED }],
+      [NO_CONSOLE_RULE]: ["error", { allow: [...CONSOLE_METHODS] }],
+    });
+  }
   if (permission === TRUSTS_UNVERIFIED_TYPES) {
     return ruleSeverities({
       [permissionBanRuleId(permission)]: "off",
@@ -152,6 +164,7 @@ export const CODE_GRANTS = [
   SCHEDULES,
   SHORT_NAMES,
   TRUSTS_UNVERIFIED_TYPES,
+  REPLACES_THE_CONSOLE,
 ] as const;
 
 const isCodeGrant = Schema.is(Schema.Literals(CODE_GRANTS));

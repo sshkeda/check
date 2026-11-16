@@ -117,6 +117,8 @@ done
 exit 0
 `;
 
+const AWAIT_A_LISTED_PROCESS = `until [ -s "$1" ]; do sleep 0.05; done`;
+
 const fakeTypeScriptApi = (mode: string, trigger: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -159,6 +161,12 @@ const fakeTypeScriptApi = (mode: string, trigger: string) =>
     );
     return {
       tsserverPath,
+      awaitLaunch: Task.exec("sh", [
+        "-c",
+        AWAIT_A_LISTED_PROCESS,
+        "await-launch",
+        launchedProcesses,
+      ]).pipe(Effect.asVoid),
       launched,
       real,
       living: launched.pipe(Effect.flatMap(livingOf)),
@@ -171,13 +179,17 @@ const parsed = (api: API, file: string) =>
     Effect.map((failure) => failure.message),
   );
 
-const failuresOfConcurrentAndLaterParses = (
-  tsserverPath: string,
+const failuresOfConcurrentAndLaterParses = <Failure, Requirements>(
+  fake: {
+    readonly tsserverPath: string;
+    readonly awaitLaunch: Effect.Effect<void, Failure, Requirements>;
+  },
   concurrentFiles: readonly string[],
   requestDeadline: `${number} ${Duration.Unit}` = "10 minutes",
 ) =>
   Effect.gen(function* () {
     const api = yield* openedApi(new Map());
+    yield* fake.awaitLaunch;
     const concurrent = yield* Effect.forEach(concurrentFiles, (file) => parsed(api, file), {
       concurrency: "unbounded",
     });
@@ -185,7 +197,10 @@ const failuresOfConcurrentAndLaterParses = (
     return { concurrent, later };
   }).pipe(
     Effect.scoped,
-    Effect.provideService(TypeScriptApiLaunch, { tsserverPath, requestDeadline }),
+    Effect.provideService(TypeScriptApiLaunch, {
+      tsserverPath: fake.tsserverPath,
+      requestDeadline,
+    }),
   );
 
 const failedToParse = (file: string, reason: string) =>
@@ -198,10 +213,7 @@ export const pendingRequestsFailWhenTheProcessExits = Task.make({
     Effect.gen(function* () {
       const fake = yield* fakeTypeScriptApi("exit", "3");
       const files = ["/project/a.json", "/project/b.json", "/project/c.json"];
-      const { concurrent, later } = yield* failuresOfConcurrentAndLaterParses(
-        fake.tsserverPath,
-        files,
-      );
+      const { concurrent, later } = yield* failuresOfConcurrentAndLaterParses(fake, files);
       const exited = "the TypeScript API process exited with code 23";
       expect(concurrent).toEqual(files.map((file) => failedToParse(file, exited)));
       expect(later).toBe(failedToParse("/project/later.json", exited));
@@ -218,10 +230,7 @@ export const pendingRequestsFailWhenTheProcessClosesItsOutput = Task.make({
     Effect.gen(function* () {
       const fake = yield* fakeTypeScriptApi("close-output", "2");
       const files = ["/project/a.json", "/project/b.json"];
-      const { concurrent, later } = yield* failuresOfConcurrentAndLaterParses(
-        fake.tsserverPath,
-        files,
-      );
+      const { concurrent, later } = yield* failuresOfConcurrentAndLaterParses(fake, files);
       const closed = "the TypeScript API process closed its output";
       expect(concurrent).toEqual(files.map((file) => failedToParse(file, closed)));
       expect(later).toBe(failedToParse("/project/later.json", closed));
@@ -262,7 +271,7 @@ export const unansweredRequestsFailAtTheDeadline = Task.make({
     Effect.gen(function* () {
       const fake = yield* fakeTypeScriptApi("silent", "1");
       const { concurrent, later } = yield* failuresOfConcurrentAndLaterParses(
-        fake.tsserverPath,
+        fake,
         ["/project/a.json"],
         "200 millis",
       );

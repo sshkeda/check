@@ -2,6 +2,7 @@ import type { Context, CreateRule, Visitor } from "@oxlint/plugins";
 import { Schema } from "effect";
 
 import {
+  CONSOLE,
   HANDLES_EVERY_FAILURE,
   PERMISSION_BANS,
   RULES_EACH_PERMISSION_LIFTS,
@@ -14,6 +15,8 @@ import {
   CODE_GRANTS,
   FAILURES_AS_RESULTS_RULE,
   INSIDE_THE_TEST_HOME,
+  NO_CONSOLE_RULE,
+  NODE_CONSOLE_RULE,
   rulesACodeGrantChanges,
   SCHEDULES_RULE,
   SLEEP_RULE,
@@ -30,17 +33,41 @@ import { noClockReadsAndSleeps } from "./ban-reading-the-clock-and-sleeping-outs
 import { noSchedules } from "./ban-timer-schedules-without-deadlines.ts";
 import { noTypePredicates } from "./ban-type-predicates.ts";
 import { mergedVisitors, permissionBanRule } from "./ban-what-a-file-is-not-granted.ts";
+import { noNodeConsole } from "./confine-node-console-to-its-console-export.ts";
 import { decodeRuleOptions, ruleOptionsJsonSchema } from "./describe-and-decode-rule-options.ts";
+import { isGlobalReference, memberName } from "./resolve-what-an-expression-imports.ts";
 
-const RULES_CODE_GRANTS_CHANGE: ReadonlyMap<
+const NO_CONSOLE_OPTIONS = Schema.Struct({
+  allow: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+const consoleMembersNoConsoleReports = {
+  create(context: Pick<Context, "options" | "report" | "sourceCode">) {
+    const allowed = new Set(decodeRuleOptions(NO_CONSOLE_OPTIONS, context.options)?.allow);
+    return {
+      MemberExpression(node) {
+        const name = memberName(node);
+        const isReported =
+          isGlobalReference(node.object, context.sourceCode, CONSOLE) &&
+          (name === undefined || !allowed.has(name));
+        if (isReported) {
+          context.report({ node, message: name ?? CONSOLE });
+        }
+      },
+    } satisfies Visitor;
+  },
+};
+
+const RULES_CODE_GRANTS_CHANGE = new Map<
   string,
   {
     readonly create: (context: Pick<Context, "options" | "report" | "sourceCode">) => Visitor;
   }
-> = new Map(
-  Object.entries({
+>([
+  ...Object.entries({
     [PERMISSION_BANS[HANDLES_EVERY_FAILURE].ruleName]: permissionBanRule(HANDLES_EVERY_FAILURE),
     [PERMISSION_BANS[TRUSTS_UNVERIFIED_TYPES].ruleName]: permissionBanRule(TRUSTS_UNVERIFIED_TYPES),
+    [NODE_CONSOLE_RULE]: noNodeConsole,
     [FAILURES_AS_RESULTS_RULE]: noFailuresAsResults,
     [UNNAMED_FALLBACKS_RULE]: noUnnamedFallbacks,
     [SLEEP_RULE]: effectOperationRule(SLEEP_RULE),
@@ -50,7 +77,8 @@ const RULES_CODE_GRANTS_CHANGE: ReadonlyMap<
     [RULES_EACH_PERMISSION_LIFTS[SHORT_NAMES]]: noAbbreviations,
     [TYPE_PREDICATES_RULE]: noTypePredicates,
   }).map(([name, rule]) => [`sshkeda/${name}`, rule] as const),
-);
+  [NO_CONSOLE_RULE, consoleMembersNoConsoleReports],
+]);
 
 const UNUSED_CODE_GRANT_OPTIONS = Schema.Struct({
   permissions: Schema.optionalKey(Schema.Array(Schema.Literals(CODE_GRANTS))),

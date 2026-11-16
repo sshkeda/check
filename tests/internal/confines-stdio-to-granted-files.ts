@@ -199,7 +199,7 @@ export const stdioUsesOtherThanArgumentReadsAreAllowed = Task.make({
 });
 
 export const terminalWritesNeedTheConsolePermission = Task.make({
-  name: "no-terminal-writes refuses Effect Console, node:console under any of its names, process.stdout, process.stderr, Bun.stdout and Bun.stderr however they are reached, in every file, even one granted writesToTheTerminal, and leaves type imports, Effect.log, stdin and lookalikes alone",
+  name: "no-terminal-writes refuses Effect Console, process.stdout, process.stderr, Bun.stdout and Bun.stderr however they are reached, in every file, even one granted writesToTheTerminal, and leaves type imports, Effect.log, stdin and lookalikes alone",
   run: ruleTest("no-terminal-writes", {
     valid: [
       'import type { Console } from "effect"; type Sink = Console.Console;',
@@ -225,12 +225,6 @@ export const terminalWritesNeedTheConsolePermission = Task.make({
       "const { stdout } = process; stdout.write('ready');",
       'import { stderr } from "node:process"; stderr.write("failed");',
       'import { stdout } from "bun"; stdout.writer();',
-      ...["node:console", "console", "bun:console"].flatMap((specifier) => [
-        `import { log } from "${specifier}"; log("x");`,
-        `import terminal from "${specifier}"; terminal.log("x");`,
-        `import * as terminal from "${specifier}"; terminal.error("x");`,
-        `import { Console } from "${specifier}"; new Console(stream).log("x");`,
-      ]),
     ].flatMap((code) => [
       { code, errors: [{ messageId: "bannedEvenWhenGranted" }] },
       {
@@ -239,6 +233,46 @@ export const terminalWritesNeedTheConsolePermission = Task.make({
         errors: [{ messageId: "bannedEvenWhenGranted" }],
       },
     ]),
+  }),
+});
+
+const NODE_CONSOLE_NAMES = ["node:console", "console", "bun:console"] as const;
+
+const CONSOLE_REPLACED = [{ console: "replaced" }] as const;
+
+export const nodeConsoleNeedsTheConsoleReplacementGrant = Task.make({
+  name: "no-node-console decides once at each import of node:console under any of its names: only named Console imports pass, and only in a file granted replacesTheConsole, while any other form, a mix with Console or import() included, is reported once in every file however it is used, and a type import is left alone",
+  run: ruleTest("no-node-console", {
+    valid: NODE_CONSOLE_NAMES.flatMap((specifier) => [
+      { code: `import type { Console } from "${specifier}"; type Sink = Console;` },
+      {
+        code: `import { Console } from "${specifier}"; new Console(stream).log("x");`,
+        options: CONSOLE_REPLACED,
+      },
+      {
+        code: `import { Console as Formatter } from "${specifier}"; new Formatter(stream);`,
+        options: CONSOLE_REPLACED,
+      },
+    ]),
+    invalid: [
+      ...NODE_CONSOLE_NAMES.map((specifier) => ({
+        code: `import { Console } from "${specifier}"; new Console(stream).log("x");`,
+        errors: [{ messageId: "outsideTheGrant" }],
+      })),
+      ...NODE_CONSOLE_NAMES.flatMap((specifier) => [
+        `import { Console, log } from "${specifier}"; log("x");`,
+        `import { log } from "${specifier}"; log("x");`,
+        `import terminal from "${specifier}"; terminal.log("x");`,
+        `import * as terminal from "${specifier}"; new terminal.Console(stream);`,
+        `import * as terminal from "${specifier}"; new (terminal satisfies typeof terminal).Console(stream);`,
+        `new terminal.Console(stream); import * as terminal from "${specifier}";`,
+        `import * as terminal from "${specifier}"; const { Console } = terminal;`,
+        `import("${specifier}");`,
+      ]).flatMap((code) => [
+        { code, errors: [{ messageId: "forbiddenForm" }] },
+        { code, options: CONSOLE_REPLACED, errors: [{ messageId: "forbiddenForm" }] },
+      ]),
+    ],
   }),
 });
 

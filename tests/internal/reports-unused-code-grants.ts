@@ -25,7 +25,7 @@ const inModule = (...declarations: readonly string[]) => [IMPORTS, ...declaratio
 const NOTHING_GRANTED = inModule("export const VALUE = 1;");
 
 export const codeGrantsNothingUsesAreReported = Task.make({
-  name: "no-unused-code-grants reports each granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes once when no rule it lifts or relaxes would report anything in the file, counting only rules that run where the file sits",
+  name: "no-unused-code-grants reports each granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations, trustsUnverifiedTypes or replacesTheConsole once when no rule it lifts or relaxes would report anything in the file, counting only rules that run where the file sits",
   run: ruleTest("no-unused-code-grants", {
     valid: [
       NOTHING_GRANTED,
@@ -77,6 +77,14 @@ export const codeGrantsNothingUsesAreReported = Task.make({
         code: inModule('export const paused = Effect.sleep("1 second"); export const args = [];'),
         options: granted("waitsOnTimers", "usesAbbreviations"),
       },
+      {
+        code: "const original = console.warn; export const replace = () => { console.warn = original; };",
+        options: granted("replacesTheConsole"),
+      },
+      {
+        code: 'import { Console as Formatter } from "node:console"; export const formatter = (stream) => new Formatter(stream);',
+        options: granted("replacesTheConsole"),
+      },
     ],
     invalid: [
       {
@@ -120,6 +128,17 @@ export const codeGrantsNothingUsesAreReported = Task.make({
         options: granted("trustsUnverifiedTypes"),
         errors: [unused("trustsUnverifiedTypes")],
       },
+      ...[
+        "export const methods = Object.entries(console);",
+        "export const stream = console._stdout;",
+        'export const stream = console["_stdout"];',
+        'import { Console, log } from "node:console"; export const formatter = (stream) => [new Console(stream), log];',
+        'import * as terminal from "node:console"; export const formatter = (stream) => new terminal.Console(stream);',
+      ].map((code) => ({
+        code,
+        options: granted("replacesTheConsole"),
+        errors: [unused("replacesTheConsole")],
+      })),
     ],
   }),
 });
