@@ -109,6 +109,29 @@ export const CREATE_REQUIRE_VALUE_USAGE = "createRequire used other than by a ca
 
 export const TRUSTS_UNVERIFIED_TYPES = "trustsUnverifiedTypes";
 export const WRITES_TO_THE_TERMINAL = "writesToTheTerminal";
+export const REPLACES_THE_CONSOLE = "replacesTheConsole";
+export const CONSOLE = "console";
+export const CONSOLE_METHODS = [
+  "log",
+  "warn",
+  "error",
+  "info",
+  "debug",
+  "dir",
+  "dirxml",
+  "table",
+  "trace",
+  "assert",
+  "clear",
+  "count",
+  "countReset",
+  "group",
+  "groupCollapsed",
+  "groupEnd",
+  "time",
+  "timeEnd",
+  "timeLog",
+] as const;
 export const READS_CONFIG = "readsConfig";
 const LOCKS_FILES = "locksFiles";
 export const HANDLES_EVERY_FAILURE = "handlesEveryFailure";
@@ -344,7 +367,6 @@ const GRANTABLE_BANS = {
         "{{usage}} writes to the terminal in a way no file may; write through the Effect Stdio service in a file allowed writesToTheTerminal",
       bans: [
         effectMembersBan([["Console"]]),
-        moduleBan(["node:console"]),
         globalMembersBan("process", ["stdout", "stderr"]),
         globalMembersBan("Bun", ["stdout", "stderr"]),
       ],

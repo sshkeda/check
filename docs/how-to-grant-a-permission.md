@@ -25,4 +25,5 @@ export default lintConfig({
 - `trustsUnverifiedTypes`: Allows trusting a value's type without checking it, through `Schema.declare`.
 - `handlesEveryFailure`: Allows catching every error, through `Effect.catch`, `Effect.exit`, a forked fiber or `Effect.runPromise`.
 - `fallsBackToFixedValues`: Allows answering every failure, or a whole library error such as `PlatformError`, with a fixed value that never reads the failure.
+- `replacesTheConsole`: Allows `Console` from `node:console`, and reading, calling and assigning these members of the global `console` by name: `log`, `warn`, `error`, `info`, `debug`, `dir`, `dirxml`, `table`, `trace`, `assert`, `clear`, `count`, `countReset`, `group`, `groupCollapsed`, `groupEnd`, `time`, `timeEnd` and `timeLog`.
 - `isGeneratedByATool`: Check skips this path, so it can't have any other permission.

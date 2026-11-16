@@ -2,6 +2,7 @@ import { eslintCompatPlugin } from "@oxlint/plugins";
 import { Record } from "effect";
 
 import {
+  CONSOLE,
   everyBanOf,
   IMPORT_META,
   moduleSpecifiersOfGlobalObject,
@@ -18,6 +19,7 @@ import {
   permissionBanRuleId,
   FAILURES_AS_RESULTS_RULE,
   FIXED_FALLBACKS_RULE,
+  NODE_CONSOLE_RULE,
   STDIO_SERVICE_RULE,
   TEST_TIMEOUTS_RULE,
   TYPE_PREDICATES_RULE,
@@ -60,6 +62,7 @@ import { noVagueFileNames } from "./ban-vague-file-names.ts";
 import { permissionBanRule } from "./ban-what-a-file-is-not-granted.ts";
 import { noWhile } from "./ban-while-do-while-and-for-loops.ts";
 import { noSharedHolders } from "./ban-writing-captured-objects-inside-effect-callbacks.ts";
+import { noNodeConsole } from "./confine-node-console-to-its-console-export.ts";
 import {
   noServiceDeclarations,
   noUnusedServiceGrants,
@@ -105,8 +108,6 @@ export const RESTRICTED_IMPORT_PATHS = RESTRICTED_PROPERTIES.flatMap(({ object, 
   })),
 );
 
-const CONSOLE = "console";
-
 const GLOBALS_WHOSE_MEMBERS_OTHER_RULES_BAN = ["Atomics", "Intl", "Number"] as const;
 
 const GLOBALS_WHOSE_MEMBERS_PERMISSIONS_BAN = Object.values(PERMISSION_BANS)
@@ -147,6 +148,7 @@ const NAMED_RULES = {
   "no-declared-values": noDeclaredValues,
   [TYPE_PREDICATES_RULE]: noTypePredicates,
   [STDIO_SERVICE_RULE]: noStdioService,
+  [NODE_CONSOLE_RULE]: noNodeConsole,
   [FAILURES_AS_RESULTS_RULE]: noFailuresAsResults,
   "no-overloads": noOverloads,
   "no-re-exports": noReExports,

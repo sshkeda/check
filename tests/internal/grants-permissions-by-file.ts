@@ -183,10 +183,11 @@ const CODE_GRANTS = [
   "pollsWithADeadline",
   "usesAbbreviations",
   "trustsUnverifiedTypes",
+  "replacesTheConsole",
 ] as const;
 
 export const codeGrantsThatLiftNothingAreReported = Task.make({
-  name: "a file granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations or trustsUnverifiedTypes that uses nothing the grant allows is reported once per permission at its first line, and a grant the file uses is not, in the test home as elsewhere",
+  name: "a file granted handlesEveryFailure, waitsOnTimers, pollsWithADeadline, usesAbbreviations, trustsUnverifiedTypes or replacesTheConsole that uses nothing the grant allows is reported once per permission at its first line, and a grant the file uses is not, in the test home as elsewhere",
   run: Effect.gen(function* () {
     const output = yield* lintWithPermissions(
       `{ "src/idle.ts": { allow: ${yield* encodeJson(CODE_GRANTS)} }, "src/catches.ts": { allow: ["handlesEveryFailure"] }, "tests/bounded.ts": { allow: ["pollsWithADeadline"] }, "tests/idle.ts": { allow: ["pollsWithADeadline"] } }`,
@@ -843,18 +844,24 @@ new bunTerminal.Console(stream).log("x");
 `;
 
 export const createdRequiresAndNodeConsoleStayBanned = Task.make({
-  name: "a file granted every permission may not load a module through the require createRequire returns, and no file may write through node:console under any of its names",
+  name: "a file granted every permission may not load a module through the require createRequire returns, and no file, one granted replacesTheConsole included, may import node:console under any of its names other than its Console export",
   run: Effect.gen(function* () {
     const loads = yield* lintWithPermissions(`{ "load.ts": ${ALL_PERMISSIONS} }`, {
       "load.ts": LOADS_THROUGH_A_CREATED_REQUIRE,
     });
     expect(loads).toContain("a require createRequire returns loads code in a way no file may");
-    for (const permissions of ["{}", `{ "write.ts": ${ALL_PERMISSIONS} }`]) {
+    for (const permissions of [
+      "{}",
+      `{ "write.ts": ${ALL_PERMISSIONS} }`,
+      '{ "write.ts": { allow: ["replacesTheConsole"] } }',
+    ]) {
       const writes = yield* lintWithPermissions(permissions, {
         "write.ts": WRITES_THROUGH_NODE_CONSOLE,
       });
       for (const module of ["node:console", "console", "bun:console"]) {
-        expect(writes).toContain(`${module} writes to the terminal in a way no file may`);
+        expect(writes).toContain(
+          `${module} is imported in a way no file may. A file allowed replacesTheConsole may import only Console from node:console`,
+        );
       }
     }
   }).pipe(Effect.scoped),
@@ -1097,5 +1104,93 @@ export const fixedFallbacksNeedAGrant = Task.make({
     expect(unused).toContain(
       `src/listed.ts:1:1: error sshkeda(no-fixed-fallbacks): ${UNUSED_FIXED_FALLBACKS_GRANT}`,
     );
+  }).pipe(Effect.scoped),
+});
+
+const REPLACES_THE_CONSOLE_SOURCE = `import { Console } from "node:console";
+
+const originalLog = console.log;
+export const formatter = (stream: NodeJS.WritableStream) => new Console(stream);
+export const replace = () => {
+  console.log = (...values: unknown[]) => {
+    originalLog(...values);
+  };
+};
+`;
+
+const REPLACES_ONLY_THE_METHODS_SOURCE = `const originalWarn = console.warn;
+export const replace = () => {
+  console.warn = originalWarn;
+};
+`;
+
+const FORMATS_ONLY_THROUGH_NODE_CONSOLE_SOURCE = `import { Console } from "node:console";
+
+export const formatter = (stream: NodeJS.WritableStream) => new Console(stream);
+`;
+
+const REACHES_THE_STREAM_SOURCE = `import { Console as Terminal } from "effect";
+import { log } from "node:console";
+
+const terminal = console;
+export const stream: unknown = console._stdout;
+export const named: unknown = console["_stderr"];
+export const listed = () => [terminal, log];
+export const greet = Terminal.log("hi");
+export const written = () => process.stdout.write("hi");
+`;
+
+const UNUSED_CONSOLE_GRANT =
+  "error sshkeda(no-unused-code-grants): this file is granted replacesTheConsole, but uses nothing replacesTheConsole allows";
+
+const NO_CONSOLE = "error eslint(no-console): Unexpected console statement.";
+
+export const consoleReplacementNeedsAGrant = Task.make({
+  name: "Console from node:console and the console's methods named one by one are refused outside a file granted replacesTheConsole, while the whole console, its other members, other imports of node:console, Effect Console and process.stdout stay refused in a granted file, and a granted file that uses neither is reported",
+  run: Effect.gen(function* () {
+    const ungranted = yield* lintWithPermissions("{}", {
+      "src/replace-console.ts": REPLACES_THE_CONSOLE_SOURCE,
+    });
+    expect(ungranted).toContain(
+      "src/replace-console.ts:1:25: error sshkeda(no-node-console): Console from node:console is used outside a file allowed replacesTheConsole",
+    );
+    for (const place of ["3:21", "6:3"]) {
+      expect(ungranted).toContain(`src/replace-console.ts:${place}: ${NO_CONSOLE}`);
+    }
+    const granted = yield* lintWithPermissions(
+      '{ "src/replace-console.ts": { allow: ["replacesTheConsole"] }, "src/replace-methods.ts": { allow: ["replacesTheConsole"] }, "src/format-text.ts": { allow: ["replacesTheConsole"] }, "src/reach-the-stream.ts": { allow: ["replacesTheConsole"] } }',
+      {
+        "src/replace-console.ts": REPLACES_THE_CONSOLE_SOURCE,
+        "src/replace-methods.ts": REPLACES_ONLY_THE_METHODS_SOURCE,
+        "src/format-text.ts": FORMATS_ONLY_THROUGH_NODE_CONSOLE_SOURCE,
+        "src/reach-the-stream.ts": REACHES_THE_STREAM_SOURCE,
+      },
+    );
+    expect(granted).not.toContain("src/replace-console.ts");
+    expect(granted).not.toContain("src/replace-methods.ts");
+    expect(granted).not.toContain("src/format-text.ts");
+    for (const report of [
+      "2:21: error sshkeda(no-node-console): node:console is imported in a way no file may. A file allowed replacesTheConsole may import only Console from node:console",
+      "4:18: error sshkeda(no-namespace-aliases): console is used without naming a member",
+      `5:32: ${NO_CONSOLE}`,
+      `6:31: ${NO_CONSOLE}`,
+      "8:22: error sshkeda(no-terminal-writes): Console.log writes to the terminal in a way no file may",
+      "9:30: error sshkeda(no-terminal-writes): process.stdout writes to the terminal in a way no file may",
+    ]) {
+      expect(granted).toContain(`src/reach-the-stream.ts:${report}`);
+    }
+    const unused = yield* lintWithPermissions(
+      '{ "src/replace-console.ts": { allow: ["replacesTheConsole"] }, "src/mix-imports.ts": { allow: ["replacesTheConsole"] } }',
+      {
+        "src/replace-console.ts": "export const IDLE = 1;\n",
+        "src/mix-imports.ts":
+          'import { Console, log } from "node:console";\n\nexport const formatter = (stream: NodeJS.WritableStream) => [new Console(stream), log];\n',
+      },
+    );
+    expect(unused).toContain(`src/replace-console.ts:1:1: ${UNUSED_CONSOLE_GRANT}`);
+    expect(unused).toContain(`src/mix-imports.ts:1:1: ${UNUSED_CONSOLE_GRANT}`);
+    expect(
+      unused.match(/mix-imports\.ts:\d+:\d+: error sshkeda\(no-node-console\)/gu),
+    ).toHaveLength(1);
   }).pipe(Effect.scoped),
 });
