@@ -1,5 +1,10 @@
 import { Schema } from "effect";
 
+import {
+  READS_CONFIG,
+  unusedGrantMessage,
+  WRITES_TO_THE_TERMINAL,
+} from "../../../../../shared/bans-each-permission-lifts.ts";
 import { listedViolations } from "../../../../../shared/format-reported-failures.ts";
 
 export class StdioArgumentsReadWithoutGrant extends Schema.TaggedError<StdioArgumentsReadWithoutGrant>()(
@@ -20,9 +25,24 @@ export class StdioTerminalWriteWithoutGrant extends Schema.TaggedError<StdioTerm
   }
 }
 
+export const STDIO_PERMISSION = Schema.Literals([READS_CONFIG, WRITES_TO_THE_TERMINAL]);
+
+export class GrantNothingUses extends Schema.TaggedError<GrantNothingUses>()("GrantNothingUses", {
+  location: Schema.String,
+  permission: STDIO_PERMISSION,
+}) {
+  public override get message() {
+    return unusedGrantMessage(this.permission);
+  }
+}
+
 export class StdioUsesRefused extends Schema.TaggedError<StdioUsesRefused>()("StdioUsesRefused", {
   violations: Schema.Array(
-    Schema.Union([StdioArgumentsReadWithoutGrant, StdioTerminalWriteWithoutGrant]),
+    Schema.Union([
+      StdioArgumentsReadWithoutGrant,
+      StdioTerminalWriteWithoutGrant,
+      GrantNothingUses,
+    ]),
   ),
 }) {
   public override get message() {

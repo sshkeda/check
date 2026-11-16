@@ -47,13 +47,18 @@ export const GLOBAL_RULES = {
 } as const satisfies Readonly<Record<string, { readonly globals: readonly string[] }>>;
 
 export const NODE_BUILTIN_RULES = {
-  "no-node-path": { modules: ["path", "path/posix", "path/win32"] },
-  "no-node-crypto": { modules: ["crypto"] },
-  "no-node-os": { modules: ["os"] },
-  "no-node-http": { modules: ["http", "https"] },
-  "no-node-stream": { modules: ["stream"] },
-  "no-node-timers": { modules: ["timers", "timers/promises", "perf_hooks"] },
-} as const satisfies Readonly<Record<string, { readonly modules: readonly string[] }>>;
+  "no-node-path": { modules: ["path", "path/posix", "path/win32"], allowedImports: [] },
+  "no-node-crypto": { modules: ["crypto"], allowedImports: [] },
+  "no-node-os": { modules: ["os"], allowedImports: ["constants"] },
+  "no-node-http": { modules: ["http", "https"], allowedImports: [] },
+  "no-node-stream": { modules: ["stream"], allowedImports: [] },
+  "no-node-timers": { modules: ["timers", "timers/promises", "perf_hooks"], allowedImports: [] },
+} as const satisfies Readonly<
+  Record<
+    string,
+    { readonly modules: readonly string[]; readonly allowedImports: readonly string[] }
+  >
+>;
 
 export const SCHEDULE_MESSAGES = {
   polling: "{{usage}} polls on a timer",
