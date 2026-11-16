@@ -141,6 +141,112 @@ const stdioUses = (sources: Readonly<Record<string, string>>) =>
     Effect.scoped,
   );
 
+const unusedGrant = (permission: string) =>
+  `this file is granted ${permission}, but uses nothing ${permission} allows`;
+
+const GRANT_USES = {
+  "env.ts": 'export const home = process.env["HOME"];\n',
+  "argv.ts": "export const words = process.argv.slice(2);\n",
+  "global-env.ts": "export const home = globalThis.process.env.HOME;\n",
+  "destructured-env.ts": "const { env } = process;\nexport const home = env.HOME;\n",
+  "config.ts": 'import { Config } from "effect";\nexport const home = Config.string("HOME");\n',
+  "config-module.ts":
+    'import { string } from "effect/Config";\nexport const home = string("HOME");\n',
+  "node-process.ts": 'import { env } from "node:process";\nexport const home = env.HOME;\n',
+  "arguments.ts": READS_ARGUMENTS,
+  "platform.ts": "export const platform = process.platform;\n",
+  "typed-config.ts":
+    'import type { Config } from "effect";\nexport type Home = Config.Config<string>;\n',
+  "writes.ts": WRITES_TO_THE_TERMINAL,
+  "parameter-writes.ts":
+    'import type { Stdio } from "effect";\nexport const sinkOf = (service: Stdio.Stdio) => service.stdout;\n',
+  "provided.ts":
+    'import { Layer, Stdio } from "effect";\ndeclare const service: Stdio.Stdio;\nexport const LIVE = Layer.succeed(Stdio.Stdio, service);\n',
+  "worker-pipes.ts":
+    "export const outputOf = (thread: { readonly stdout: ReadableStream }) => thread.stdout;\n",
+  "both.ts": "export const home = process.env.HOME;\n",
+  "aliased-config.ts":
+    'import { Config as Settings } from "effect";\nexport const port = Settings.int("PORT");\n',
+  "namespace-config.ts":
+    'import * as Effectful from "effect";\nexport const port = Effectful["Config"].int("PORT");\n',
+  "constant-key.ts":
+    'const ARGUMENTS = "argv";\nexport const words = process[ARGUMENTS].slice(2);\n',
+  "instantiated-config.ts":
+    'import { Config } from "effect";\nexport const optionalText = Config.option<string>;\n',
+  "aliased-stdio.ts":
+    'import { Stdio as Terminal } from "effect/Stdio";\nexport const terminalService = Terminal;\n',
+  "bun-process.ts": 'import { env } from "bun:process";\nexport const home = env.HOME;\n',
+  "computed-type-key.ts":
+    'export const settings: { readonly [process.env.HOME as "home"]: string } = { home: "" };\n',
+  "type-argument-key.ts":
+    'const identity = <Value>(value: Value) => value;\nexport const settingsIdentity = identity<{ readonly [process.env.HOME as "home"]: string }>;\n',
+  "ambient-import.ts":
+    'declare module "virtual-settings" {\n  import { env as environment } from "node:process";\n  export const home: string | undefined;\n}\n',
+  "extended-stdio.ts":
+    'import type { Stdio } from "effect";\nexport interface Terminal extends Stdio.Stdio {}\n',
+};
+
+const READS_CONFIG_FILES = [
+  "env.ts",
+  "argv.ts",
+  "global-env.ts",
+  "destructured-env.ts",
+  "config.ts",
+  "config-module.ts",
+  "node-process.ts",
+  "arguments.ts",
+  "platform.ts",
+  "typed-config.ts",
+  "aliased-config.ts",
+  "namespace-config.ts",
+  "constant-key.ts",
+  "instantiated-config.ts",
+  "bun-process.ts",
+  "computed-type-key.ts",
+  "type-argument-key.ts",
+  "ambient-import.ts",
+  "missing.ts",
+] as const;
+
+const WRITES_TO_THE_TERMINAL_FILES = [
+  "writes.ts",
+  "parameter-writes.ts",
+  "provided.ts",
+  "worker-pipes.ts",
+  "aliased-stdio.ts",
+  "extended-stdio.ts",
+] as const;
+
+const grantUses = makeProject(
+  GRANT_USES,
+  `lintConfig({ ${[
+    ...READS_CONFIG_FILES.map((file) => `"${file}": { allow: ["readsConfig"] }`),
+    ...WRITES_TO_THE_TERMINAL_FILES.map((file) => `"${file}": { allow: ["writesToTheTerminal"] }`),
+    '"both.ts": { allow: ["readsConfig", "writesToTheTerminal"] }',
+  ].join(", ")} })`,
+).pipe(
+  Effect.flatMap(({ tsconfigFile }) =>
+    findUngrantedStdioUses(tsconfigFile, openTypeScriptProjects(tsconfigFile)),
+  ),
+  Effect.as(new Array<string>()),
+  Effect.catchTag("StdioUsesRefused", (failure) =>
+    Effect.succeed(taggedViolations(failure.violations).toSorted()),
+  ),
+  Effect.scoped,
+);
+
+export const grantsNothingUsesAreReported = Task.make({
+  name: "a file granted readsConfig that reads no process.env, process.argv, Effect Config or Stdio args, or granted writesToTheTerminal that names no Stdio service and reads no stdout or stderr from a Stdio value, is reported once for that permission, while a grant on a file outside the project and every used grant are not, a renamed import, a namespace member, a constant key, a generic reference, an interface heritage, bun:process, a computed key in a type or a type argument and an import in an ambient module included",
+  run: Effect.gen(function* () {
+    expect(yield* grantUses).toEqual([
+      `both.ts: error GrantNothingUses: ${unusedGrant("writesToTheTerminal")}`,
+      `platform.ts: error GrantNothingUses: ${unusedGrant("readsConfig")}`,
+      `typed-config.ts: error GrantNothingUses: ${unusedGrant("readsConfig")}`,
+      `worker-pipes.ts: error GrantNothingUses: ${unusedGrant("writesToTheTerminal")}`,
+    ]);
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
+});
+
 export const stdioArgumentReadsAreRefused = Task.make({
   name: "outside files granted readsConfig, files granted writesToTheTerminal included, reading args from a value whose type is Effect's Stdio is refused, by property access, element access or object destructuring, with a literal, constant or generic key, on a union that includes Stdio, including in a Stdio.use or Effect.flatMap callback",
   run: Effect.gen(function* () {
@@ -172,8 +278,9 @@ export const stdioArgumentReadsAreRefused = Task.make({
 export const stdioTerminalWritesAreRefused = Task.make({
   name: "outside files granted writesToTheTerminal, files granted readsConfig included, reading the stdout or stderr sink from a value whose type is Effect's Stdio is refused, by property access, element access or destructuring, with a literal, constant or generic key",
   run: Effect.gen(function* () {
-    expect(yield* stdioUses(TERMINAL_WRITES)).toEqual(
-      [
+    expect(yield* stdioUses(TERMINAL_WRITES)).toEqual([
+      `config-writes.ts: error GrantNothingUses: ${unusedGrant("readsConfig")}`,
+      ...[
         "config-writes.ts:4:52 stdout",
         "config-writes.ts:5:52 stderr",
         "constant-key-writes.ts:3:51 stdout",
@@ -187,7 +294,7 @@ export const stdioTerminalWritesAreRefused = Task.make({
         const [location, member] = entry.split(" ");
         return `${location}: error StdioTerminalWriteWithoutGrant: Stdio.${member} writes to the terminal`;
       }),
-    );
+    ]);
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
 });
 

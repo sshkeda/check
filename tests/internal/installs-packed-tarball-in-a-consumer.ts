@@ -121,7 +121,7 @@ export const runsChecksFromPackedTarball = Task.make({
       );
       yield* fileSystem.writeFileString(
         path.join(consumer, "oxlint.config.ts"),
-        `import { lintConfig } from ${yield* encodeJson(packageJson.name)};\n\nexport default lintConfig({ "src/index.ts": { allow: ["writesToTheTerminal"] } });\n`,
+        `import { lintConfig } from ${yield* encodeJson(packageJson.name)};\n\nexport default lintConfig({ "scripts/internal": { cannotImport: ["src"] } });\n`,
       );
       yield* fileSystem.writeFileString(
         path.join(consumer, "oxfmt.config.ts"),
@@ -178,14 +178,14 @@ export const runsChecksFromPackedTarball = Task.make({
       const lintConfig = yield* fileSystem.readFileString(lintConfigFile);
       yield* fileSystem.writeFileString(
         lintConfigFile,
-        lintConfig.replace('"src/index.ts"', '"src/*.ts"'),
+        lintConfig.replace('"scripts/internal"', '"scripts/*"'),
       );
       const configMistake = yield* runTaskFile(CHECK_COMMAND, {
         ...options,
         taskStateDirectory,
       }).pipe(printedByAFailedRun);
       expect(configMistake).toContain(
-        '[lint-config] oxlint.config.ts: error MalformedGrant: "src/*.ts": is a glob',
+        '[lint-config] oxlint.config.ts: error MalformedGrant: "scripts/*": is a glob',
       );
       expect(configMistake).toContain("[oxlint] error AwaitedTaskFailed: lint-config failed");
       expect(configMistake).not.toContain("/dist/");

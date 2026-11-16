@@ -23,14 +23,14 @@ const BUILTIN_VALID = [
   "const load = (specifier) => import(specifier);",
 ] as const;
 
-const builtinTest = (rule: string, invalid: readonly string[]) =>
+const builtinTest = (rule: string, invalid: readonly string[], allowed: readonly string[] = []) =>
   ruleTest(rule, {
-    valid: BUILTIN_VALID,
+    valid: [...BUILTIN_VALID, ...allowed],
     invalid: invalid.map((code) => ({ code, errors: [{ messageId: "builtin" }] })),
   });
 
 export const rejectsNodeBuiltins = Task.make({
-  name: "each Node built-in with an Effect replacement has its own rule, which also owns a literal import() of it, while import = stays with no-require-imports and re-exports with no-re-exports",
+  name: "each Node built-in with an Effect replacement has its own rule, which also owns a literal import() of it, while import = stays with no-require-imports and re-exports with no-re-exports, and node:os allows an import of only its constants",
   run: Effect.all(
     [
       builtinTest("no-node-path", [
@@ -44,7 +44,25 @@ export const rejectsNodeBuiltins = Task.make({
         'import { createHash } from "node:crypto";',
         'import { createHash } from "bun:crypto";',
       ]),
-      builtinTest("no-node-os", ['import { tmpdir } from "node:os";']),
+      builtinTest(
+        "no-node-os",
+        [
+          'import { tmpdir } from "node:os";',
+          'import { constants, tmpdir } from "node:os";',
+          'import * as os from "node:os";',
+          'import os from "node:os";',
+          'import { constants as osConstants, homedir } from "bun:os";',
+          'import { type CpuInfo, tmpdir } from "node:os";',
+          'const loaded = import("node:os");',
+        ],
+        [
+          'import { constants } from "node:os";',
+          'import { constants as osConstants } from "os";',
+          'import { constants } from "bun:os";',
+          'import { constants, type CpuInfo } from "node:os";',
+          'import { type NetworkInterfaceInfo, constants as osConstants } from "bun:os";',
+        ],
+      ),
       builtinTest("no-node-timers", [
         'import { setTimeout } from "node:timers/promises";',
         'import { performance } from "node:perf_hooks";',

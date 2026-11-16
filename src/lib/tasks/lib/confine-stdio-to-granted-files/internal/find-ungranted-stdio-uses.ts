@@ -1,19 +1,31 @@
-import { Effect, Path } from "effect";
-import type { Node, SourceFile } from "typescript/unstable/ast";
+import { Effect, Path, Schema } from "effect";
+import { SyntaxKind } from "typescript/unstable/ast";
+import type { ImportDeclaration, Node, SourceFile } from "typescript/unstable/ast";
 import {
   isBindingElement,
   isComputedPropertyName,
   isElementAccessExpression,
+  isExpressionWithTypeArguments,
   isIdentifier,
+  isImportDeclaration,
+  isNamedImports,
+  isNamespaceImport,
   isNoSubstitutionTemplateLiteral,
   isNumericLiteral,
   isObjectBindingPattern,
   isPropertyAccessExpression,
   isStringLiteral,
+  isTypeAliasDeclaration,
+  isTypeNode,
 } from "typescript/unstable/ast/is";
 import { isStringLiteralType, isTypeParameter, isUnionType } from "typescript/unstable/async";
 import type { Checker, Type } from "typescript/unstable/async";
 
+import {
+  moduleSpecifiersOfGlobalObject,
+  READS_CONFIG,
+  WRITES_TO_THE_TERMINAL,
+} from "../../../../../shared/bans-each-permission-lifts.ts";
 import { loadedLintConfigIn } from "../../../shared/load-the-lint-config.ts";
 import {
   CONCURRENT_TYPESCRIPT_REQUESTS,
@@ -24,18 +36,36 @@ import {
 } from "../../../shared/query-the-typescript-project.ts";
 import type { openTypeScriptProjects } from "../../../shared/query-the-typescript-project.ts";
 import {
+  GrantNothingUses,
   StdioArgumentsReadWithoutGrant,
   StdioTerminalWriteWithoutGrant,
+  STDIO_PERMISSION,
   StdioUsesRefused,
 } from "./stdio-use-errors.ts";
 
 const STDIO_TYPE_ID = "~effect/Stdio";
 
-const PERMISSION_OF_STDIO_MEMBER = new Map<string, "readsConfig" | "writesToTheTerminal">([
-  ["args", "readsConfig"],
-  ["stdout", "writesToTheTerminal"],
-  ["stderr", "writesToTheTerminal"],
+const PERMISSION_OF_STDIO_MEMBER = new Map<string, typeof STDIO_PERMISSION.Type>([
+  ["args", READS_CONFIG],
+  ["stdout", WRITES_TO_THE_TERMINAL],
+  ["stderr", WRITES_TO_THE_TERMINAL],
 ]);
+
+const PROCESS = "process";
+const PROCESS_MEMBERS_THAT_READ_CONFIG = new Set(["env", "argv"]);
+const EFFECT = "effect";
+const PERMISSION_OF_MODULE = new Map<string, typeof STDIO_PERMISSION.Type>([
+  ["effect/Config", READS_CONFIG],
+  ...moduleSpecifiersOfGlobalObject(PROCESS).map((specifier) => [specifier, READS_CONFIG] as const),
+  ["effect/Stdio", WRITES_TO_THE_TERMINAL],
+]);
+const PERMISSION_OF_NAME = new Map<string, typeof STDIO_PERMISSION.Type>([
+  ["Config", READS_CONFIG],
+  ["Stdio", WRITES_TO_THE_TERMINAL],
+]);
+const EVERY_STDIO_PERMISSION = [READS_CONFIG, WRITES_TO_THE_TERMINAL] as const;
+
+const isStdioPermission = Schema.is(STDIO_PERMISSION);
 
 const literalKeyText = (key: Node) => {
   const isNamedOrLiteralKey =
@@ -95,6 +125,155 @@ const possibleStdioReadsIn = (sourceFile: SourceFile) => {
   };
   sourceFile.forEachChild(visit);
   return reads;
+};
+
+const processMemberRead = (reference: Node) => {
+  const parent = parentOf(reference);
+  const isMemberRead =
+    parent !== undefined && isPropertyAccessExpression(parent) && parent.expression === reference;
+  if (isMemberRead) {
+    return parent.name.text;
+  }
+  const isElementRead =
+    parent !== undefined && isElementAccessExpression(parent) && parent.expression === reference;
+  if (!isElementRead) {
+    return;
+  }
+  const key = parent.argumentExpression;
+  return isIdentifier(key) ? undefined : literalKeyText(key);
+};
+
+const readsConfigThroughProcess = (processReference: Node) => {
+  const parent = parentOf(processReference);
+  const isGlobalMember =
+    parent !== undefined && isPropertyAccessExpression(parent) && parent.name === processReference;
+  const member = processMemberRead(isGlobalMember ? parent : processReference);
+  return member === undefined || PROCESS_MEMBERS_THAT_READ_CONFIG.has(member);
+};
+
+const namespacePermissions = (moduleName: string) => {
+  if (moduleName === EFFECT) {
+    return EVERY_STDIO_PERMISSION;
+  }
+  const permission = PERMISSION_OF_MODULE.get(moduleName);
+  return permission === undefined ? [] : [permission];
+};
+
+const importedBindings = (declaration: ImportDeclaration) => {
+  const { importClause, moduleSpecifier } = declaration;
+  const isNamedModuleImport = importClause !== undefined && isStringLiteral(moduleSpecifier);
+  if (!isNamedModuleImport) {
+    return [];
+  }
+  const moduleName = moduleSpecifier.text;
+  const isTypeOnlyClause = importClause.phaseModifier === SyntaxKind.TypeKeyword;
+  const modulePermission = PERMISSION_OF_MODULE.get(moduleName);
+  const bindings = importClause.namedBindings;
+  const isNamespace = bindings !== undefined && isNamespaceImport(bindings);
+  if (isNamespace) {
+    return namespacePermissions(moduleName).map((permission) => ({
+      local: bindings.name.text,
+      permission,
+      isTypeOnly: isTypeOnlyClause,
+    }));
+  }
+  const isNamed = bindings !== undefined && isNamedImports(bindings);
+  const named = (isNamed ? bindings.elements : []).flatMap((specifier) => {
+    const imported = literalKeyText(specifier.propertyName ?? specifier.name) ?? "";
+    const permission = moduleName === EFFECT ? PERMISSION_OF_NAME.get(imported) : modulePermission;
+    const isTypeOnly = isTypeOnlyClause || specifier.isTypeOnly;
+    return permission === undefined ? [] : [{ local: specifier.name.text, permission, isTypeOnly }];
+  });
+  const defaultName = importClause.name;
+  const hasPermittingDefault = defaultName !== undefined && modulePermission !== undefined;
+  const defaultBinding = hasPermittingDefault
+    ? [{ local: defaultName.text, permission: modulePermission, isTypeOnly: isTypeOnlyClause }]
+    : [];
+  return [...named, ...defaultBinding];
+};
+
+const sideEffectImportPermission = (declaration: ImportDeclaration) => {
+  const specifier = declaration.moduleSpecifier;
+  const isSideEffectImport = declaration.importClause === undefined && isStringLiteral(specifier);
+  return isSideEffectImport ? PERMISSION_OF_MODULE.get(specifier.text) : undefined;
+};
+
+const permissionOfReference = (
+  reference: Node,
+  permissionOfLocal: ReadonlyMap<string, typeof STDIO_PERMISSION.Type>,
+) => {
+  if (!isIdentifier(reference)) {
+    return;
+  }
+  if (reference.text !== PROCESS) {
+    return permissionOfLocal.get(reference.text);
+  }
+  return readsConfigThroughProcess(reference) ? READS_CONFIG : undefined;
+};
+
+const importDeclarationsIn = (sourceFile: SourceFile) => {
+  const declarations: ImportDeclaration[] = [];
+  const visit = (node: Node): void => {
+    if (isImportDeclaration(node)) {
+      declarations.push(node);
+      return;
+    }
+    node.forEachChild(visit);
+  };
+  sourceFile.forEachChild(visit);
+  return declarations;
+};
+
+const visitComputedKeysIn = (node: Node, visit: (expression: Node) => void): void => {
+  if (isComputedPropertyName(node)) {
+    visit(node.expression);
+    return;
+  }
+  node.forEachChild((child) => {
+    visitComputedKeysIn(child, visit);
+  });
+};
+
+const permissionsUsedOutsideStdioReadsIn = (sourceFile: SourceFile) => {
+  const used = new Set<typeof STDIO_PERMISSION.Type>();
+  const permissionOfLocal = new Map(PERMISSION_OF_NAME);
+  for (const declaration of importDeclarationsIn(sourceFile)) {
+    const sideEffectPermission = sideEffectImportPermission(declaration);
+    if (sideEffectPermission !== undefined) {
+      used.add(sideEffectPermission);
+    }
+    for (const binding of importedBindings(declaration)) {
+      if (binding.isTypeOnly) {
+        permissionOfLocal.set(binding.local, binding.permission);
+      } else {
+        used.add(binding.permission);
+      }
+    }
+  }
+  const visit = (node: Node): void => {
+    if (isImportDeclaration(node)) {
+      return;
+    }
+    if (isExpressionWithTypeArguments(node)) {
+      visit(node.expression);
+      for (const typeArgument of node.typeArguments ?? []) {
+        visitComputedKeysIn(typeArgument, visit);
+      }
+      return;
+    }
+    const isErasedType = isTypeNode(node) || isTypeAliasDeclaration(node);
+    if (isErasedType) {
+      visitComputedKeysIn(node, visit);
+      return;
+    }
+    const permission = permissionOfReference(node, permissionOfLocal);
+    if (permission !== undefined) {
+      used.add(permission);
+    }
+    node.forEachChild(visit);
+  };
+  sourceFile.forEachChild(visit);
+  return used;
 };
 
 const unionMembersOf = (type: Type) =>
@@ -180,17 +359,39 @@ export const findUngrantedStdioUses = <OpeningError, OpeningRequirement>(
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const grants = yield* loadedLintConfigIn(path.dirname(projectFile));
+    const stdioGrants = grants.flatMap((grant) =>
+      grant.allow.filter(isStdioPermission).map((permission) => ({ path: grant.path, permission })),
+    );
     const isGranted = (displayName: string, member: string) => {
       const permission = PERMISSION_OF_STDIO_MEMBER.get(member);
-      return grants.some(
-        (grant) =>
-          grant.path === displayName &&
-          permission !== undefined &&
-          grant.allow.some((allowed) => allowed === permission),
+      return stdioGrants.some(
+        (grant) => grant.path === displayName && grant.permission === permission,
       );
     };
+    const usedPermissions = new Map<string, Set<typeof STDIO_PERMISSION.Type>>();
+    const recordUse = (
+      displayName: string,
+      permission: typeof STDIO_PERMISSION.Type | undefined,
+    ) => {
+      if (permission === undefined) {
+        return;
+      }
+      const used = usedPermissions.get(displayName) ?? new Set<typeof STDIO_PERMISSION.Type>();
+      used.add(permission);
+      usedPermissions.set(displayName, used);
+    };
+    const checkedFiles = new Set<string>();
     const violations: StdioUsesRefused["violations"][number][] = [];
     for (const { checker, sourceFiles } of yield* openedProjects) {
+      for (const { sourceFile, displayName } of sourceFiles) {
+        checkedFiles.add(displayName);
+        const isGrantedFile = stdioGrants.some((grant) => grant.path === displayName);
+        if (isGrantedFile) {
+          for (const permission of permissionsUsedOutsideStdioReadsIn(sourceFile)) {
+            recordUse(displayName, permission);
+          }
+        }
+      }
       const reads = sourceFiles.flatMap(({ sourceFile, displayName }) =>
         possibleStdioReadsIn(sourceFile).map((read) => {
           const location = nodePosition(sourceFile, read.receiver);
@@ -204,15 +405,32 @@ export const findUngrantedStdioUses = <OpeningError, OpeningRequirement>(
       const found = yield* Effect.forEach(
         reads,
         ({ read, displayName, location }) =>
-          Effect.map(stdioMembersRead(checker, read), (members) =>
-            members
-              .filter((member) => !isGranted(displayName, member))
-              .map((member) => violationOf(member, location)),
-          ),
+          Effect.map(stdioMembersRead(checker, read), (members) => ({
+            displayName,
+            location,
+            members,
+          })),
         { concurrency: CONCURRENT_TYPESCRIPT_REQUESTS },
       );
-      violations.push(...found.flat());
+      for (const { displayName, location, members } of found) {
+        for (const member of members) {
+          recordUse(displayName, PERMISSION_OF_STDIO_MEMBER.get(member));
+          if (!isGranted(displayName, member)) {
+            violations.push(violationOf(member, location));
+          }
+        }
+      }
     }
+    const unusedGrants = stdioGrants.filter(
+      ({ path: grantedPath, permission }) =>
+        checkedFiles.has(grantedPath) && usedPermissions.get(grantedPath)?.has(permission) !== true,
+    );
+    violations.push(
+      ...unusedGrants.map(
+        ({ path: grantedPath, permission }) =>
+          new GrantNothingUses({ location: grantedPath, permission }),
+      ),
+    );
     if (violations.length > 0) {
       return yield* new StdioUsesRefused({ violations });
     }

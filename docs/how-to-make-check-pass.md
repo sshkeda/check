@@ -10,7 +10,10 @@ Check may not catch every violation of these principles. Review your code agains
 - Move the code that needs a grant into its own small file and grant that file. A grant covers the whole file, so Check stops reporting that ban for everything else in it.
 - Design for the current requirement as if you were starting fresh. Delete code the new design doesn't need.
 - Handle a forked effect's failure before the fork, or keep the fiber and join it.
+- Read a fact from where a tool states it, such as an error's fields, a command's exit code or its JSON output. Text written for people changes between releases, and code that searches it breaks quietly when it does.
 - Return a fixed value only for the one failure you expect, such as a file that isn't there. Let every other failure fail.
+- Write a job that moves through stages as an explicit state machine, with one tagged case per stage in one union, so the job is always in exactly one stage.
+- Give each status its own struct holding the fields that status always has, and join them in a union.
 - Grant `isGeneratedByATool` only to a file a tool generates.
 
 ## Make the code explain itself
