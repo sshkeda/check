@@ -17,6 +17,7 @@ const PICKED_RULES = {
   "eslint/id-length": "error",
   "eslint/no-duplicate-imports": ["error", { allowSeparateTypeImports: true }],
   "eslint/no-empty-function": ["error", { allow: ["privateConstructors"] }],
+  "eslint/no-extend-native": "error",
   "eslint/no-implicit-coercion": "error",
   "eslint/no-magic-numbers": ["error", { ignore: [0, 1, -1], ignoreTypeIndexes: true }],
   "eslint/no-regex-spaces": "error",
@@ -35,6 +36,7 @@ const PICKED_RULES = {
   "typescript/explicit-member-accessibility": "error",
   "typescript/no-confusing-void-expression": "error",
   "typescript/no-dynamic-delete": "error",
+  "typescript/no-floating-promises": ["error", { ignoreVoid: false, checkThenables: true }],
   "typescript/no-misused-promises": "error",
   "typescript/no-unnecessary-boolean-literal-compare": "error",
   "typescript/parameter-properties": "error",
@@ -105,6 +107,30 @@ export const ruleOptionsRejectInvalidValues = Task.make({
   }),
 });
 
+const expectTagsOfEachCase = (
+  cases: readonly (readonly [string, readonly string[]])[],
+  ruleTags: readonly string[],
+) =>
+  Effect.gen(function* () {
+    const linted = yield* lintErrorsOfEachCase(
+      oxlintReport,
+      REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
+      "src",
+      cases.map(([code]) => code),
+    );
+    expect(
+      linted.map(({ code, errors }) => ({
+        code,
+        tags: errors
+          .map((error) => {
+            const [tag] = error.split(": ");
+            return tag;
+          })
+          .filter((tag) => ruleTags.some((ruleTag) => ruleTag === tag)),
+      })),
+    ).toEqual(cases.map(([code, tags]) => ({ code, tags: [...tags] })));
+  });
+
 const OPTION_RULE_TAGS = [
   "eslint(class-methods-use-this)",
   "eslint(no-duplicate-imports)",
@@ -155,22 +181,29 @@ export const pickedOptionsDecideWhatIsReported = Task.make({
       ],
       ["export const double = (count: number) => 2 * count;", ["eslint(no-magic-numbers)"]],
     ] as const;
-    const linted = yield* lintErrorsOfEachCase(
-      oxlintReport,
-      REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT,
-      "src",
-      cases.map(([code]) => code),
-    );
-    expect(
-      linted.map(({ code, errors }) => ({
-        code,
-        tags: errors
-          .map((error) => {
-            const [tag] = error.split(": ");
-            return tag;
-          })
-          .filter((tag) => OPTION_RULE_TAGS.some((optionRuleTag) => optionRuleTag === tag)),
-      })),
-    ).toEqual(cases.map(([code, tags]) => ({ code, tags: [...tags] })));
+    yield* expectTagsOfEachCase(cases, OPTION_RULE_TAGS);
+  }),
+});
+
+const BUN_LINT_RULE_TAGS = [
+  "eslint(no-extend-native)",
+  "typescript(no-floating-promises)",
+] as const;
+
+export const rulesPickedFromBunLintReport = Task.make({
+  name: "no-floating-promises reports a Promise discarded with void while void of a plain value passes, and no-extend-native reports a change to a built-in prototype",
+  run: Effect.gen(function* () {
+    const cases = [
+      [
+        "export const start = (work: () => Promise<string>) => {\n  void work();\n};",
+        ["typescript(no-floating-promises)"],
+      ],
+      ["export const start = (work: () => string) => {\n  void work();\n};", []],
+      [
+        'Object.defineProperty(Array.prototype, "last", { value: 1 });',
+        ["eslint(no-extend-native)"],
+      ],
+    ] as const;
+    yield* expectTagsOfEachCase(cases, BUN_LINT_RULE_TAGS);
   }),
 });

@@ -464,6 +464,10 @@ export const manifestViolations = (
 
 const ROOT_README = "README.md";
 
+const isMarkdownInDocs = (path: string) => isMarkdown(path) && isWithin(path, DOCS_DIRECTORY);
+
+const needsNoDocumentGrant = (path: string) => path === ROOT_README || isMarkdownInDocs(path);
+
 export const permissionGrantViolations = (
   paths: readonly string[],
   grants: Effect.Success<ReturnType<typeof loadedLintConfigIn>>,
@@ -500,7 +504,7 @@ export const permissionGrantViolations = (
   for (const path of paths) {
     const isUngrantedDocument =
       isMarkdown(path) &&
-      path !== ROOT_README &&
+      !needsNoDocumentGrant(path) &&
       !generated.has(path) &&
       !isGranted(path, FILE_TYPE);
     if (isUngrantedDocument) {
@@ -538,14 +542,26 @@ export const permissionGrantViolations = (
     if (isDirectoryGrantedPermissions) {
       violations.push(new DirectoryGrantedPermissions({ path: grant.path }));
     }
-    const grantsFileTypeToRootReadme =
-      grant.path === ROOT_README && grant.allow.includes(FILE_TYPE);
+    const grantsFileTypeToExistingFile =
+      repositoryFiles.has(grant.path) && grant.allow.includes(FILE_TYPE);
+    const grantsFileTypeToRootReadme = grantsFileTypeToExistingFile && grant.path === ROOT_README;
     if (grantsFileTypeToRootReadme) {
       violations.push(
         new RedundantGrant({
           path: grant.path,
           permission: FILE_TYPE,
           reason: "the root README.md needs no grant",
+        }),
+      );
+    }
+    const grantsFileTypeToMarkdownInDocs =
+      grantsFileTypeToExistingFile && isMarkdownInDocs(grant.path);
+    if (grantsFileTypeToMarkdownInDocs) {
+      violations.push(
+        new RedundantGrant({
+          path: grant.path,
+          permission: FILE_TYPE,
+          reason: `Markdown in ${DOCS_DIRECTORY}/ needs no grant`,
         }),
       );
     }
