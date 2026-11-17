@@ -782,7 +782,7 @@ export const directoryGrantsRequireDirectories = Task.make({
 });
 
 export const standardDirectoriesNeedNoGrants = Task.make({
-  name: "src, scripts and docs at the root and ordinary nested directories need no directory grants, while documents still need theirs",
+  name: "src, scripts and docs at the root and ordinary nested directories need no directory grants, and Markdown in docs/ needs no grant",
   run: Effect.sync(() => {
     expect(
       taggedViolations(
@@ -794,8 +794,9 @@ export const standardDirectoriesNeedNoGrants = Task.make({
             "scripts/ci.ts",
             "scripts/tests/fixtures/sample.json",
             "docs/guide.md",
+            "docs/runbooks/deploy.md",
           ],
-          grantsOf({ documents: ["docs/guide.md"], others: [] }),
+          [],
         ),
       ),
     ).toEqual([]);
@@ -842,17 +843,22 @@ export const scriptsNeedNoGrant = Task.make({
 });
 
 export const grantsForMissingFilesAreRefused = Task.make({
-  name: "a file granted permissions that is not a repository file is reported",
+  name: "a file granted permissions that is not a repository file is reported once as GrantedPathMissing, also when the grant is on the root README.md or on Markdown in docs/",
   run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
           ["scripts/ci.ts"],
-          grantsOf({ documents: ["docs/gone.md"], others: ["scripts/bench.ts", "src/gone.ts"] }),
+          grantsOf({
+            documents: ["README.md", "docs/gone.md", "gone.md"],
+            others: ["scripts/bench.ts", "src/gone.ts"],
+          }),
         ),
       ),
     ).toEqual([
+      "oxlint.config.ts: error GrantedPathMissing: README.md is listed but is not a repository file or directory",
       "oxlint.config.ts: error GrantedPathMissing: docs/gone.md is listed but is not a repository file or directory",
+      "oxlint.config.ts: error GrantedPathMissing: gone.md is listed but is not a repository file or directory",
       "oxlint.config.ts: error GrantedPathMissing: scripts/bench.ts is listed but is not a repository file or directory",
       "oxlint.config.ts: error GrantedPathMissing: src/gone.ts is listed but is not a repository file or directory",
     ]);
@@ -885,15 +891,21 @@ export const grantsRepeatingBuiltInRulesAreRedundant = Task.make({
 });
 
 export const grantedDocumentsPass = Task.make({
-  name: "Markdown files granted hasAnUnlistedFileType pass wherever they live, and the root README.md passes without a grant",
+  name: "Markdown files granted hasAnUnlistedFileType pass wherever they live, and the root README.md and Markdown in docs/ pass without a grant",
   run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
-          ["README.md", "docs/code-review.md", "packages/app/README.md"],
+          [
+            "README.md",
+            "docs/code-review.md",
+            "docs/reviews/naming.md",
+            "notes.md",
+            "packages/app/README.md",
+          ],
           [
             ...grantsOf({
-              documents: ["docs/code-review.md", "packages/app/README.md"],
+              documents: ["notes.md", "packages/app/README.md"],
               others: [],
             }),
             ...directoryGrantsOf(["packages"]),
@@ -905,34 +917,46 @@ export const grantedDocumentsPass = Task.make({
 });
 
 export const rootReadmeGrantIsRedundant = Task.make({
-  name: "a hasAnUnlistedFileType grant on the root README.md is RedundantGrant",
+  name: "a hasAnUnlistedFileType grant on the root README.md or on Markdown in docs/ is RedundantGrant",
   run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
-          ["README.md"],
-          grantsOf({ documents: ["README.md"], others: [] }),
+          ["README.md", "docs/code-review.md", "docs/reviews/naming.md"],
+          grantsOf({
+            documents: ["README.md", "docs/code-review.md", "docs/reviews/naming.md"],
+            others: [],
+          }),
         ),
       ),
     ).toEqual([
       "oxlint.config.ts: error RedundantGrant: README.md is granted hasAnUnlistedFileType, but the root README.md needs no grant",
+      "oxlint.config.ts: error RedundantGrant: docs/code-review.md is granted hasAnUnlistedFileType, but Markdown in docs/ needs no grant",
+      "oxlint.config.ts: error RedundantGrant: docs/reviews/naming.md is granted hasAnUnlistedFileType, but Markdown in docs/ needs no grant",
     ]);
   }),
 });
 
 export const ungrantedDocumentsAreRefused = Task.make({
-  name: "a Markdown file without hasAnUnlistedFileType is reported",
+  name: "a Markdown file outside docs/ without hasAnUnlistedFileType is reported",
   run: Effect.sync(() => {
     expect(
       taggedViolations(
         permissionGrantViolations(
-          ["docs/code-review.md", "docs/permissions.md", "notes.markdown"],
-          grantsOf({ documents: ["docs/code-review.md"], others: [] }),
+          [
+            "code-review.md",
+            "permissions.md",
+            "notes.markdown",
+            "src/guide.md",
+            "docs/notes.markdown",
+          ],
+          grantsOf({ documents: ["code-review.md"], others: [] }),
         ),
       ),
     ).toEqual([
-      "docs/permissions.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
+      "permissions.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
       "notes.markdown: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
+      "src/guide.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
     ]);
   }),
 });
@@ -1147,11 +1171,11 @@ export const rootGrantsMatchOnlyTheRootFile = Task.make({
       'export default lintConfig({ "notes.md": { allow: ["hasAnUnlistedFileType"] } });',
       {
         "notes.md": "# Notes\n",
-        "docs/notes.md": "# Docs\n",
+        "src/notes.md": "# Notes\n",
       },
     );
     expect(yield* layoutViolationsIn(directory)).toEqual([
-      "docs/notes.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
+      "src/notes.md: error UngrantedDocument: is a document that oxlint.config.ts does not allow",
     ]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 });
@@ -1502,14 +1526,14 @@ export const layoutCheckListsGitFiles = Task.make({
           `import { lintConfig } from "@sshkeda/check";\nexport default lintConfig(${permissionsByFile});\n`,
         );
       const grantedFiles =
-        '"scripts/release.ts": { allow: ["writesToTheTerminal"] }, "docs/code-review.md": { allow: ["hasAnUnlistedFileType"] }';
+        '"scripts/release.ts": { allow: ["writesToTheTerminal"] }, "code-review.md": { allow: ["hasAnUnlistedFileType"] }';
       yield* grantPermissions(`{ ${grantedFiles} }`);
       yield* write(".gitignore", "ignored\nnode_modules\n");
       yield* write("package.json", '{ "name": "a" }\n');
       yield* write("scripts/ci.ts", RUNNABLE);
       yield* write("scripts/release.ts", RUNNABLE);
       yield* write("ignored/NOTES.md", "ignored\n");
-      yield* write("docs/code-review.md", "# Code Review\n");
+      yield* write("code-review.md", "# Code Review\n");
       yield* Task.exec("git", ["init", "--quiet"], { cwd: directory });
       expect(yield* loadedLintConfigIn(directory)).toEqual([
         {
@@ -1519,7 +1543,7 @@ export const layoutCheckListsGitFiles = Task.make({
           cannotImport: [],
         },
         {
-          path: "docs/code-review.md",
+          path: "code-review.md",
           allow: ["hasAnUnlistedFileType"],
           services: [],
           cannotImport: [],

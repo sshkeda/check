@@ -19,7 +19,7 @@ export default lintConfig({
 - `usesAbbreviations`: Allows abbreviations in variable, function, type and other declared names.
 - `pollsWithADeadline`: Allows `Effect.repeat` and `Effect.retry` with `Schedule.spaced` or `Schedule.exponential`, under a deadline. `Schedule.exponential` may be wrapped in or piped through `Schedule.jittered`.
 - `waitsOnTimers`: Allows `Effect.sleep`, `Effect.delay`, `Clock.sleep` and the Stream operations that wait on a timer, such as `Stream.tick`.
-- `hasAnUnlistedFileType`: Allows a file type Check doesn't list, such as Markdown.
+- `hasAnUnlistedFileType`: Allows a file type Check doesn't list, such as Markdown outside `docs/`. Markdown in `docs/` and the root `README.md` pass as they are.
 - `isAnUnlistedDirectory`: Allows a directory Check doesn't list, such as `.github`. Check doesn't apply its directory-shape rules inside it, but files there still need their own `hasAnUnlistedFileType` grant.
 - `patchesADependency`: Allows a patch file from `bun patch`.
 - `trustsUnverifiedTypes`: Allows trusting a value's type without checking it, through `Schema.declare`.
