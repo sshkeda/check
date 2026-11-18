@@ -96,6 +96,7 @@ import {
 import {
   exportPathMismatches,
   packageEntriesNotTypeScript,
+  packageExportPatterns,
 } from "./find-export-path-mismatches.ts";
 import {
   directoriesOutsideModuleLayoutAmong,
@@ -459,6 +460,7 @@ export const manifestViolations = (
       ...(yield* dependenciesOutsideRepository(path, manifest.success, repository)),
       ...packageEntriesNotTypeScript(path, manifest.success),
       ...exportPathMismatches(path, manifest.success),
+      ...packageExportPatterns(path, manifest.success),
     ];
   });
 

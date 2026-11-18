@@ -6,6 +6,7 @@ import {
   ExportPathMismatch,
   moduleDirectoryNamedBy,
   PackageEntryNotTypeScript,
+  PackageExportPattern,
 } from "./file-layout-errors.ts";
 
 const ROOT_SUBPATH = ".";
@@ -16,6 +17,7 @@ const CODE_FILE = /\.[cm]?[jt]sx?$/u;
 const FILE_EXTENSION = /\.[^./]+$/u;
 const INDEX_FILE = /^index\.tsx?$/u;
 const PACKAGE_PATTERN_WILDCARD = "*";
+const DIRECTORY_MAPPING_END = "/";
 const ENTRY_FIELDS = ["main", "module", "types", "typings"] as const;
 const PROPERTY_NAME = /^[A-Za-z_$][\w$]*$/u;
 const isJsonObject = Schema.is(JSON_OBJECT);
@@ -42,6 +44,12 @@ const targetsUnderEveryCondition = (
   );
 };
 
+const isPackageExportPattern = (path: string) =>
+  path.includes(PACKAGE_PATTERN_WILDCARD) || path.endsWith(DIRECTORY_MAPPING_END);
+
+const isPackageExportPatternTarget = (target: string) =>
+  isPackageExportPattern(target.replace(QUERY_OR_FRAGMENT, ""));
+
 const subpathsWithTheirFields = (exports: Schema.Json) => {
   const isSubpathMap =
     isJsonObject(exports) && Object.keys(exports).some((key) => key.startsWith(ROOT_SUBPATH));
@@ -50,8 +58,39 @@ const subpathsWithTheirFields = (exports: Schema.Json) => {
         subpath,
         field: fieldWithKey("exports", subpath),
         value,
+        isPatternKey: isPackageExportPattern(subpath),
       }))
-    : [{ subpath: ROOT_SUBPATH, field: "exports", value: exports }];
+    : [{ subpath: ROOT_SUBPATH, field: "exports", value: exports, isPatternKey: false }];
+};
+
+const namedExportTargets = (exports: Schema.Json) =>
+  subpathsWithTheirFields(exports).flatMap(({ subpath, field, value, isPatternKey }) =>
+    isPatternKey
+      ? []
+      : targetsUnderEveryCondition(field, value)
+          .filter(({ target }) => !isPackageExportPatternTarget(target))
+          .map(({ field: targetField, target }) => ({ subpath, field: targetField, target })),
+  );
+
+export const packageExportPatterns = (path: string, manifest: typeof JSON_OBJECT.Type) => {
+  const exports = manifest["exports"];
+  if (exports === undefined) {
+    return [];
+  }
+  return subpathsWithTheirFields(exports).flatMap(({ subpath, field, value, isPatternKey }) => {
+    const targets = targetsUnderEveryCondition(field, value);
+    if (isPatternKey) {
+      return targets.length > 0
+        ? [new PackageExportPattern({ location: path, field, pattern: subpath })]
+        : [];
+    }
+    return targets
+      .filter(({ target }) => isPackageExportPatternTarget(target))
+      .map(
+        ({ field: targetField, target }) =>
+          new PackageExportPattern({ location: path, field: targetField, pattern: target }),
+      );
+  });
 };
 
 const isIndexOfTheDirectoryTheSubpathNames = (subpath: string, target: string) => {
@@ -76,18 +115,16 @@ export const exportPathMismatches = (path: string, manifest: typeof JSON_OBJECT.
   if (exports === undefined) {
     return [];
   }
-  return subpathsWithTheirFields(exports).flatMap(({ subpath, field, value }) =>
-    targetsUnderEveryCondition(field, value)
-      .filter(
-        ({ target }) =>
-          isTypeScriptSourceFile(target.replace(QUERY_OR_FRAGMENT, "")) &&
-          !isIndexOfTheDirectoryTheSubpathNames(subpath, target),
-      )
-      .map(
-        ({ field: conditionField, target }) =>
-          new ExportPathMismatch({ location: path, field: conditionField, target, subpath }),
-      ),
-  );
+  return namedExportTargets(exports)
+    .filter(
+      ({ subpath, target }) =>
+        isTypeScriptSourceFile(target.replace(QUERY_OR_FRAGMENT, "")) &&
+        !isIndexOfTheDirectoryTheSubpathNames(subpath, target),
+    )
+    .map(
+      ({ subpath, field, target }) =>
+        new ExportPathMismatch({ location: path, field, target, subpath }),
+    );
 };
 
 const isCodeOtherThanTypeScriptSource = (target: string) => {
@@ -104,11 +141,7 @@ export const packageEntriesNotTypeScript = (path: string, manifest: typeof JSON_
       const target = manifest[field];
       return typeof target === "string" ? [{ field, target }] : [];
     }),
-    ...(exports === undefined
-      ? []
-      : subpathsWithTheirFields(exports).flatMap(({ field, value }) =>
-          targetsUnderEveryCondition(field, value),
-        )),
+    ...(exports === undefined ? [] : namedExportTargets(exports)),
   ]
     .filter(({ target }) => isCodeOtherThanTypeScriptSource(target))
     .map(({ field, target }) => new PackageEntryNotTypeScript({ location: path, field, target }));
