@@ -61,6 +61,7 @@ import { noVagueErrorNames } from "./ban-vague-error-class-names.ts";
 import { noVagueFileNames } from "./ban-vague-file-names.ts";
 import { permissionBanRule } from "./ban-what-a-file-is-not-granted.ts";
 import { noWhile } from "./ban-while-do-while-and-for-loops.ts";
+import { noNativePrototypeWrites } from "./ban-writes-to-native-prototypes.ts";
 import { noSharedHolders } from "./ban-writing-captured-objects-inside-effect-callbacks.ts";
 import { noNodeConsole } from "./confine-node-console-to-its-console-export.ts";
 import {
@@ -143,6 +144,7 @@ const NAMED_RULES = {
   [UNUSED_CODE_GRANTS_RULE]: noUnusedCodeGrants,
   "no-glob-scan": noGlobScan,
   "no-unknown-boundaries": noUnknownBoundaries,
+  "no-native-prototype-writes": noNativePrototypeWrites,
   "no-loose-literal-constants": noLooseLiteralConstants,
   "no-type-declarations": noTypeDeclarations,
   "no-declared-values": noDeclaredValues,
@@ -235,7 +237,6 @@ const baseConfig = {
       "eslint/no-else-return": "error",
       "eslint/no-empty": "error",
       "eslint/no-empty-function": ["error", { allow: ["privateConstructors"] }],
-      "eslint/no-extend-native": "error",
       "eslint/no-implicit-coercion": "error",
       "eslint/no-lone-blocks": "error",
       "eslint/no-lonely-if": "error",

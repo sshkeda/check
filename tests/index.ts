@@ -58,6 +58,7 @@ import * as signatureRestrictions from "./internal/rejects-loose-type-annotation
 import * as manualTagRestrictions from "./internal/rejects-manual-tags.ts";
 import * as moduleEscapes from "./internal/rejects-module-escapes.ts";
 import * as namespaceAliases from "./internal/rejects-namespace-aliases.ts";
+import * as nativePrototypeWrites from "./internal/rejects-native-prototype-writes.ts";
 import * as nodeBuiltinImports from "./internal/rejects-node-builtin-imports.ts";
 import * as permissionEscapes from "./internal/rejects-permission-escapes.ts";
 import * as reExports from "./internal/rejects-re-exports.ts";
@@ -141,6 +142,7 @@ export const ci = Task.make({
         bannedMembers,
         moduleEscapes,
         namespaceAliases,
+        nativePrototypeWrites,
         uncalledCheckedMembers,
         unnamedFallbacks,
         recoveredExists,

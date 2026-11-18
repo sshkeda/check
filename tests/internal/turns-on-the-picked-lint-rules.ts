@@ -17,7 +17,6 @@ const PICKED_RULES = {
   "eslint/id-length": "error",
   "eslint/no-duplicate-imports": ["error", { allowSeparateTypeImports: true }],
   "eslint/no-empty-function": ["error", { allow: ["privateConstructors"] }],
-  "eslint/no-extend-native": "error",
   "eslint/no-implicit-coercion": "error",
   "eslint/no-magic-numbers": ["error", { ignore: [0, 1, -1], ignoreTypeIndexes: true }],
   "eslint/no-regex-spaces": "error",
@@ -45,6 +44,7 @@ const PICKED_RULES = {
   "typescript/prefer-promise-reject-errors": "error",
   "typescript/prefer-regexp-exec": "error",
   "typescript/prefer-string-starts-ends-with": "error",
+  "sshkeda/no-native-prototype-writes": "error",
   "sshkeda/no-unsorted-type-constituents": "error",
   "typescript/strict-boolean-expressions": "error",
   "typescript/strict-void-return": "error",
@@ -81,10 +81,13 @@ const PICKED_RULES = {
   "import/no-unassigned-import": "error",
 } as const;
 
-const UNPICKED_RULES = ["unicorn/prefer-native-coercion-functions"] as const;
+const UNPICKED_RULES = [
+  "eslint/no-extend-native",
+  "unicorn/prefer-native-coercion-functions",
+] as const;
 
 export const lintConfigTurnsOnThePickedRules = Task.make({
-  name: "lintConfig turns on each picked rule at error with its options, and leaves off prefer-native-coercion-functions, which would demand .map(Number) where no-namespace-aliases refuses it",
+  name: "lintConfig turns on each picked rule at error with its options, and leaves off prefer-native-coercion-functions, which would demand .map(Number) where no-namespace-aliases refuses it, and leaves off no-extend-native, which no-native-prototype-writes replaces",
   run: Effect.sync(() => {
     const { rules } = lintConfig({});
     expect(
@@ -186,12 +189,12 @@ export const pickedOptionsDecideWhatIsReported = Task.make({
 });
 
 const BUN_LINT_RULE_TAGS = [
-  "eslint(no-extend-native)",
+  "sshkeda(no-native-prototype-writes)",
   "typescript(no-floating-promises)",
 ] as const;
 
 export const rulesPickedFromBunLintReport = Task.make({
-  name: "no-floating-promises reports a Promise discarded with void while void of a plain value passes, and no-extend-native reports a change to a built-in prototype",
+  name: "no-floating-promises reports a Promise discarded with void while void of a plain value passes, and no-native-prototype-writes reports a change to a built-in prototype, also through Object.assign, Reflect.defineProperty and a constant alias, while a change to a class of the project passes",
   run: Effect.gen(function* () {
     const cases = [
       [
@@ -201,7 +204,20 @@ export const rulesPickedFromBunLintReport = Task.make({
       ["export const start = (work: () => string) => {\n  void work();\n};", []],
       [
         'Object.defineProperty(Array.prototype, "last", { value: 1 });',
-        ["eslint(no-extend-native)"],
+        ["sshkeda(no-native-prototype-writes)"],
+      ],
+      ["Object.assign(Array.prototype, { last: 1 });", ["sshkeda(no-native-prototype-writes)"]],
+      [
+        'Reflect.defineProperty(Array.prototype, "last", { value: 1 });',
+        ["sshkeda(no-native-prototype-writes)"],
+      ],
+      [
+        "const shared = Array.prototype;\nObject.assign(shared, { last: 1 });",
+        ["sshkeda(no-native-prototype-writes)"],
+      ],
+      [
+        "class Box {}\nObject.assign(Box.prototype, { last: 1 });\nexport const BOX = new Box();",
+        [],
       ],
     ] as const;
     yield* expectTagsOfEachCase(cases, BUN_LINT_RULE_TAGS);

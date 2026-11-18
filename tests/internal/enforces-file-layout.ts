@@ -2009,7 +2009,7 @@ const notTypeScript = (field: string, target: string) =>
   `package.json: error PackageEntryNotTypeScript: ${field} points to ${target}, which is not a TypeScript source file`;
 
 export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make({
-  name: "a main, module, types, typings or exports target that is JavaScript, a declaration file or a file with no extension is PackageEntryNotTypeScript under every condition, and is not also judged as an export path, while a pattern with no extension, non-code targets and null exclusions pass",
+  name: "a main, module, types, typings or exports target that is JavaScript, a declaration file or a file with no extension is PackageEntryNotTypeScript under every condition, and is not also judged as an export path, while non-code targets and null exclusions pass",
   run: Effect.gen(function* () {
     const manifest = yield* encodeJson({
       name: "a",
@@ -2024,7 +2024,6 @@ export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make({
         "./c": "./src/lib/c/index.mts",
         "./d": "./dist/lib/d/index",
         "./e": "./dist/wrong.js?version=1",
-        "./tests/*": "./tests/*",
         "./package.json": "./package.json",
         "./styles": "./src/styles/theme.css",
         "./hidden": null,
@@ -2046,6 +2045,101 @@ export const packageEntriesThatAreNotTypeScriptSourceAreReported = Task.make({
     ]);
     expect(yield* exportViolationsOf({ default: "./dist/cli.js" })).toEqual([
       notTypeScript("exports.default", "./dist/cli.js"),
+    ]);
+  }),
+});
+
+const exportPattern = (field: string, pattern: string) =>
+  `package.json: error PackageExportPattern: ${field} contains package export pattern "${pattern}"`;
+
+export const exportsThatNameEachEntryPointPass = Task.make({
+  name: "exports that name each entry point pass PackageExportPattern, as do null exclusions under a pattern, a missing exports field and private imports patterns",
+  run: Effect.gen(function* () {
+    const patternsInPassingExports = yield* Effect.forEach(
+      [
+        "./src/index.ts",
+        { ".": "./src/index.ts", "./feature": "./src/lib/feature/index.ts" },
+        { ".": { types: "./src/index.ts", bun: "./src/index.ts", default: "./src/index.ts" } },
+        { ".": "./src/index.ts", "./private/*": null, "./internal/": null },
+        { ".": "./src/index.ts", "./private/*": { import: null, default: [null] } },
+        { ".": "./src/index.ts", "./package.json": "./package.json" },
+        { ".": "./src/index.ts?base=/" },
+        {},
+      ],
+      (exports: Schema.Json) =>
+        exportViolationsOf(exports).pipe(
+          Effect.map((violations) =>
+            violations.filter((violation) => violation.includes("PackageExportPattern")),
+          ),
+        ),
+    );
+    expect(patternsInPassingExports.flat()).toEqual([]);
+    const manifest = yield* encodeJson({
+      name: "a",
+      main: "./src/index.ts",
+      imports: { "#*": "./src/*.ts" },
+      dependencies: { effect: "*" },
+    });
+    expect(
+      taggedViolations(yield* manifestViolations("package.json", manifest, AT_REPOSITORY_ROOT)),
+    ).toEqual([]);
+  }),
+});
+
+export const exportPatternsAndDirectoryMappingsAreReported = Task.make({
+  name: "a public exports key or target with * or a trailing / is PackageExportPattern once per field under every condition and fallback, a pattern key is reported once for all its targets, and its targets are not also judged as export paths or entry types",
+  run: Effect.gen(function* () {
+    expect(yield* exportViolationsOf({ ".": "./src/wrong.ts?base=/" })).toEqual([
+      mismatch('exports["."]', "./src/wrong.ts?base=/", "the root index"),
+    ]);
+    expect(yield* exportViolationsOf({ "./assets?name=*": "./assets/index.json" })).toEqual([
+      exportPattern('exports["./assets?name=*"]', "./assets?name=*"),
+    ]);
+    expect(yield* exportViolationsOf({ "./*": "./src/*.ts" })).toEqual([
+      exportPattern('exports["./*"]', "./*"),
+    ]);
+    expect(yield* exportViolationsOf({ "./*": "./src/index.ts" })).toEqual([
+      exportPattern('exports["./*"]', "./*"),
+    ]);
+    expect(
+      yield* exportViolationsOf({ "./private/*": { import: null, default: "./dist/index.js" } }),
+    ).toEqual([exportPattern('exports["./private/*"]', "./private/*")]);
+    expect(yield* exportViolationsOf("./src/*.ts")).toEqual([
+      exportPattern("exports", "./src/*.ts"),
+    ]);
+    expect(yield* exportViolationsOf({ "./": "./src/" })).toEqual([
+      exportPattern('exports["./"]', "./"),
+    ]);
+    expect(yield* exportViolationsOf({ ".": "./src/index.ts", "./feature": "./src/" })).toEqual([
+      exportPattern('exports["./feature"]', "./src/"),
+    ]);
+    expect(
+      yield* exportViolationsOf({
+        ".": "./src/index.ts",
+        "./feature": {
+          types: "./dist/*.d.ts",
+          custom: { nested: ["./src/lib/feature/index.ts", "./dist/**/*.js"] },
+          default: "./src/lib/feature/index.ts",
+        },
+        "./schema/*": "./src/schema/*.json",
+        "./styles/*": "./styles/*.css",
+      }),
+    ).toEqual([
+      exportPattern('exports["./feature"].types', "./dist/*.d.ts"),
+      exportPattern('exports["./feature"].custom.nested[1]', "./dist/**/*.js"),
+      exportPattern('exports["./schema/*"]', "./schema/*"),
+      exportPattern('exports["./styles/*"]', "./styles/*"),
+    ]);
+    expect(
+      yield* exportViolationsOf({
+        ".": "./dist/index.js",
+        "./a": "./shared/*.js",
+        "./b": "./shared/*.js",
+      }),
+    ).toEqual([
+      notTypeScript('exports["."]', "./dist/index.js"),
+      exportPattern('exports["./a"]', "./shared/*.js"),
+      exportPattern('exports["./b"]', "./shared/*.js"),
     ]);
   }),
 });

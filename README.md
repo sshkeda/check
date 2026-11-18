@@ -83,6 +83,8 @@ Check passes.
 
 ## Why these rules
 
+The rules keep code type-safe, observable and predictable. [How to Make Check Pass](docs/how-to-make-check-pass.md) gives each goal and how to decide if a new rule is worth it.
+
 - **No comments.** When code is hard to follow, the fix is better names and simpler code, which stay true as the code changes. Comments drift out of date, and agents fill them with noise. When you need more explanation, ask your agent to explain the code.
 - **No `type` or `interface` declarations.** Types are inferred from the code that produces each value, so every type has one source of truth and nothing to keep in sync.
 - **No `let`, and no `while` or counting `for` loops.** Values don't change after they're made, which leaves an agent fewer ways to get state wrong.

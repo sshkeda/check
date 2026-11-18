@@ -1,6 +1,6 @@
 # How to Grant a Permission
 
-Grant a permission to one file or directory in `oxlint.config.ts`. The key is the path from the folder that holds `oxlint.config.ts`, with no glob. Each name in `allow` lifts one ban for that path only.
+Grant a permission to one file or directory in `oxlint.config.ts`. The key is the path from the directory that holds `oxlint.config.ts`, with no glob. Each name in `allow` lifts one ban for that path only.
 
 ```ts
 export default lintConfig({
@@ -8,6 +8,8 @@ export default lintConfig({
   "src/internal/run-all-checks.ts": { allow: ["handlesEveryFailure"] },
 });
 ```
+
+Move the code that needs a grant into its own small file and grant that file. A grant covers the whole file, so Check stops reporting that ban for everything else in it.
 
 - `readsConfig`: Allows Effect `Config`, `process.env` and `process.argv`.
 - `spawnsCommands`: Allows Effect `ChildProcess`, `Bun.spawn` and `spawn` from `node:child_process`.
@@ -26,4 +28,4 @@ export default lintConfig({
 - `handlesEveryFailure`: Allows catching every error, through `Effect.catch`, `Effect.exit`, a forked fiber or `Effect.runPromise`.
 - `fallsBackToFixedValues`: Allows answering every failure, or a whole library error such as `PlatformError`, with a fixed value that never reads the failure.
 - `replacesTheConsole`: Allows `Console` from `node:console`, and reading, calling and assigning these members of the global `console` by name: `log`, `warn`, `error`, `info`, `debug`, `dir`, `dirxml`, `table`, `trace`, `assert`, `clear`, `count`, `countReset`, `group`, `groupCollapsed`, `groupEnd`, `time`, `timeEnd` and `timeLog`.
-- `isGeneratedByATool`: Check skips this path, so it can't have any other permission.
+- `isGeneratedByATool`: Check skips this path, so it can't have any other permission. Grant it only to a file a tool generates.
