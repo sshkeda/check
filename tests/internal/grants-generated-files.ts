@@ -175,64 +175,27 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make({
   }).pipe(Effect.scoped),
 });
 
-const GENERATED_WITHOUT_TYPE_CHECKING = "src/internal/generated.ts";
+const TANSTACK_ROUTE_TREE = "src/routeTree.gen.ts";
 
-const GENERATED_WITH_THREE_SLASHES = "src/internal/generated-with-three-slashes.ts";
+const GENERATED_WITH_SUPPRESSIONS = "src/internal/generated.ts";
 
-const GENERATED_WITH_A_SUPPRESSION = "src/internal/generated-with-a-suppression.ts";
-
-const GENERATED_WITH_A_PERIOD = "src/internal/generated-with-a-period.ts";
-
-const GENERATED_WITH_A_LONGER_WORD = "src/internal/generated-with-a-longer-word.ts";
-
-export const generatedSourceCannotTurnOffTypeChecking = Task.make({
-  name: "a generated source that turns off its own type checking with @ts-nocheck, @ts-ignore or @ts-expect-error is reported, though the grant skips its other directives",
+export const generatedSourceKeepsItsOwnDirectives = Task.make({
+  name: "a generated source keeps the directives its tool writes, @ts-nocheck, @ts-ignore and @ts-expect-error included",
   run: Effect.gen(function* () {
     const { directory } = yield* makeProject(
       {
-        [GENERATED_WITHOUT_TYPE_CHECKING]:
-          '// @ts-nocheck\n/* eslint-disable */\nexport const VALUE: number = "bad";\n',
-        [GENERATED_WITH_THREE_SLASHES]: '/// @ts-nocheck\nexport const OTHER: number = "bad";\n',
-        [GENERATED_WITH_A_SUPPRESSION]:
-          '/* eslint-disable */\nexport const FIRST = 1;\n// @ts-expect-error\nexport const SECOND: number = "bad";\n/* @ts-ignore */\nexport const THIRD: number = "bad";\n',
-        [GENERATED_WITH_A_PERIOD]:
-          '// @ts-nocheck. Generated file.\nexport const FOURTH: number = "bad";\n',
-        [GENERATED_WITH_A_LONGER_WORD]:
-          "// @ts-nocheckers ran on this file\nexport const FIFTH = 5;\n",
+        [TANSTACK_ROUTE_TREE]:
+          "/* eslint-disable */\n\n// @ts-nocheck\n\n// noinspection JSUnusedGlobalSymbols\n\nexport const routeTree = 1;\n",
+        [GENERATED_WITH_SUPPRESSIONS]:
+          'export const FIRST = 1;\n// @ts-expect-error\nexport const SECOND: number = "bad";\n/* @ts-ignore */\nexport const THIRD: number = "bad";\n',
       },
-      `lintConfig({ "${GENERATED_WITHOUT_TYPE_CHECKING}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_THREE_SLASHES}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_A_SUPPRESSION}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_A_PERIOD}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_A_LONGER_WORD}": { allow: ["isGeneratedByATool"] } })`,
+      `lintConfig({ "${TANSTACK_ROUTE_TREE}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_SUPPRESSIONS}": { allow: ["isGeneratedByATool"] } })`,
     );
     const reported = yield* findDisableDirectivesInLintedFilesOf(directory).pipe(
       Effect.as([]),
       Effect.catchTag("ReportedErrors", ({ reportedErrors }) => Effect.succeed(reportedErrors)),
     );
-    expect(reported).toEqual([
-      {
-        tag: "DisableDirective",
-        location: `${GENERATED_WITH_A_PERIOD}:1`,
-        message: "has disable directive @ts-nocheck. Generated file.",
-      },
-      {
-        tag: "DisableDirective",
-        location: `${GENERATED_WITH_A_SUPPRESSION}:3`,
-        message: "has disable directive @ts-expect-error",
-      },
-      {
-        tag: "DisableDirective",
-        location: `${GENERATED_WITH_A_SUPPRESSION}:5`,
-        message: "has disable directive @ts-ignore",
-      },
-      {
-        tag: "DisableDirective",
-        location: `${GENERATED_WITH_THREE_SLASHES}:1`,
-        message: "has disable directive @ts-nocheck",
-      },
-      {
-        tag: "DisableDirective",
-        location: `${GENERATED_WITHOUT_TYPE_CHECKING}:1`,
-        message: "has disable directive @ts-nocheck",
-      },
-    ]);
+    expect(reported).toEqual([]);
   }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 });
 

@@ -120,7 +120,7 @@ export const directivesTaskFindsEveryDisableDirective = Task.make({
       "// oxlint-disable-next-line node/no-sync -- writes must reach stderr in order",
       "// @ts-expect-error",
       "// @ts-ignore",
-      "/* @ts-nocheck */",
+      "// @ts-nocheck",
       `// ${EFFECT_DIRECTIVE} floatingEffect:off`,
       "// eslint-disable-line",
     ];
@@ -136,7 +136,7 @@ export const directivesTaskFindsEveryDisableDirective = Task.make({
 });
 
 export const directivesTaskFindsEveryTypeScriptDirectiveFormTscHonors = Task.make({
-  name: "the directives task reports @ts-nocheck after three slashes, in any case or before a period, and @ts-ignore and @ts-expect-error after more than two slashes or in a one-line JSDoc comment, as tsc honors each",
+  name: "the directives task reports @ts-nocheck after three slashes, in any case or before a period or a non-ASCII letter, and @ts-ignore and @ts-expect-error after more than two slashes or in a one-line JSDoc comment, as tsc honors each",
   run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -148,7 +148,8 @@ export const directivesTaskFindsEveryTypeScriptDirectiveFormTscHonors = Task.mak
         "/// @ts-nocheck",
         "///@ts-nocheck",
         "// @TS-NOCHECK",
-        "// @ts-nocheck. Generated file.",
+        "/// @ts-nocheck. Generated file.",
+        "// @ts-nocheck\u212A",
         "/// @ts-ignore",
         "//// @ts-ignore",
         "/** @ts-ignore */",
@@ -163,12 +164,40 @@ export const directivesTaskFindsEveryTypeScriptDirectiveFormTscHonors = Task.mak
       `${file}:2: error DisableDirective: has disable directive @ts-nocheck`,
       `${file}:3: error DisableDirective: has disable directive @TS-NOCHECK`,
       `${file}:4: error DisableDirective: has disable directive @ts-nocheck. Generated file.`,
-      `${file}:5: error DisableDirective: has disable directive @ts-ignore`,
+      `${file}:5: error DisableDirective: has disable directive @ts-nocheck\u212A`,
       `${file}:6: error DisableDirective: has disable directive @ts-ignore`,
-      `${file}:7: error DisableDirective: has disable directive * @ts-ignore`,
-      `${file}:8: error DisableDirective: has disable directive @ts-expect-error`,
-      `${file}:9: error DisableDirective: has disable directive * @ts-expect-error`,
+      `${file}:7: error DisableDirective: has disable directive @ts-ignore`,
+      `${file}:8: error DisableDirective: has disable directive * @ts-ignore`,
+      `${file}:9: error DisableDirective: has disable directive @ts-expect-error`,
+      `${file}:10: error DisableDirective: has disable directive * @ts-expect-error`,
     ]);
+  }).pipe(Effect.scoped),
+});
+
+export const directivesTaskLeavesLookalikesTscIgnores = Task.make({
+  name: "the directives task leaves a comment that looks like a TypeScript suppression but that tsc ignores to no-comments",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const file = path.join(directory, "main.ts");
+    yield* fileSystem.writeFileString(
+      file,
+      [
+        "// * @ts-expect-error",
+        "// / @ts-ignore",
+        "//\u00A0@ts-ignore",
+        "//\u00A0@TS-NOCHECK.",
+        "// @TS-IGNORE",
+        "// @ts-nocheck-free",
+        "/* @ts-nocheck */",
+        "/* a note @ts-ignore */",
+        "/* @ts-ignore",
+        " * a note */",
+        "export const answer = 42;",
+      ].join("\n"),
+    );
+    expect(yield* disableDirectivesIn(file)).toEqual([]);
   }).pipe(Effect.scoped),
 });
 

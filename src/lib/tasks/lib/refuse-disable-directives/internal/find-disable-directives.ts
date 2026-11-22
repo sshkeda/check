@@ -3,12 +3,7 @@ import { parseSync } from "oxc-parser";
 import type { Comment } from "oxc-parser";
 
 import { FORMAT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
-import {
-  isDirective,
-  isTypeScriptSuppression,
-  TYPESCRIPT_NO_CHECK,
-} from "../../../../../shared/lint-rule-messages-and-patterns.ts";
-import { isDeclarationFile } from "../../../shared/classify-files-by-role.ts";
+import { isDirective } from "../../../../../shared/lint-rule-messages-and-patterns.ts";
 import { lineNumbersIn, lineOfTheFirstLabel } from "../../../shared/count-the-line-of-an-offset.ts";
 import { scriptFiles } from "../../../shared/list-linted-files.ts";
 import { ownedFilesAmong } from "../../../shared/list-owned-files.ts";
@@ -23,8 +18,6 @@ import {
 } from "./disable-directive-errors.ts";
 
 const LEADING_SLASHES = /^\/+/u;
-
-const LINE_COMMENT = "Line";
 
 const sourceTextOf = (file: string, directory: string) =>
   Effect.gen(function* () {
@@ -64,27 +57,7 @@ export const disableDirectivesIn = (file: string, directory = ".") =>
     return directivesAmong(
       file,
       text,
-      parsed.comments.filter((comment) => isDirective(comment.value)),
-    );
-  });
-
-const typeScriptDirectivesIn = (file: string, directory: string) =>
-  Effect.gen(function* () {
-    const text = yield* sourceTextOf(file, directory);
-    const parsed = parseSync(file, text);
-    if (parsed.errors.length > 0) {
-      return [];
-    }
-    const firstStatementStart = parsed.program.body[0]?.start ?? text.length;
-    return directivesAmong(
-      file,
-      text,
-      parsed.comments.filter((comment) => {
-        const isLeadingLineComment =
-          comment.type === LINE_COMMENT && comment.end <= firstStatementStart;
-        const isNoCheck = isLeadingLineComment && TYPESCRIPT_NO_CHECK.test(comment.value);
-        return isNoCheck || isTypeScriptSuppression(comment.value);
-      }),
+      parsed.comments.filter((comment) => isDirective(comment)),
     );
   });
 
@@ -94,16 +67,9 @@ export const findDisableDirectivesInLintedFilesOf = (directory: string) =>
     const isFormatConfigRefused = yield* isFormatConfigTextRefusedIn(directory);
     const scripts = yield* scriptFiles(path.join(directory, TYPESCRIPT_PROJECT_FILE));
     const owned = yield* ownedFilesAmong(directory, scripts);
-    const ownedFiles = new Set(owned);
     const files = owned.filter((file) => !isFormatConfigRefused || file !== FORMAT_CONFIG_FILE);
-    const generatedSources = scripts.filter(
-      (file) => !ownedFiles.has(file) && !isDeclarationFile(file),
-    );
     const scans = yield* Effect.forEach(
-      [
-        ...files.map((file) => disableDirectivesIn(file, directory)),
-        ...generatedSources.map((file) => typeScriptDirectivesIn(file, directory)),
-      ],
+      files.map((file) => disableDirectivesIn(file, directory)),
       (scan) =>
         scan.pipe(
           Effect.map(Result.succeed),
