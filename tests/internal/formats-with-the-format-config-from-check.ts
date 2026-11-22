@@ -13,11 +13,12 @@ import {
   PLUGIN,
   stagedCheckModule,
 } from "../shared/checked-project.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, traceFileOf } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
 const FORMATTING_TASK = stagedCheckModule("src/lib/tasks/lib/format-with-bun-fmt/index.ts");
+const TYPE_CHECK_TASK = stagedCheckModule("src/lib/tasks/lib/type-check-with-bun-check/index.ts");
 const DIRECTORY_COUNT = 30;
 const UNFORMATTED_EVERY = 2500;
 const MORE_BYTES_THAN_ONE_COMMAND_TAKES = 1_100_000;
@@ -94,7 +95,7 @@ const UNSORTED_IMPORTS = {
     'import { B } from "./b.ts";\nimport { A } from "./a.ts";\n\nexport const SUM = A + B;\n',
 } as const;
 
-const UNFORMATTED_FILE = /^\[bun-fmt\] (?<file>.+): error UnformattedFile: is not formatted$/u;
+const UNFORMATTED_FILE = /^error: \[bun-fmt\] (?<file>.+): UnformattedFile: is not formatted$/u;
 
 const unformattedFilesBy = (directory: string, taskStateDirectory: string) =>
   Effect.gen(function* () {
@@ -158,7 +159,7 @@ export const formatsTheOnlyVisibleConfigFile = Task.make({
       }),
     ).toBe("oxfmt.config.ts\n");
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
-    expect(output).toContain("[bun-fmt] oxfmt.config.ts: error UnformattedFile: is not formatted");
+    expect(output).toContain("error: [bun-fmt] oxfmt.config.ts: UnformattedFile: is not formatted");
   }).pipe(Effect.scoped),
 });
 
@@ -191,7 +192,7 @@ export const reportsUnformattedFilesNextToAParseFailure = Task.make({
     expect(unformatted.bunFormat).toEqual(["src/index.ts", "src/other.ts"]);
     expect(unformatted.check.toSorted()).toEqual(unformatted.bunFormat);
     expect(unformatted.checkOutput).toContain(
-      "[bun-fmt] error ToolExited: bun fmt exited with code 2",
+      "error: [bun-fmt] ToolExited: bun fmt exited with code 2",
     );
     expect(unformatted.checkOutput).toContain("src/broken.ts");
   }).pipe(Effect.scoped),
@@ -230,10 +231,10 @@ export const formatsNestedPackagesToo = Task.make({
       '{ "semi": false }\n',
     );
     expect((yield* unformattedFilesBy(directory, taskStateDirectory)).checkOutput).toContain(
-      "nested/.oxfmtrc.json: error CompetingFormatterConfig: competes with oxfmt.config.ts",
+      "nested/.oxfmtrc.json: CompetingFormatterConfig: competes with oxfmt.config.ts",
     );
     expect(yield* outputIn(nestedDirectory, taskStateDirectory, "bun run.ts")).toContain(
-      ".oxfmtrc.json: error CompetingFormatterConfig: competes with oxfmt.config.ts",
+      ".oxfmtrc.json: CompetingFormatterConfig: competes with oxfmt.config.ts",
     );
   }).pipe(Effect.scoped),
 });
@@ -263,7 +264,7 @@ export const neverPassesFromAnEarlierRun = Task.make({
 });
 
 const FORMAT_CONFIG_ERROR =
-  /^(?:\[format-inputs\] |\[bun-fmt\] (?=oxfmt\.config\.ts))(?<violation>.*\berror \w+: .*)$/u;
+  /^error: (?:\[format-inputs\] |\[bun-fmt\] (?=oxfmt\.config\.ts))(?<violation>(?:\S+: )?[A-Z]\w*: .*)$/u;
 
 const formatConfigViolationsIn = (filesByPath: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
@@ -282,7 +283,7 @@ const formatConfigViolations = (text: string) =>
 const IMPORT = 'import { FORMAT_CONFIG } from "@sshkeda/check";\n';
 
 const HOLDS_SOMETHING_ELSE =
-  "oxfmt.config.ts: error ConfigFileHoldsSomethingElse: holds something other than check's config";
+  "oxfmt.config.ts: ConfigFileHoldsSomethingElse: holds something other than check's config";
 
 const RETIRED_FORMAT_CONFIG_CALL =
   'import { formatConfig } from "@sshkeda/check";\n\nexport default formatConfig();\n';
@@ -297,7 +298,7 @@ export const acceptsOnlyTheFormatConfigOfCheck = Task.make({
       ),
     ).toEqual([]);
     expect(yield* formatConfigViolationsIn({})).toEqual([
-      "oxfmt.config.ts: error ConfigFileMissing: does not exist",
+      "oxfmt.config.ts: ConfigFileMissing: does not exist",
     ]);
     for (const text of [
       IMPORT,
@@ -316,9 +317,7 @@ export const acceptsOnlyTheFormatConfigOfCheck = Task.make({
     }
     const unparsable = yield* formatConfigViolations("export default {\n");
     expect(unparsable).toHaveLength(1);
-    expect(unparsable[0]).toStartWith(
-      "oxfmt.config.ts: error ConfigFileUnparsable: does not parse: ",
-    );
+    expect(unparsable[0]).toStartWith("oxfmt.config.ts: ConfigFileUnparsable: does not parse: ");
   }),
 });
 
@@ -332,7 +331,7 @@ export const acceptsFormatConfigOnlyFromCheck = Task.make({
           'import { FORMAT_CONFIG } from "./loose-format-config.ts";\n\nexport default FORMAT_CONFIG;\n',
       }),
     ).toEqual([
-      "oxfmt.config.ts:1: error ConfigFileImportsFromOutsideCheck: imports FORMAT_CONFIG from ./loose-format-config.ts, which resolves to loose-format-config.ts instead of a file of @sshkeda/check",
+      "oxfmt.config.ts:1: ConfigFileImportsFromOutsideCheck: imports FORMAT_CONFIG from ./loose-format-config.ts, which resolves to loose-format-config.ts instead of a file of @sshkeda/check",
     ]);
     expect(
       yield* formatConfigViolationsIn({
@@ -347,9 +346,13 @@ export const acceptsFormatConfigOnlyFromCheck = Task.make({
 const TYPED_CHECK_SHIM =
   '{ "name": "@sshkeda/check", "type": "module", "exports": { "types": "./index.d.ts", "default": "./index.js" } }\n';
 
-const ERROR_LINE = /^(?:\[[^\]]+\] )?(?:\S+: )?error \S+:/u;
+const ERROR_LINE = /^error: (?!\[[^\]]+\] its output is in )/u;
 
-const wholeCheckOutputWithFormatConfig = (formatConfig: string) =>
+const outputWithFormatConfig = <Failure, Requirements>(
+  formatConfig: string,
+  command: Effect.Effect<string, Failure, Requirements>,
+  runFiles: Readonly<Record<string, string>> = {},
+) =>
   Effect.gen(function* () {
     const { directory, taskStateDirectory } = yield* makeProject(
       {
@@ -363,26 +366,25 @@ const wholeCheckOutputWithFormatConfig = (formatConfig: string) =>
         "oxlint.config.ts":
           'import { lintConfig } from "@sshkeda/check";\n\nexport default lintConfig({});\n',
         "src/index.ts": "export const COUNT = 1;\n",
+        ...runFiles,
       },
       "lintConfig({})",
       { include: ["src/**/*.ts", "oxlint.config.ts", "oxfmt.config.ts"] },
     );
-    return yield* outputIn(directory, taskStateDirectory, yield* theCheckCommand);
+    return yield* outputIn(directory, taskStateDirectory, yield* command);
   });
+
+const wholeCheckOutputWithFormatConfig = (formatConfig: string) =>
+  outputWithFormatConfig(formatConfig, theCheckCommand);
 
 export const reportsTheRetiredFormatConfigCallOnce = Task.make({
   name: "a whole check run over a format config that still calls the retired formatConfig() prints one error, which names the text to write, while type-check, oxlint and bun fmt add none",
   run: Effect.gen(function* () {
     const output = yield* wholeCheckOutputWithFormatConfig(RETIRED_FORMAT_CONFIG_CALL);
-    const errors = output
-      .split("\n")
-      .filter((line) => ERROR_LINE.test(line))
-      .filter((line) => !line.includes("error SettledTasksFailed:"));
-    expect(errors).toEqual([`[bun-fmt] ${HOLDS_SOMETHING_ELSE}`]);
+    const errors = output.split("\n").filter((line) => ERROR_LINE.test(line));
+    expect(errors).toEqual([`error: [bun-fmt] ${HOLDS_SOMETHING_ELSE}`]);
     expect(output).not.toContain("formatConfig");
-    expect(output.trimEnd().split("\n").at(-1)).toBe(
-      HOLDS_SOMETHING_ELSE.replace("oxfmt.config.ts: error ", ""),
-    );
+    expect(output).toMatch(/^failed: \[bun-fmt\] \(1 of \d+ tasks\), /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -392,9 +394,9 @@ export const reportsAFormatConfigSyntaxErrorOnce = Task.make({
     const output = yield* wholeCheckOutputWithFormatConfig("export default {\n");
     const errors = output
       .split("\n")
-      .filter((line) => line.startsWith("[") && line.includes("oxfmt.config.ts: error "));
+      .filter((line) => line.startsWith("error: [") && line.includes(" oxfmt.config.ts: "));
     expect(errors).toEqual([
-      "[bun-fmt] oxfmt.config.ts: error ConfigFileUnparsable: does not parse: Expected `}` but found `EOF`",
+      "error: [bun-fmt] oxfmt.config.ts: ConfigFileUnparsable: does not parse: Expected `}` but found `EOF`",
     ]);
   }).pipe(Effect.scoped),
 });
@@ -406,12 +408,28 @@ export const reportsTypeErrorsInAFormatConfigCheckAccepts = Task.make({
       `/// <reference path="./missing.d.ts" />\n${FORMAT_CONFIG_TEXT}`,
     );
     expect(output).toContain(
-      "[type-check] oxfmt.config.ts:1:22: error TS6053: File './missing.d.ts' not found.",
+      "error: [type-check] oxfmt.config.ts:1:22: TS6053: File './missing.d.ts' not found.",
     );
     expect(output).toContain(
-      "[oxlint] oxfmt.config.ts:1:1: error typescript(triple-slash-reference):",
+      "error: [oxlint] oxfmt.config.ts:1:1: typescript(triple-slash-reference):",
     );
     expect(output).not.toContain("ConfigFileHoldsSomethingElse");
+  }).pipe(Effect.scoped),
+});
+
+export const typeCheckAloneFailsOnTypeErrorsItLeavesToTheFormatCheck = Task.make({
+  name: "type-check run alone over a format config the format check refuses fails on the type errors it leaves to that check, which bun-fmt prints once",
+  run: Effect.gen(function* () {
+    const output = yield* outputWithFormatConfig(
+      "export default missingName;\n",
+      Effect.succeed("bun run.ts"),
+      {
+        ".gitignore": "node_modules\nrun.ts\n",
+        "run.ts": `import { typeCheck } from ${yield* encodeJson(TYPE_CHECK_TASK)};\nexport default typeCheck;\n`,
+      },
+    );
+    expect(output).toContain(`[bun-fmt] ${HOLDS_SOMETHING_ELSE}`);
+    expect(output).not.toContain("TS2304");
   }).pipe(Effect.scoped),
 });
 
@@ -449,10 +467,10 @@ export const reportsEveryOtherFormatterConfigInThePackage = Task.make({
     ).toEqual([
       ...[...COMPETING_FORMATTER_CONFIGS, ".prettierignore"]
         .toSorted()
-        .map((file) => `${file}: error CompetingFormatterConfig: competes with oxfmt.config.ts`),
-      'tools/package.json: error PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
-      "nested/.prettierrc: error CompetingFormatterConfig: competes with oxfmt.config.ts",
-      'nested/package.json: error PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
+        .map((file) => `${file}: CompetingFormatterConfig: competes with oxfmt.config.ts`),
+      'tools/package.json: PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
+      "nested/.prettierrc: CompetingFormatterConfig: competes with oxfmt.config.ts",
+      'nested/package.json: PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
     ]);
   }),
 });
@@ -461,13 +479,13 @@ const gitIn = (directory: string, gitArguments: readonly string[]) =>
   Task.exec("git", gitArguments, { cwd: directory });
 
 const linesOfTag = (output: string, tag: string) =>
-  output.split("\n").filter((line) => line.includes(`error ${tag}:`));
+  output.split("\n").filter((line) => line.startsWith("error: [") && line.includes(` ${tag}: `));
 
 const unformattedLinesIn = (output: string) =>
   linesOfTag(output, "UnformattedFile").map((line) => UNFORMATTED_FILE.exec(line)?.[1] ?? line);
 
 const ROOT_PRETTIER_IGNORE_REPORT =
-  "[format-inputs] .prettierignore: error CompetingFormatterConfig: competes with oxfmt.config.ts";
+  "error: [format-inputs] .prettierignore: CompetingFormatterConfig: competes with oxfmt.config.ts";
 
 export const formatsExactlyTheFilesGitLists = Task.make({
   name: "check formats every file git lists and no other: a tracked file that .gitignore, a nested .gitignore or .git/info/exclude matches is listed, a file .prettierignore names is left to bun fmt, which skips it, while the .prettierignore is reported, an untracked file that core.excludesFile matches is not, and a tracked file of a nested package that its .gitignore matches is listed too",
@@ -538,7 +556,7 @@ export const refusesIgnoredCompetingConfigsAtTheRoot = Task.make({
         .toSorted()
         .map(
           (file) =>
-            `[format-inputs] ${file}: error CompetingFormatterConfig: competes with oxfmt.config.ts`,
+            `error: [format-inputs] ${file}: CompetingFormatterConfig: competes with oxfmt.config.ts`,
         ),
     );
   }).pipe(Effect.scoped),
@@ -575,12 +593,12 @@ export const runsBunFormatNextToACompetingConfig = Task.make({
     });
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
     expect(output).toContain(
-      "[format-inputs] .prettierrc: error CompetingFormatterConfig: competes with oxfmt.config.ts",
+      "error: [format-inputs] .prettierrc: CompetingFormatterConfig: competes with oxfmt.config.ts",
     );
     expect(output).toContain(
-      '[format-inputs] package.json: error PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
+      'error: [format-inputs] package.json: PackagePrettierField: has a "prettier" field, which competes with oxfmt.config.ts',
     );
-    expect(output).toContain("[bun-fmt] src/index.ts: error UnformattedFile: is not formatted");
+    expect(output).toContain("error: [bun-fmt] src/index.ts: UnformattedFile: is not formatted");
   }).pipe(Effect.scoped),
 });
 
@@ -593,11 +611,10 @@ export const checksFormatInputsWhenTheFormatConfigIsRefused = Task.make({
       "src/index.ts": UNFORMATTED_VALUE,
     });
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
-    expect(output).toContain(`[bun-fmt] ${HOLDS_SOMETHING_ELSE}`);
+    expect(output).toContain(`error: [bun-fmt] ${HOLDS_SOMETHING_ELSE}`);
     expect(output).toContain(
-      "[format-inputs] .prettierrc: error CompetingFormatterConfig: competes with oxfmt.config.ts",
+      "error: [format-inputs] .prettierrc: CompetingFormatterConfig: competes with oxfmt.config.ts",
     );
-    expect(output).not.toContain("AwaitedTaskFailed");
     expect(output).not.toContain("UnformattedFile");
   }).pipe(Effect.scoped),
 });
@@ -827,9 +844,7 @@ const shimThatRuns = (directory: string, statements: string) =>
 const commandInTraceOf = (output: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const trace = yield* fileSystem.readFileString(
-      /wrote the trace to (?<file>\S+)/u.exec(output)?.[1] ?? "",
-    );
+    const trace = yield* fileSystem.readFileString(traceFileOf(output));
     return /"key":"check\.command","value":\{"stringValue":(?<command>"(?:[^"\\]|\\.)*")\}/u.exec(
       trace,
     )?.[1];
@@ -844,7 +859,7 @@ export const namesTheCommandOfTheRunWithTheReportedCode = Task.make({
     });
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
     expect(unformattedLinesIn(output)).toEqual(["src/index.ts"]);
-    expect(output).toContain("[bun-fmt] error ToolExited: bun fmt exited with code 2");
+    expect(output).toContain("error: [bun-fmt] ToolExited: bun fmt exited with code 2");
     expect(yield* commandInTraceOf(output)).toEndWith(
       String.raw` ./oxfmt.config.ts ./src/broken\nline.ts"`,
     );
@@ -867,12 +882,12 @@ export const printsEachStandardErrorOnce = Task.make({
       "export const lintConfig = () => ({});\n",
     );
     const output = yield* outputIn(directory, taskStateDirectory, "bun run.ts");
-    expect(output).toContain("[bun-fmt] error ToolExited: bun fmt exited with code 1");
+    expect(output).toContain("error: [bun-fmt] ToolExited: bun fmt exited with code 1");
     expect(
       output
         .split("\n")
         .filter((line) =>
-          line.startsWith("[bun-fmt]   error: Cannot load the configuration file "),
+          line.startsWith("error: [bun-fmt] error: Cannot load the configuration file "),
         ),
     ).toHaveLength(1);
   }).pipe(Effect.scoped),

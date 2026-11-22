@@ -1,12 +1,19 @@
 import { isBuiltin } from "node:module";
 
-const DIRECTIVE =
-  /^\s*(?:(?:oxlint|eslint)-(?:disable|enable)|@ts-(?:ignore|expect-error|nocheck)|@effect-diagnostics)/u;
+const DIRECTIVE = /^\s*(?:(?:oxlint|eslint)-(?:disable|enable)|@ts-nocheck|@effect-diagnostics)/u;
 
-const TYPESCRIPT_SUPPRESSION_ON_A_LAST_LINE = /\n[\s*/]*@ts-(?:ignore|expect-error)[^\n]*$/u;
+const TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE =
+  /(?:^|\n)[\s*/]*@ts-(?:ignore|expect-error)[^\n]*$/u;
+
+export const TYPESCRIPT_NO_CHECK = /^\/?\s*@ts-nocheck(?![a-z-])/iu;
+
+export const isTypeScriptSuppression = (commentText: string) =>
+  TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE.test(commentText);
 
 export const isDirective = (commentText: string) =>
-  DIRECTIVE.test(commentText) || TYPESCRIPT_SUPPRESSION_ON_A_LAST_LINE.test(commentText);
+  DIRECTIVE.test(commentText) ||
+  isTypeScriptSuppression(commentText) ||
+  TYPESCRIPT_NO_CHECK.test(commentText);
 
 export const EFFECT_OPERATION_RULES = {
   "no-dropped-failures": {

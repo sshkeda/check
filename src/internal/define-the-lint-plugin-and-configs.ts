@@ -43,6 +43,7 @@ import { noIndexLogic } from "./ban-logic-in-index-files.ts";
 import { noNamespaceAliases } from "./ban-namespaces-used-without-a-member.ts";
 import { nodeBuiltinRule } from "./ban-node-builtins-that-effect-replaces.ts";
 import { noUncheckedParsing } from "./ban-parsing-outside-data-without-a-schema.ts";
+import { noPromiseCombinators } from "./ban-promise-combinators.ts";
 import { noReExports } from "./ban-re-exports.ts";
 import {
   CLOCK_PROPERTIES,
@@ -145,6 +146,7 @@ const NAMED_RULES = {
   "no-glob-scan": noGlobScan,
   "no-unknown-boundaries": noUnknownBoundaries,
   "no-native-prototype-writes": noNativePrototypeWrites,
+  "no-promise-combinators": noPromiseCombinators,
   "no-loose-literal-constants": noLooseLiteralConstants,
   "no-type-declarations": noTypeDeclarations,
   "no-declared-values": noDeclaredValues,

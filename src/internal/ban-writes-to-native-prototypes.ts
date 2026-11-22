@@ -1,16 +1,12 @@
 import { defineRule } from "@oxlint/plugins";
-import type { ESTree, SourceCode, Variable } from "@oxlint/plugins";
+import type { ESTree, SourceCode } from "@oxlint/plugins";
 
 import {
-  constantValue,
-  isAssignmentTarget,
-  isGlobalReference,
-  memberName,
-  propertyKeyName,
-  resolvedVariable,
-  staticKeyName,
-  unwrappedExpression,
-} from "./resolve-what-an-expression-imports.ts";
+  GLOBAL_CONTAINERS,
+  globalValueOf,
+  staticMemberKey,
+} from "./resolve-globals-through-constant-aliases.ts";
+import { isAssignmentTarget, unwrappedExpression } from "./resolve-what-an-expression-imports.ts";
 
 const OBJECT = "Object";
 
@@ -85,8 +81,6 @@ const PARENT_PROTOTYPES = new Map<string, string | undefined>([
   ...TYPED_ARRAYS.map((name) => [name, undefined] as const),
 ]);
 
-const GLOBAL_CONTAINERS: ReadonlySet<string> = new Set(["global", "globalThis", "self", "window"]);
-
 const OBJECT_WRITES: ReadonlySet<string> = new Set([
   "assign",
   "defineProperties",
@@ -139,68 +133,8 @@ const memberOfIntrinsic = (owner: ReturnType<typeof intrinsic> | undefined, key:
   return parent === undefined ? undefined : intrinsic("prototype", parent);
 };
 
-const staticMemberKey = (node: ESTree.MemberExpression, sourceCode: SourceCode) => {
-  const name = memberName(node);
-  const isUnresolvedComputedKey = name === undefined && node.computed;
-  return isUnresolvedComputedKey ? staticKeyName(constantValue(node.property, sourceCode)) : name;
-};
-
-const constantAlias = (node: ESTree.Node, sourceCode: SourceCode) => {
-  const variable = resolvedVariable(node, sourceCode);
-  const definitions = variable?.defs ?? [];
-  const [definition] = definitions;
-  const declarator = definitions.length === 1 ? definition?.node : undefined;
-  const isConstantDeclarator =
-    declarator?.type === "VariableDeclarator" &&
-    declarator.parent.type === "VariableDeclaration" &&
-    declarator.parent.kind === "const";
-  const value = isConstantDeclarator ? declarator.init : null;
-  const isConstantWithAValue =
-    variable !== undefined && definition !== undefined && isConstantDeclarator && value !== null;
-  if (!isConstantWithAValue) {
-    return;
-  }
-  if (declarator.id.type === "Identifier") {
-    return { variable, value, key: undefined };
-  }
-  const property = definition.name.parent;
-  const isDestructuredByKey =
-    property.type === "Property" &&
-    property.value === definition.name &&
-    property.parent === declarator.id;
-  const key = isDestructuredByKey ? propertyKeyName(property) : undefined;
-  return key === undefined ? undefined : { variable, value, key };
-};
-
-const intrinsicOf = (
-  expression: ESTree.Node,
-  sourceCode: SourceCode,
-  seen: ReadonlySet<Variable> = new Set(),
-): ReturnType<typeof intrinsic> | undefined => {
-  const node = unwrappedExpression(expression);
-  if (node.type === "ChainExpression") {
-    return intrinsicOf(node.expression, sourceCode, seen);
-  }
-  if (node.type === "MemberExpression") {
-    const key = staticMemberKey(node, sourceCode);
-    return key === undefined
-      ? undefined
-      : memberOfIntrinsic(intrinsicOf(node.object, sourceCode, seen), key);
-  }
-  if (node.type !== "Identifier") {
-    return;
-  }
-  if (isGlobalReference(node, sourceCode, node.name)) {
-    return globalIntrinsic(node.name);
-  }
-  const alias = constantAlias(node, sourceCode);
-  const isUnknownOrSeen = alias === undefined || seen.has(alias.variable);
-  if (isUnknownOrSeen) {
-    return;
-  }
-  const value = intrinsicOf(alias.value, sourceCode, new Set([...seen, alias.variable]));
-  return alias.key === undefined ? value : memberOfIntrinsic(value, alias.key);
-};
+const intrinsicOf = (expression: ESTree.Node, sourceCode: SourceCode) =>
+  globalValueOf(expression, sourceCode, { global: globalIntrinsic, member: memberOfIntrinsic });
 
 const prototypeWrittenThrough = (target: ESTree.Node, sourceCode: SourceCode) => {
   const node = unwrappedExpression(target);

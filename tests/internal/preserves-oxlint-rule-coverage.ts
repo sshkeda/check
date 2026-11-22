@@ -20,7 +20,7 @@ import {
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 import { ruleTestWith } from "../shared/rule-test.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, traceFileOf } from "../shared/run-task-files.ts";
 
 const ruleTest = ruleTestWith(({ reported, expected }) => {
   expect(reported).toMatchObject(expected);
@@ -83,24 +83,25 @@ export const preservesEnumAssignmentsAndTypeSorting = Task.make({
         ].join("\n"),
       });
       expect(output).toContain(
-        "error typescript(no-unsafe-enum-assignment): The value assigned here does not have a shared enum type with the expected enum 'Mode'.",
+        ": typescript(no-unsafe-enum-assignment): The value assigned here does not have a shared enum type with the expected enum 'Mode'.",
       );
       expect(output).toMatch(
-        /error sshkeda\(no-unsorted-type-constituents\): Union type constituents must be sorted$/mu,
+        /: sshkeda\(no-unsorted-type-constituents\): Union type constituents must be sorted$/mu,
       );
       const compatibilityReports = output
         .split("\n")
         .filter(
           (line) =>
-            line.includes("error typescript(no-unsafe-enum-assignment)") ||
-            line.includes("error sshkeda(no-unsorted-type-constituents)"),
+            line.startsWith("error: ") &&
+            (line.includes(": typescript(no-unsafe-enum-assignment): ") ||
+              line.includes(": sshkeda(no-unsorted-type-constituents): ")),
         );
       expect(compatibilityReports).toHaveLength(COMPATIBILITY_VIOLATIONS);
       expect(compatibilityReports.join("\n")).not.toContain("src/safe.ts:");
       expect(output).not.toContain("EnumLintFailed");
-      expect(output).toMatch(/^\[oxlint\] error ToolExited: oxlint exited with code 1$/mu);
+      expect(output).toMatch(/^error: \[oxlint\] ToolExited: oxlint exited with code 1$/mu);
       expect(output).toMatch(
-        /^\[oxlint\] error ToolReportedViolations: tsgolint reported 1 violation and exited with code 0$/mu,
+        /^error: \[oxlint\] ToolReportedViolations: tsgolint reported 1 violation and exited with code 0$/mu,
       );
     }),
   ),
@@ -120,7 +121,11 @@ export const readsAnOxlintReportLargerThanAPipeBuffer = Task.make({
       expect(
         output
           .split("\n")
-          .filter((line) => line.includes("error sshkeda(no-unsorted-type-constituents)")),
+          .filter(
+            (line) =>
+              line.startsWith("error: ") &&
+              line.includes(": sshkeda(no-unsorted-type-constituents): "),
+          ),
       ).toHaveLength(UNSORTED_UNIONS);
     }),
   ),
@@ -142,9 +147,7 @@ export const runsOxlintAndTheEnumCheckTogether = Task.make({
       const output = yield* lintOutputOf({
         "src/index.ts": "export const MODE = 0;\n",
       });
-      const trace = yield* fileSystem.readFileString(
-        /wrote the trace to (?<file>\S+)/u.exec(output)?.groups?.["file"] ?? "",
-      );
+      const trace = yield* fileSystem.readFileString(traceFileOf(output));
       const lintRules = spanTimesIn(trace, "lint-rules");
       const enumCheck = spanTimesIn(trace, "unsafe-enum-assignments");
       expect(lintRules.end).toBeGreaterThan(lintRules.start);

@@ -27,7 +27,8 @@ const COMMIT_ARGUMENTS = [
 
 const WORKTREE_DIRECTORY = ".claude/worktrees/one";
 
-const PRINTED_VIOLATION = "src/Bad_Name.ts: error NotKebabCase: Bad_Name.ts is not kebab-case";
+const PRINTED_VIOLATION =
+  "error: [layout] src/Bad_Name.ts: NotKebabCase: Bad_Name.ts is not kebab-case";
 
 const TOOL_FILES = {
   "oxlint.config.ts":
@@ -94,7 +95,7 @@ export const nestedGitWorktreeIsNeitherAFileNorAPackage = Task.make({
     const printed = yield* printedCheckAt(root, taskStateDirectory);
     expect(printed).not.toContain("worktrees");
     expect(printed).not.toContain("Bad_Name");
-    expect(printed).not.toContain(" error ");
+    expect(printed).not.toMatch(/^error: /mu);
     expect(printed).toContain("passed: ");
   }).pipe(Effect.scoped),
 });

@@ -32,7 +32,7 @@ import {
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, taskStatesOf } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
@@ -447,7 +447,7 @@ export const checkRefusesNoCheckOverRealTypeErrors = Task.make({
     );
     const printed = yield* printedCheckOf(directory);
     expect(printed).toContain(
-      "[typescript-config] tsconfig.json: error LooseCompilerOption: noCheck resolves to true",
+      "error: [typescript-config] tsconfig.json: LooseCompilerOption: noCheck resolves to true",
     );
   }).pipe(Effect.scoped),
 });
@@ -636,10 +636,11 @@ export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.mak
       (yield* projectExtending({ strictNullChecks: false })).directory,
     );
     expect(printed).toContain(
-      "[typescript-config] tsconfig.json: error LooseCompilerOption: strictNullChecks resolves to false",
+      "error: [typescript-config] tsconfig.json: LooseCompilerOption: strictNullChecks resolves to false",
     );
-    expect(printed).toContain("[typed-checks] error AwaitedTaskFailed: typescript-config failed");
-    expect(printed).toContain("[check] error SettledTasksFailed: 2 of 7 tasks failed");
+    expect(printed).toMatch(/^ended: \[typed-checks\], [\d.]+s, failed$/mu);
+    expect(printed).not.toMatch(/^error: \[typed-checks\] /mu);
+    expect(printed).toMatch(/^failed: \[typescript-config\] \(1 of \d+ tasks\), /mu);
     expect(printed).not.toContain("[type-check]");
     expect(
       printed
@@ -647,7 +648,9 @@ export const typedChecksWaitOnTheConfigInsteadOfFailingInDependencies = Task.mak
         .filter((line) => line.includes("node_modules") && !line.startsWith("[check] read "))
         .filter(
           (line) =>
-            !/^\[[^\]]+\] {3}detected at \S+\/node_modules\/@sshkeda\/task\/src\//u.test(line),
+            !/^(?:error: )?\[[^\]]+\] {3}detected at \S+\/node_modules\/@sshkeda\/task\/src\//u.test(
+              line,
+            ),
         )
         .filter((line) => !TASK_LOADING_NOTICE.test(line)),
     ).toEqual([]);
@@ -666,12 +669,14 @@ export const typedChecksRunPastAFileNoProjectCompiles = Task.make({
       { include: ["src/index.ts", "oxlint.config.ts"] },
     );
     const printed = yield* printedCheckOf(directory);
-    expect(printed).toMatch(/^\[typescript-config\] passed in /mu);
-    expect(printed).toContain("[type-check] src/index.ts:3:14: error TS2322");
+    expect(yield* taskStatesOf(printed)).toContainEqual({
+      task: "typescript-config",
+      state: "passed",
+    });
+    expect(printed).toContain("error: [type-check] src/index.ts:3:14: TS2322");
     expect(printed).toContain(
-      "[linted-files-type-checked] src/stray.ts: error LintedFileOutsideTypeScriptProgram: must be type-checked, but no program of tsconfig.json compiles it",
+      "error: [linted-files-type-checked] src/stray.ts: LintedFileOutsideTypeScriptProgram: must be type-checked, but no program of tsconfig.json compiles it",
     );
-    expect(printed).not.toContain("AwaitedTaskFailed");
   }).pipe(Effect.scoped),
 });
 
@@ -679,10 +684,13 @@ export const printsANonBooleanStrictValueOnceFromBunCheck = Task.make({
   name: "check prints a non-boolean strict value once, from bun check, and typescript-config passes",
   run: Effect.gen(function* () {
     const printed = yield* printedCheckOf((yield* projectExtending({ strict: "yes" })).directory);
-    expect(printed.split("\n").filter((line) => line.includes("error TS5024"))).toEqual([
-      "[type-check] base.json:17:15: error TS5024: Compiler option 'strict' requires a value of type boolean.",
+    expect(printed.split("\n").filter((line) => line.includes(": TS5024: "))).toEqual([
+      "error: [type-check] base.json:17:15: TS5024: Compiler option 'strict' requires a value of type boolean.",
     ]);
-    expect(printed).toMatch(/^\[typescript-config\] passed in /mu);
+    expect(yield* taskStatesOf(printed)).toContainEqual({
+      task: "typescript-config",
+      state: "passed",
+    });
   }).pipe(Effect.scoped),
 });
 
@@ -718,9 +726,12 @@ export const typeChecksAConsumerShapedProjectWithoutStrict = Task.make({
       "src/index.ts": `${IMPORTS_TASK}export const echo = (value) => value;\n`,
     });
     const printed = yield* printedCheckOf(directory);
-    expect(printed).toMatch(/^\[typescript-config\] passed in /mu);
+    expect(yield* taskStatesOf(printed)).toContainEqual({
+      task: "typescript-config",
+      state: "passed",
+    });
     expect(printed).toContain(
-      "[type-check] src/index.ts:3:22: error TS7006: Parameter 'value' implicitly has an 'any' type.",
+      "error: [type-check] src/index.ts:3:22: TS7006: Parameter 'value' implicitly has an 'any' type.",
     );
   }).pipe(Effect.scoped),
 });
@@ -897,9 +908,10 @@ export const checkRefusesUncheckedIndexAccessOverAPossiblyMissingElement = Task.
     );
     const printed = yield* printedCheckOf(directory);
     expect(printed).toContain(
-      "[typescript-config] tsconfig.json: error LooseCompilerOption: noUncheckedIndexedAccess resolves to false",
+      "error: [typescript-config] tsconfig.json: LooseCompilerOption: noUncheckedIndexedAccess resolves to false",
     );
-    expect(printed).toContain("[typed-checks] error AwaitedTaskFailed: typescript-config failed");
+    expect(printed).toMatch(/^ended: \[typed-checks\], [\d.]+s, failed$/mu);
+    expect(printed).not.toMatch(/^error: \[typed-checks\] /mu);
   }).pipe(Effect.scoped),
 });
 

@@ -3,6 +3,7 @@ import { expect } from "bun:test";
 import { Task } from "@sshkeda/task";
 import { Effect, FileSystem, Path } from "effect";
 
+import { findDisableDirectivesInLintedFilesOf } from "../../src/lib/tasks/lib/refuse-disable-directives/internal/find-disable-directives.ts";
 import { loadedLintConfigIn } from "../../src/lib/tasks/shared/load-the-lint-config.ts";
 import {
   LintConfigRefused,
@@ -138,7 +139,7 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make({
     });
     const importFromGeneratedFailure = yield* runCheck().pipe(failureAsValue);
     expect(importFromGeneratedFailure.message).toContain(
-      `${RUNTIME_PATH}:1: error import-boundaries`,
+      `error: [checker-queries] ${RUNTIME_PATH}:1: import-boundaries`,
     );
     expect(importFromGeneratedFailure.message).toContain("scripts/generated.ts");
 
@@ -148,7 +149,7 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make({
     });
     const importOfGeneratedFailure = yield* runCheck().pipe(failureAsValue);
     expect(importOfGeneratedFailure.message).toContain(
-      "src/internal/read.ts:6: error import-boundaries",
+      "error: [checker-queries] src/internal/read.ts:6: import-boundaries",
     );
     expect(importOfGeneratedFailure.message).toContain(HIDDEN_PATH);
 
@@ -158,16 +159,81 @@ export const generatedSourceIsTypeCheckedAndImportChecked = Task.make({
       "src/internal/read.ts":
         'import { Schema } from "effect";\nimport type { Manual } from "../../.cloudflare/types/manual.d.ts";\n\nexport const ENTRY = Schema.Struct({ id: Schema.String });\nexport const read = (environment: Manual, value: typeof ENTRY.Type) => environment.VALUE + value.id;\nexport const ownedAsync = async () => 1;\n',
     });
-    const handwrittenFailure = yield* runCheck().pipe(failureAsValue);
-    expect(handwrittenFailure.message).toContain("DisableDirective");
-    expect(handwrittenFailure.message).toContain("effect(asyncFunction)");
-    expect(handwrittenFailure.message).toContain("LintedDeclarationFileNotTypeChecked");
-    expect(handwrittenFailure.message).toContain(".cloudflare/types/manual.d.ts");
+    const handwritten = yield* runCheck().pipe(
+      Effect.catchTag("CommandFailed", (failure) => Effect.succeed(failure.standardOutput)),
+    );
+    expect(handwritten).toContain("DisableDirective");
+    expect(handwritten).toContain("effect(asyncFunction)");
+    expect(handwritten).toContain("LintedDeclarationFileNotTypeChecked");
+    expect(handwritten).toContain(".cloudflare/types/manual.d.ts");
 
     yield* fileSystem.remove(path.join(directory, DECLARATION_PATH));
-    const missing = yield* runCheck().pipe(failureAsValue);
-    expect(missing.message).toContain("grants isGeneratedByATool, but is not an existing file");
+    const missing = yield* runCheck().pipe(
+      Effect.catchTag("CommandFailed", (failure) => Effect.succeed(failure.standardOutput)),
+    );
+    expect(missing).toContain("grants isGeneratedByATool, but is not an existing file");
   }).pipe(Effect.scoped),
+});
+
+const GENERATED_WITHOUT_TYPE_CHECKING = "src/internal/generated.ts";
+
+const GENERATED_WITH_THREE_SLASHES = "src/internal/generated-with-three-slashes.ts";
+
+const GENERATED_WITH_A_SUPPRESSION = "src/internal/generated-with-a-suppression.ts";
+
+const GENERATED_WITH_A_PERIOD = "src/internal/generated-with-a-period.ts";
+
+const GENERATED_WITH_A_LONGER_WORD = "src/internal/generated-with-a-longer-word.ts";
+
+export const generatedSourceCannotTurnOffTypeChecking = Task.make({
+  name: "a generated source that turns off its own type checking with @ts-nocheck, @ts-ignore or @ts-expect-error is reported, though the grant skips its other directives",
+  run: Effect.gen(function* () {
+    const { directory } = yield* makeProject(
+      {
+        [GENERATED_WITHOUT_TYPE_CHECKING]:
+          '// @ts-nocheck\n/* eslint-disable */\nexport const VALUE: number = "bad";\n',
+        [GENERATED_WITH_THREE_SLASHES]: '/// @ts-nocheck\nexport const OTHER: number = "bad";\n',
+        [GENERATED_WITH_A_SUPPRESSION]:
+          '/* eslint-disable */\nexport const FIRST = 1;\n// @ts-expect-error\nexport const SECOND: number = "bad";\n/* @ts-ignore */\nexport const THIRD: number = "bad";\n',
+        [GENERATED_WITH_A_PERIOD]:
+          '// @ts-nocheck. Generated file.\nexport const FOURTH: number = "bad";\n',
+        [GENERATED_WITH_A_LONGER_WORD]:
+          "// @ts-nocheckers ran on this file\nexport const FIFTH = 5;\n",
+      },
+      `lintConfig({ "${GENERATED_WITHOUT_TYPE_CHECKING}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_THREE_SLASHES}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_A_SUPPRESSION}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_A_PERIOD}": { allow: ["isGeneratedByATool"] }, "${GENERATED_WITH_A_LONGER_WORD}": { allow: ["isGeneratedByATool"] } })`,
+    );
+    const reported = yield* findDisableDirectivesInLintedFilesOf(directory).pipe(
+      Effect.as([]),
+      Effect.catchTag("ReportedErrors", ({ reportedErrors }) => Effect.succeed(reportedErrors)),
+    );
+    expect(reported).toEqual([
+      {
+        tag: "DisableDirective",
+        location: `${GENERATED_WITH_A_PERIOD}:1`,
+        message: "has disable directive @ts-nocheck. Generated file.",
+      },
+      {
+        tag: "DisableDirective",
+        location: `${GENERATED_WITH_A_SUPPRESSION}:3`,
+        message: "has disable directive @ts-expect-error",
+      },
+      {
+        tag: "DisableDirective",
+        location: `${GENERATED_WITH_A_SUPPRESSION}:5`,
+        message: "has disable directive @ts-ignore",
+      },
+      {
+        tag: "DisableDirective",
+        location: `${GENERATED_WITH_THREE_SLASHES}:1`,
+        message: "has disable directive @ts-nocheck",
+      },
+      {
+        tag: "DisableDirective",
+        location: `${GENERATED_WITHOUT_TYPE_CHECKING}:1`,
+        message: "has disable directive @ts-nocheck",
+      },
+    ]);
+  }).pipe(Effect.scoped, Effect.provide(ProjectQueryCachesLive)),
 });
 
 export const plainPermissionsDecodeToTheirNames = Task.make({

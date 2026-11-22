@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 
 import { Task } from "@sshkeda/task";
-import { Effect, Predicate } from "effect";
+import { Effect, FileSystem, Path, Predicate } from "effect";
 
 import {
   packageRootViolations,
@@ -23,7 +23,7 @@ import {
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, taskStatesOf } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
@@ -221,11 +221,38 @@ export const untrackedForbiddenFilesFailTheNextRun = Task.make({
       "run.ts": `import { fileTypes } from ${yield* encodeJson(FILE_TYPES_TASK)};\nexport default fileTypes;\n`,
     });
     const options = { cwd: directory, taskStateDirectory };
-    expect(yield* runTaskFile("bun run.ts", options)).toContain("[file-types] passed");
+    expect(yield* taskStatesOf(yield* runTaskFile("bun run.ts", options))).toContainEqual({
+      task: "file-types",
+      state: "passed",
+    });
     yield* writtenFiles(directory, { "src/untracked.c": "" });
     const failure = yield* runTaskFile("bun run.ts", options).pipe(failureAsValue);
     expect(failure.message).toContain("src/untracked.c");
     expect(failure.message).toContain("FileTypeNotGranted");
+  }).pipe(Effect.scoped),
+});
+
+export const fileTypesAloneFailsWithoutALintConfig = Task.make({
+  name: "the file-type task run alone in a package without an oxlint.config.ts fails, with lint-config reporting the missing config, instead of passing without checking a file",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { directory, taskStateDirectory } = yield* makeProject({
+      "src/index.ts": "export {};\n",
+      ".gitignore": "node_modules\nrun.ts\n",
+      "bad.c": "",
+    });
+    yield* fileSystem.remove(path.join(directory, "oxlint.config.ts"));
+    yield* writtenFiles(directory, {
+      "run.ts": `import { fileTypes } from ${yield* encodeJson(FILE_TYPES_TASK)};\nexport default fileTypes;\n`,
+    });
+    yield* Task.exec("git", ["add", "bad.c"], { cwd: directory });
+    const failure = yield* runTaskFile("bun run.ts", { cwd: directory, taskStateDirectory }).pipe(
+      failureAsValue,
+    );
+    expect(failure.message).toContain(
+      "error: [lint-config] oxlint.config.ts: ConfigFileMissing: does not exist",
+    );
   }).pipe(Effect.scoped),
 });
 

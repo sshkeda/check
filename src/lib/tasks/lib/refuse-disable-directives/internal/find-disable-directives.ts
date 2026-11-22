@@ -1,10 +1,17 @@
 import { Array as Arrays, Effect, FileSystem, Path, Result } from "effect";
 import { parseSync } from "oxc-parser";
+import type { Comment } from "oxc-parser";
 
 import { FORMAT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
-import { isDirective } from "../../../../../shared/lint-rule-messages-and-patterns.ts";
+import {
+  isDirective,
+  isTypeScriptSuppression,
+  TYPESCRIPT_NO_CHECK,
+} from "../../../../../shared/lint-rule-messages-and-patterns.ts";
+import { isDeclarationFile } from "../../../shared/classify-files-by-role.ts";
 import { lineNumbersIn, lineOfTheFirstLabel } from "../../../shared/count-the-line-of-an-offset.ts";
-import { lintedFiles } from "../../../shared/list-linted-files.ts";
+import { scriptFiles } from "../../../shared/list-linted-files.ts";
+import { ownedFilesAmong } from "../../../shared/list-owned-files.ts";
 import { isFormatConfigTextRefusedIn } from "../../../shared/parse-config-files-that-import-from-check.ts";
 import { quietViolations } from "../../../shared/print-failures-and-keep-detail-in-the-trace.ts";
 import { SourceFileUnparsable } from "../../../shared/project-config-and-tool-errors.ts";
@@ -15,13 +22,34 @@ import {
   SourceFileUnreadable,
 } from "./disable-directive-errors.ts";
 
-export const disableDirectivesIn = (file: string, directory = ".") =>
+const LEADING_SLASHES = /^\/+/u;
+
+const LINE_COMMENT = "Line";
+
+const sourceTextOf = (file: string, directory: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const text = yield* fileSystem
+    return yield* fileSystem
       .readFileString(path.isAbsolute(file) ? file : path.join(directory, file))
       .pipe(Effect.mapError((error) => new SourceFileUnreadable({ file, reason: error.message })));
+  });
+
+const directivesAmong = (file: string, text: string, comments: readonly Comment[]) => {
+  const lineAt = lineNumbersIn(text);
+  return comments.map(
+    (comment) =>
+      new DisableDirective({
+        file,
+        line: lineAt(comment.start),
+        directive: comment.value.replace(LEADING_SLASHES, "").trim(),
+      }),
+  );
+};
+
+export const disableDirectivesIn = (file: string, directory = ".") =>
+  Effect.gen(function* () {
+    const text = yield* sourceTextOf(file, directory);
     const parsed = parseSync(file, text);
     if (parsed.errors.length > 0) {
       return parsed.errors.map(
@@ -33,30 +61,51 @@ export const disableDirectivesIn = (file: string, directory = ".") =>
           }),
       );
     }
-    const lineAt = lineNumbersIn(text);
-    return parsed.comments
-      .filter((comment) => isDirective(comment.value))
-      .map(
-        (comment) =>
-          new DisableDirective({
-            file,
-            line: lineAt(comment.start),
-            directive: comment.value.trim(),
-          }),
-      );
+    return directivesAmong(
+      file,
+      text,
+      parsed.comments.filter((comment) => isDirective(comment.value)),
+    );
+  });
+
+const typeScriptDirectivesIn = (file: string, directory: string) =>
+  Effect.gen(function* () {
+    const text = yield* sourceTextOf(file, directory);
+    const parsed = parseSync(file, text);
+    if (parsed.errors.length > 0) {
+      return [];
+    }
+    const firstStatementStart = parsed.program.body[0]?.start ?? text.length;
+    return directivesAmong(
+      file,
+      text,
+      parsed.comments.filter((comment) => {
+        const isLeadingLineComment =
+          comment.type === LINE_COMMENT && comment.end <= firstStatementStart;
+        const isNoCheck = isLeadingLineComment && TYPESCRIPT_NO_CHECK.test(comment.value);
+        return isNoCheck || isTypeScriptSuppression(comment.value);
+      }),
+    );
   });
 
 export const findDisableDirectivesInLintedFilesOf = (directory: string) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const isFormatConfigRefused = yield* isFormatConfigTextRefusedIn(directory);
-    const files = (yield* lintedFiles(path.join(directory, TYPESCRIPT_PROJECT_FILE))).filter(
-      (file) => !isFormatConfigRefused || file !== FORMAT_CONFIG_FILE,
+    const scripts = yield* scriptFiles(path.join(directory, TYPESCRIPT_PROJECT_FILE));
+    const owned = yield* ownedFilesAmong(directory, scripts);
+    const ownedFiles = new Set(owned);
+    const files = owned.filter((file) => !isFormatConfigRefused || file !== FORMAT_CONFIG_FILE);
+    const generatedSources = scripts.filter(
+      (file) => !ownedFiles.has(file) && !isDeclarationFile(file),
     );
     const scans = yield* Effect.forEach(
-      files,
-      (file) =>
-        disableDirectivesIn(file, directory).pipe(
+      [
+        ...files.map((file) => disableDirectivesIn(file, directory)),
+        ...generatedSources.map((file) => typeScriptDirectivesIn(file, directory)),
+      ],
+      (scan) =>
+        scan.pipe(
           Effect.map(Result.succeed),
           Effect.catchTag("SourceFileUnreadable", (unscanned) =>
             Effect.succeed(Result.fail(unscanned)),

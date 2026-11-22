@@ -176,7 +176,7 @@ export const allowsLocallyImplementedJsonMethods = Task.make({
 });
 
 export const allowsJsonPromisesDecodedWithThen = Task.make({
-  name: "json promises passed straight to a Schema decoder through then pass, while transforms and lookalike decoders are rejected",
+  name: "no-unchecked-parsing alone passes a json promise handed straight to a Schema decoder through then, which the promise-chains check reports instead, and rejects transforms and lookalike decoders",
   run: ruleTest("no-unchecked-parsing", {
     valid: [
       'import { Schema } from "effect"; response.json().then(Schema.decodeUnknownSync(Body));',

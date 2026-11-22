@@ -195,16 +195,16 @@ export const referencedGitignoredFilesAreChecked = Task.make({
     yield* Task.exec("git", ["init", "--quiet"], { cwd: directory });
     yield* fileSystem.writeFileString(path.join(directory, "package.json"), '{"name":"covered"}\n');
     const linted = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
-    expect(linted).toContain("ignored.ts:1:30: error sshkeda(no-command-spawn)");
-    expect(linted).toContain("referenced/referenced.ts:1:30: error sshkeda(no-command-spawn)");
-    expect(linted).toContain("ignored-globals.d.ts:1:1: error sshkeda(no-type-declarations)");
+    expect(linted).toContain("ignored.ts:1:30: sshkeda(no-command-spawn)");
+    expect(linted).toContain("referenced/referenced.ts:1:30: sshkeda(no-command-spawn)");
+    expect(linted).toContain("ignored-globals.d.ts:1:1: sshkeda(no-type-declarations)");
     const typeChecked = yield* failedTaskOutput(
       directory,
       taskStateDirectory,
       "typeCheck",
       TYPE_CHECK_TASK,
     );
-    expect(typeChecked).toContain("[type-check] referenced/referenced.ts:2:14: error TS2322");
+    expect(typeChecked).toContain("error: [type-check] referenced/referenced.ts:2:14: TS2322");
   }).pipe(Effect.scoped),
 });
 
@@ -236,7 +236,7 @@ export const ignoredJavaScriptWithDeclarationsIsLinted = Task.make({
     const { directory, taskStateDirectory } =
       yield* projectImportingIgnoredJavaScriptWithDeclarations();
     const printed = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
-    expect(printed).toContain("src/engine.js:1:28: error sshkeda(no-command-spawn)");
+    expect(printed).toContain("src/engine.js:1:28: sshkeda(no-command-spawn)");
     expect(printed).not.toContain("TaskCalledLocationOperations");
   }).pipe(Effect.scoped),
 });
@@ -252,7 +252,7 @@ export const ignoredJavaScriptWithDeclarationsNeedsTypeChecking = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("src/engine.js: error LintedFileOutsideTypeScriptProgram");
+    expect(printed).toContain("src/engine.js: LintedFileOutsideTypeScriptProgram");
     expect(printed).not.toContain("TaskCalledLocationOperations");
   }).pipe(Effect.scoped),
 });
@@ -314,21 +314,21 @@ export const lintedFilesTheTypeCheckSkipsFail = Task.make({
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
     expect(printed).toContain(
-      "outside.ts: error LintedFileOutsideTypeScriptProgram: must be type-checked, but no program of tsconfig.json compiles it",
+      "outside.ts: LintedFileOutsideTypeScriptProgram: must be type-checked, but no program of tsconfig.json compiles it",
     );
     expect(printed).toMatch(
-      /\] script\.js: error LintedJavaScriptFileNotTypeChecked: must be type-checked, but tsconfig\.json compiles it without checking JavaScript$/mu,
+      /\] script\.js: LintedJavaScriptFileNotTypeChecked: must be type-checked, but tsconfig\.json compiles it without checking JavaScript$/mu,
     );
     expect(printed).toMatch(
-      /\] checked\.js: error LintedJavaScriptFileNotTypeChecked: must be type-checked, but tsconfig\.json compiles it without checking JavaScript$/mu,
+      /\] checked\.js: LintedJavaScriptFileNotTypeChecked: must be type-checked, but tsconfig\.json compiles it without checking JavaScript$/mu,
     );
     expect(printed).toContain(
-      "globals.d.ts: error LintedDeclarationFileNotTypeChecked: must be type-checked, but tsconfig.json compiles it without checking declaration files",
+      "globals.d.ts: LintedDeclarationFileNotTypeChecked: must be type-checked, but tsconfig.json compiles it without checking declaration files",
     );
     expect(printed).toContain(
-      "styles.d.css.ts: error LintedDeclarationFileNotTypeChecked: must be type-checked, but tsconfig.json compiles it without checking declaration files",
+      "styles.d.css.ts: LintedDeclarationFileNotTypeChecked: must be type-checked, but tsconfig.json compiles it without checking declaration files",
     );
-    expect(printed).not.toMatch(/main\.ts: error|oxlint\.config\.ts: error/u);
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] (?:main|oxlint\.config)\.ts: /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -345,9 +345,9 @@ export const generatedSourceTheTypeCheckSkipsFails = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("outside.ts: error LintedFileOutsideTypeScriptProgram");
-    expect(printed).toContain("script.js: error LintedJavaScriptFileNotTypeChecked");
-    expect(printed).not.toMatch(/globals\.d\.ts: error|styles\.d\.css\.ts: error/u);
+    expect(printed).toContain("outside.ts: LintedFileOutsideTypeScriptProgram");
+    expect(printed).toContain("script.js: LintedJavaScriptFileNotTypeChecked");
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] (?:globals\.d|styles\.d\.css)\.ts: /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -364,11 +364,11 @@ export const lintedFilesTheTypeCheckCoversPass = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("outside.ts: error LintedFileOutsideTypeScriptProgram");
-    expect(printed).not.toContain("script.js: error");
-    expect(printed).not.toContain("checked.js: error");
-    expect(printed).not.toContain("globals.d.ts: error");
-    expect(printed).not.toContain("styles.d.css.ts: error");
+    expect(printed).toContain("outside.ts: LintedFileOutsideTypeScriptProgram");
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] script\.js: /mu);
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] checked\.js: /mu);
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] globals\.d\.ts: /mu);
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] styles\.d\.css\.ts: /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -410,10 +410,10 @@ export const referencedProjectsThatSkipLintedFilesFail = Task.make({
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
     expect(printed).toContain(
-      "referenced/script.js: error LintedJavaScriptFileNotTypeChecked: must be type-checked, but referenced/tsconfig.json compiles it without checking JavaScript",
+      "referenced/script.js: LintedJavaScriptFileNotTypeChecked: must be type-checked, but referenced/tsconfig.json compiles it without checking JavaScript",
     );
     expect(printed).toContain(
-      "referenced/globals.d.ts: error LintedDeclarationFileNotTypeChecked: must be type-checked, but referenced/tsconfig.json compiles it without checking declaration files",
+      "referenced/globals.d.ts: LintedDeclarationFileNotTypeChecked: must be type-checked, but referenced/tsconfig.json compiles it without checking declaration files",
     );
   }).pipe(Effect.scoped),
 });
@@ -464,8 +464,8 @@ export const aDeclarationFileOneProjectChecksPasses = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("stray.ts: error LintedFileOutsideTypeScriptProgram");
-    expect(printed).not.toContain("shapes.d.ts: error");
+    expect(printed).toContain("stray.ts: LintedFileOutsideTypeScriptProgram");
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] shapes\.d\.ts: /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -487,9 +487,9 @@ export const configFilesCheckLoadsMustBeCompiled = Task.make({
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
     expect(printed).toContain(
-      "oxlint.config.ts: error LintedFileOutsideTypeScriptProgram: must be type-checked, but no program of tsconfig.json compiles it",
+      "oxlint.config.ts: LintedFileOutsideTypeScriptProgram: must be type-checked, but no program of tsconfig.json compiles it",
     );
-    expect(printed).not.toContain("src/index.ts: error");
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] src\/index\.ts: /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -523,7 +523,7 @@ export const javaScriptWithJsxIsJudgedWithoutParsingIt = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("view.js: error LintedJavaScriptFileNotTypeChecked");
+    expect(printed).toContain("view.js: LintedJavaScriptFileNotTypeChecked");
     expect(printed).not.toContain("SourceFileUnparsable");
   }).pipe(Effect.scoped),
 });
@@ -551,8 +551,8 @@ export const aFileCompiledThroughASymlinkPasses = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("stray.ts: error LintedFileOutsideTypeScriptProgram");
-    expect(printed).not.toMatch(/(?:lib\/real|src\/link)\.ts: error/u);
+    expect(printed).toContain("stray.ts: LintedFileOutsideTypeScriptProgram");
+    expect(printed).not.toMatch(/^error: \[[^\]]+\] (?:lib\/real|src\/link)\.ts: /mu);
   }).pipe(Effect.scoped),
 });
 
@@ -590,7 +590,7 @@ export const retargetingADirectoryLinkRerunsTheCheck = Task.make({
       "lintedFilesTypeChecked",
       LINTED_FILES_TYPE_CHECKED_TASK,
     );
-    expect(printed).toContain("lib/real.ts: error LintedFileOutsideTypeScriptProgram");
+    expect(printed).toContain("lib/real.ts: LintedFileOutsideTypeScriptProgram");
   }).pipe(Effect.scoped),
 });
 
@@ -604,8 +604,8 @@ export const staticImportCyclesFailTheLint = Task.make({
       ".gitignore": "node_modules\nrun-*.ts\n",
     });
     const linted = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
-    expect(linted).toMatch(/first\.ts:1:\d+: error import\(no-cycle\)/u);
-    expect(linted).toMatch(/second\.ts:1:\d+: error import\(no-cycle\)/u);
+    expect(linted).toMatch(/first\.ts:1:\d+: import\(no-cycle\)/u);
+    expect(linted).toMatch(/second\.ts:1:\d+: import\(no-cycle\)/u);
   }).pipe(Effect.scoped),
 });
 
@@ -657,7 +657,7 @@ export const referencesThatImportEachOtherAreTypeCheckedFromSource = Task.make({
       failureAsValue,
       Effect.map((failure) => failure.message),
     );
-    expect(typeChecked).toMatch(/^\[type-check\] second\/index\.ts:2:\d+: error TS2322: /mu);
+    expect(typeChecked).toMatch(/^error: \[type-check\] second\/index\.ts:2:\d+: TS2322: /mu);
     expect(typeChecked).not.toMatch(/TS6305|TS6310/u);
     expect(yield* fileSystem.exists(path.join(directory, "first/dist"))).toBe(false);
   }).pipe(Effect.scoped),
@@ -675,7 +675,7 @@ export const filesAnEslintIgnoreListsAreLinted = Task.make({
       ".gitignore": "node_modules\nrun-*.ts\n",
     });
     const linted = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
-    expect(linted).toContain("src/listed.ts:1:30: error sshkeda(no-command-spawn)");
+    expect(linted).toContain("src/listed.ts:1:30: sshkeda(no-command-spawn)");
   }).pipe(Effect.scoped),
 });
 
@@ -720,8 +720,8 @@ export const aFileListLongerThanOneCommandTakesIsLintedInRuns = Task.make({
       MORE_BYTES_THAN_ONE_COMMAND_TAKES,
     );
     const linted = yield* failedTaskOutput(directory, taskStateDirectory, "oxlint", OXLINT_TASK);
-    expect(linted).toContain(`${files[0]}:1:30: error sshkeda(no-command-spawn)`);
-    expect(linted).toContain(`${files.at(-1)}:1:30: error sshkeda(no-command-spawn)`);
+    expect(linted).toContain(`${files[0]}:1:30: sshkeda(no-command-spawn)`);
+    expect(linted).toContain(`${files.at(-1)}:1:30: sshkeda(no-command-spawn)`);
   }).pipe(Effect.scoped),
 });
 

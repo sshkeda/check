@@ -136,11 +136,17 @@ export const rootPackageChecksEachNestedPackageFromItsOwnRoot = Task.make({
     const printed = yield* runCheck(yield* workspaceWithNestedPackages(), ".");
     expect(printed).not.toContain("left out nested packages");
     expect(printed).toContain(
-      "packages/app/inner/src/Bad_Name.ts: error NotKebabCase: Bad_Name.ts is not kebab-case",
+      "error: [layout] packages/app/inner/src/Bad_Name.ts: NotKebabCase: Bad_Name.ts is not kebab-case",
     );
-    expect(printed).toContain("packages/app/inner/stray.ts: error MisplacedAtPackageRoot");
-    expect(printed).toContain("packages/app/inner/src/native.cpp: error FileTypeNotGranted");
-    expect(printed).toContain("packages/library/src/lowercase-constant.ts:1:14: error");
+    expect(printed).toContain(
+      "error: [layout] packages/app/inner/stray.ts: MisplacedAtPackageRoot",
+    );
+    expect(printed).toContain(
+      "error: [file-types] packages/app/inner/src/native.cpp: FileTypeNotGranted",
+    );
+    expect(printed).toMatch(
+      /^error: \[oxlint\] packages\/library\/src\/lowercase-constant\.ts:1:14: /mu,
+    );
     expect(printed).not.toContain("notes.md");
     expect(printed).not.toContain("MisplacedToolFile");
     expect(printed).not.toContain("UngrantedDirectory");
@@ -160,9 +166,9 @@ export const nestedPackageNeedsItsOwnConfigFiles = Task.make({
       ".",
     );
     for (const missing of [
-      "[lint-config] packages/bare/oxlint.config.ts: error ConfigFileMissing",
-      "[bun-fmt] packages/bare/oxfmt.config.ts: error ConfigFileMissing",
-      "[typescript-config] packages/bare/tsconfig.json: error TypeScriptProjectFileMissing",
+      "error: [lint-config] packages/bare/oxlint.config.ts: ConfigFileMissing",
+      "error: [bun-fmt] packages/bare/oxfmt.config.ts: ConfigFileMissing",
+      "error: [typescript-config] packages/bare/tsconfig.json: TypeScriptProjectFileMissing",
     ]) {
       expect(printed).toContain(missing);
     }
@@ -180,7 +186,7 @@ export const referencedProjectOutsideThePackageIsNamedFromTheRoot = Task.make({
       ".",
     );
     expect(printed).toContain(
-      "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+      "error: [typescript-config] packages/library/tsconfig.json: LooseCompilerOption: strictNullChecks",
     );
     expect(printed).not.toContain("packages/app/packages/library");
   }).pipe(Effect.scoped),
@@ -198,10 +204,10 @@ export const referencedProjectInsideThePackageIsNamedFromTheRoot = Task.make({
       ".",
     );
     expect(printed).toContain(
-      "[typescript-config] packages/library/packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+      "error: [typescript-config] packages/library/packages/library/tsconfig.json: LooseCompilerOption: strictNullChecks",
     );
     expect(printed).not.toContain(
-      "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+      "error: [typescript-config] packages/library/tsconfig.json: LooseCompilerOption: strictNullChecks",
     );
   }).pipe(Effect.scoped),
 });
@@ -221,7 +227,7 @@ export const projectCheckedByTwoPackagesIsReportedOnce = Task.make({
         .split("\n")
         .filter((line) =>
           line.startsWith(
-            "[typescript-config] packages/library/tsconfig.json: error LooseCompilerOption: strictNullChecks",
+            "error: [typescript-config] packages/library/tsconfig.json: LooseCompilerOption: strictNullChecks",
           ),
         ),
     ).toHaveLength(1);
@@ -240,7 +246,7 @@ export const packageCheckReportsPathsFromItsDirectory = Task.make({
       "export declare const ANSWER: string;\n",
     );
     const printed = yield* runCheck(workspace, "packages/app");
-    expect(printed).toContain("[type-check] src/index.ts:3:31: error TS2551");
+    expect(printed).toContain("error: [type-check] src/index.ts:3:31: TS2551");
     expect(printed).not.toContain("lowercaseConstant");
   }).pipe(Effect.scoped),
 });
@@ -275,7 +281,7 @@ export const passesWithTrackedFilesMissingFromTheWorkingTree = Task.make({
       ".",
     );
     expect(printed).not.toContain("NotFound");
-    expect(printed).not.toContain(" error ");
+    expect(printed).not.toMatch(/^error: /mu);
     expect(printed).toContain("passed: ");
   }).pipe(Effect.scoped),
 });

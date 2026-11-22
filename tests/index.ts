@@ -35,6 +35,7 @@ import * as fileLocationGrants from "./internal/refuses-file-location-grants.ts"
 import * as hiddenImports from "./internal/refuses-hidden-imports.ts";
 import * as importBoundaries from "./internal/refuses-imports-across-boundaries.ts";
 import * as layerProvides from "./internal/refuses-layer-provides-outside-program-starts.ts";
+import * as promiseChains from "./internal/refuses-promise-chains.ts";
 import * as typeOnlySchemas from "./internal/refuses-schemas-used-only-as-types.ts";
 import * as syncCalls from "./internal/refuses-sync-calls-in-every-file.ts";
 import * as assertions from "./internal/refuses-test-runners-and-assertions-outside-test-home.ts";
@@ -61,6 +62,7 @@ import * as namespaceAliases from "./internal/rejects-namespace-aliases.ts";
 import * as nativePrototypeWrites from "./internal/rejects-native-prototype-writes.ts";
 import * as nodeBuiltinImports from "./internal/rejects-node-builtin-imports.ts";
 import * as permissionEscapes from "./internal/rejects-permission-escapes.ts";
+import * as promiseCombinators from "./internal/rejects-promise-combinators.ts";
 import * as reExports from "./internal/rejects-re-exports.ts";
 import * as recoveredExists from "./internal/rejects-recovered-file-system-exists.ts";
 import * as retiredWords from "./internal/rejects-retired-words.ts";
@@ -116,6 +118,7 @@ export const ci = Task.make({
         serviceLayers,
         errorMappingsToDone,
         unobservedForkFailures,
+        promiseChains,
         dynamicRuntimeCalls,
         effectLanguageServiceRules,
         effectNativeRestrictions,
@@ -143,6 +146,7 @@ export const ci = Task.make({
         moduleEscapes,
         namespaceAliases,
         nativePrototypeWrites,
+        promiseCombinators,
         uncalledCheckedMembers,
         unnamedFallbacks,
         recoveredExists,
