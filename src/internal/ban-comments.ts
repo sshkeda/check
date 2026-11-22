@@ -1,6 +1,6 @@
 import { defineRule } from "@oxlint/plugins";
 
-import { isDirective } from "../shared/lint-rule-messages-and-patterns.ts";
+import { directivesAmong } from "../shared/lint-rule-messages-and-patterns.ts";
 
 export const noComments = defineRule({
   meta: {
@@ -10,8 +10,11 @@ export const noComments = defineRule({
   create(context) {
     return {
       "Program:exit"() {
-        for (const comment of context.sourceCode.getAllComments()) {
-          const isCodeComment = comment.type !== "Shebang" && !isDirective(comment);
+        const { sourceCode } = context;
+        const comments = sourceCode.getAllComments();
+        const directives = new Set(directivesAmong(sourceCode.text, comments));
+        for (const comment of comments) {
+          const isCodeComment = comment.type !== "Shebang" && !directives.has(comment);
           if (isCodeComment) {
             context.report({ loc: comment.loc, messageId: "comment" });
           }

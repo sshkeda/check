@@ -8,6 +8,7 @@ import {
 } from "./resolve-globals-through-constant-aliases.ts";
 import {
   constantValue,
+  memberName,
   propertyKeyName,
   staticKeyName,
 } from "./resolve-what-an-expression-imports.ts";
@@ -21,7 +22,8 @@ const NO_OWN_STATICS: ReadonlySet<string> = new Set();
 const promiseValue = (
   kind: "constructor" | "container" | "subclass",
   ownStatics: ReadonlySet<string> = NO_OWN_STATICS,
-) => ({ kind, ownStatics });
+  hasUnresolvedStatics = false,
+) => ({ kind, ownStatics, hasUnresolvedStatics });
 
 const globalPromiseValue = (name: string) => {
   if (name === PROMISE) {
@@ -33,35 +35,107 @@ const globalPromiseValue = (name: string) => {
 const memberOfPromiseValue = (owner: ReturnType<typeof promiseValue> | undefined, key: string) =>
   owner?.kind === "container" ? globalPromiseValue(key) : undefined;
 
-const classMemberKeyName = (
-  member: ESTree.AccessorProperty | ESTree.MethodDefinition | ESTree.PropertyDefinition,
+const SYMBOL = "Symbol";
+
+const literalKeyName = (key: ESTree.Node) =>
+  key.type === "Literal" ? String(key.value) : staticKeyName(key);
+
+const MOST_CONSTANTS_FOLDED_INTO_A_KEY = 32;
+
+const foldedConstant = (
+  node: ESTree.Node,
   sourceCode: SourceCode,
-) => {
-  const { computed, key } = member;
-  if (computed) {
-    return staticKeyName(constantValue(key, sourceCode));
+  depth = 0,
+): number | string | undefined => {
+  if (depth > MOST_CONSTANTS_FOLDED_INTO_A_KEY) {
+    return;
   }
-  return key.type === "Identifier" ? key.name : staticKeyName(key);
+  const value = constantValue(node, sourceCode);
+  const fold = (part: ESTree.Node) => foldedConstant(part, sourceCode, depth + 1);
+  if (value.type === "Literal") {
+    return typeof value.value === "number" ? value.value : String(value.value);
+  }
+  if (value.type === "TemplateLiteral") {
+    const parts = value.expressions.map(fold);
+    const cooked = value.quasis.map((quasi) => quasi.value.cooked);
+    const isFoldable = !parts.includes(undefined) && !cooked.includes(null);
+    return isFoldable
+      ? cooked.map((text, index) => `${text ?? ""}${String(parts[index] ?? "")}`).join("")
+      : undefined;
+  }
+  const isSum = value.type === "BinaryExpression" && value.operator === "+";
+  if (!isSum) {
+    return;
+  }
+  const left = fold(value.left);
+  const right = fold(value.right);
+  const isUnfoldable = left === undefined || right === undefined;
+  if (isUnfoldable) {
+    return;
+  }
+  const areNumbers = typeof left === "number" && typeof right === "number";
+  return areNumbers ? left + right : `${left}${right}`;
 };
 
-const ownStaticName = (element: ESTree.ClassElement, sourceCode: SourceCode) => {
+const isGlobalSymbol = (node: ESTree.Node) => {
+  if (node.type === "Identifier") {
+    return node.name === SYMBOL;
+  }
+  const isSymbolOfAContainer =
+    node.type === "MemberExpression" &&
+    memberName(node) === SYMBOL &&
+    node.object.type === "Identifier" &&
+    GLOBAL_CONTAINERS.has(node.object.name);
+  return isSymbolOfAContainer;
+};
+
+const isSymbolKey = (key: ESTree.Node) => {
+  const value = key.type === "CallExpression" ? key.callee : key;
+  return (
+    isGlobalSymbol(value) || (value.type === "MemberExpression" && isGlobalSymbol(value.object))
+  );
+};
+
+const classMemberKeyNames = (
+  member: ESTree.AccessorProperty | ESTree.MethodDefinition | ESTree.PropertyDefinition,
+  sourceCode: SourceCode,
+): readonly (string | undefined)[] => {
+  const { computed, key } = member;
+  if (key.type === "PrivateIdentifier") {
+    return [];
+  }
+  if (!computed) {
+    return [key.type === "Identifier" ? key.name : literalKeyName(key)];
+  }
+  if (isSymbolKey(constantValue(key, sourceCode))) {
+    return [];
+  }
+  const name = foldedConstant(key, sourceCode);
+  return [name === undefined ? undefined : String(name)];
+};
+
+const ownStaticKeyNames = (element: ESTree.ClassElement, sourceCode: SourceCode) => {
   const isClassMember =
     element.type === "MethodDefinition" ||
     element.type === "PropertyDefinition" ||
     element.type === "AccessorProperty";
   if (!isClassMember) {
-    return;
+    return [];
   }
   const isDeclaredOnly = element.type === "PropertyDefinition" && element.declare === true;
   const isRuntimeStatic = element.static && !isDeclaredOnly;
-  return isRuntimeStatic ? classMemberKeyName(element, sourceCode) : undefined;
+  return isRuntimeStatic ? classMemberKeyNames(element, sourceCode) : [];
 };
 
-const ownStaticNames = (declaration: ESTree.Class, sourceCode: SourceCode) =>
-  declaration.body.body.flatMap((element) => {
-    const name = ownStaticName(element, sourceCode);
-    return name === undefined ? [] : [name];
-  });
+const ownStatics = (declaration: ESTree.Class, sourceCode: SourceCode) => {
+  const keyNames = declaration.body.body.flatMap((element) =>
+    ownStaticKeyNames(element, sourceCode),
+  );
+  return {
+    names: keyNames.flatMap((name) => (name === undefined ? [] : [name])),
+    hasUnresolved: keyNames.includes(undefined),
+  };
+};
 
 const subclassOfPromiseValue = (
   superClass: ReturnType<typeof promiseValue> | undefined,
@@ -69,12 +143,15 @@ const subclassOfPromiseValue = (
   sourceCode: SourceCode,
 ) => {
   const extendsPromise = superClass !== undefined && superClass.kind !== "container";
-  return extendsPromise
-    ? promiseValue(
-        "subclass",
-        new Set([...superClass.ownStatics, ...ownStaticNames(declaration, sourceCode)]),
-      )
-    : undefined;
+  if (!extendsPromise) {
+    return;
+  }
+  const { names, hasUnresolved } = ownStatics(declaration, sourceCode);
+  return promiseValue(
+    "subclass",
+    new Set([...superClass.ownStatics, ...names]),
+    superClass.hasUnresolvedStatics || hasUnresolved,
+  );
 };
 
 const promiseValueOf = (expression: ESTree.Node, sourceCode: SourceCode) =>
@@ -91,7 +168,8 @@ const reachesNativeCombinator = (
   member: string,
 ) => {
   const isConstructor = value?.kind === "constructor";
-  const isSubclassWithoutOwnMember = value?.kind === "subclass" && !value.ownStatics.has(member);
+  const isSubclassWithoutOwnMember =
+    value?.kind === "subclass" && !value.hasUnresolvedStatics && !value.ownStatics.has(member);
   return COMBINATORS.has(member) && (isConstructor || isSubclassWithoutOwnMember);
 };
 
@@ -153,6 +231,14 @@ const exportedValues = (node: ESTree.ExportNamedDeclaration) => {
   );
 };
 
+const nestedPattern = (property: ESTree.Node) => {
+  if (property.type !== "Property") {
+    return;
+  }
+  const { value } = property;
+  return value.type === "AssignmentPattern" ? value.left : value;
+};
+
 export const noPromiseCombinators = defineRule({
   meta: {
     type: "problem",
@@ -163,19 +249,40 @@ export const noPromiseCombinators = defineRule({
   },
   create(context) {
     const { sourceCode } = context;
-    const reportDestructuredCombinators = (pattern: ESTree.Node, source: ESTree.Node | null) => {
-      const isObjectPatternWithSource = pattern.type === "ObjectPattern" && source !== null;
-      if (!isObjectPatternWithSource) {
+    const destructuredKeyName = (property: ESTree.Node) => {
+      const name = propertyKeyName(property);
+      const isComputedKey = name === undefined && property.type === "Property" && property.computed;
+      return isComputedKey ? staticKeyName(constantValue(property.key, sourceCode)) : name;
+    };
+    const reportedProperties = new Set<ESTree.Node>();
+    const reportCombinatorsIn = (
+      pattern: ESTree.Node | undefined,
+      value: ReturnType<typeof promiseValueOf>,
+    ) => {
+      const isObjectPatternWithValue = pattern?.type === "ObjectPattern" && value !== undefined;
+      if (!isObjectPatternWithValue) {
         return;
       }
-      const value = promiseValueOf(source, sourceCode);
       for (const property of pattern.properties) {
-        const member = propertyKeyName(property);
-        const isNativeCombinator = member !== undefined && reachesNativeCombinator(value, member);
-        if (isNativeCombinator) {
-          context.report({ node: property, messageId: "combinator", data: { member } });
+        const member = destructuredKeyName(property);
+        if (member === undefined) {
+          continue;
+        }
+        if (reachesNativeCombinator(value, member)) {
+          if (!reportedProperties.has(property)) {
+            reportedProperties.add(property);
+            context.report({ node: property, messageId: "combinator", data: { member } });
+          }
+        } else {
+          reportCombinatorsIn(nestedPattern(property), memberOfPromiseValue(value, member));
         }
       }
+    };
+    const reportDestructuredCombinators = (pattern: ESTree.Node, source: ESTree.Node | null) => {
+      reportCombinatorsIn(
+        pattern,
+        source === null ? undefined : promiseValueOf(source, sourceCode),
+      );
     };
     return {
       MemberExpression(node) {

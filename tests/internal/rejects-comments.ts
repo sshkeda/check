@@ -201,6 +201,100 @@ export const directivesTaskLeavesLookalikesTscIgnores = Task.make({
   }).pipe(Effect.scoped),
 });
 
+export const directivesTaskFindsTsNoCheckOnlyBeforeTheFirstToken = Task.make({
+  name: "the directives task reports @ts-nocheck only before the first token of a file, after a shebang or other comments, and leaves one after code to no-comments, as tsc reads it only there",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const file = path.join(directory, "main.ts");
+    yield* fileSystem.writeFileString(
+      file,
+      [
+        "#!/usr/bin/env bun",
+        "/* a header */",
+        "",
+        "// @ts-nocheck",
+        "export const first = 1;",
+        "// @ts-nocheck",
+        "export const answer = 42; // @ts-nocheck",
+      ].join("\n"),
+    );
+    const violations = yield* disableDirectivesIn(file);
+    expect(taggedViolations(violations)).toEqual([
+      `${file}:4: error DisableDirective: has disable directive @ts-nocheck`,
+    ]);
+  }).pipe(Effect.scoped),
+});
+
+export const directivesTaskReadsANextLineCharacterAsWhitespace = Task.make({
+  name: "the directives task reports a directive after U+0085, which oxlint and tsc read as whitespace",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const file = path.join(directory, "main.ts");
+    yield* fileSystem.writeFileString(
+      file,
+      [
+        "/*\u0085oxlint-disable sshkeda/no-comments */",
+        "\u0085// @ts-nocheck",
+        "export const answer = 42;",
+      ].join("\n"),
+    );
+    const violations = yield* disableDirectivesIn(file);
+    expect(taggedViolations(violations).map((violation) => violation.split(": error ")[0])).toEqual(
+      [`${file}:1`, `${file}:2`],
+    );
+  }).pipe(Effect.scoped),
+});
+
+export const noCommentsReportsTsNoCheckAfterCode = Task.make({
+  name: "no-comments reports a @ts-nocheck after the first token as an ordinary comment and leaves one after a shebang to the directives task",
+  run: ruleTest("no-comments", {
+    valid: ["#!/usr/bin/env bun\n// @ts-nocheck\nlog();"],
+    invalid: [
+      {
+        code: "export const first = 1;\n// @ts-nocheck\nlog();",
+        errors: [{ messageId: "comment" }],
+      },
+    ],
+  }),
+});
+
+export const directivesTaskCountsEveryLineBreakTscCounts = Task.make({
+  name: "the directives task reports the right line in a file whose lines end with CR, CRLF or U+2028, as tsc counts them",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const lines = [
+      "export const first = 1;",
+      "/* note",
+      " * @ts-ignore */",
+      "export const second = 2;",
+      "// @ts-expect-error",
+      "export const third = 3;",
+    ];
+    const lineBreaks = { cr: "\r", crlf: "\r\n", separator: "\u2028" };
+    const linesOfEachFile = yield* Effect.forEach(Object.entries(lineBreaks), ([name, lineBreak]) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, `${name}.ts`);
+        yield* fileSystem.writeFileString(file, lines.join(lineBreak));
+        const violations = yield* disableDirectivesIn(file);
+        return taggedViolations(violations).map(
+          (violation) => violation.split(": error ")[0]?.replace(`${directory}/`, "") ?? "",
+        );
+      }),
+    );
+    expect(linesOfEachFile).toEqual([
+      ["cr.ts:2", "cr.ts:5"],
+      ["crlf.ts:2", "crlf.ts:5"],
+      ["separator.ts:2", "separator.ts:5"],
+    ]);
+  }).pipe(Effect.scoped),
+});
+
 export const directivesTaskCountsLinesOncePerFile = Task.make({
   name: "the directives task reports the line of each of 25,000 directives in a 50,000-line file in under 5 seconds",
   run: Effect.gen(function* () {

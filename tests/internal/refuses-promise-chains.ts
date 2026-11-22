@@ -83,6 +83,20 @@ export const thenablesAreRefused = Task.make({
   }).pipe(Effect.provide(ProjectQueryCachesLive)),
 });
 
+export const chainsByAComputedKeyAreRefused = Task.make({
+  name: "a then, catch or finally call on a Promise by a computed key whose type is that method's name is refused, and one by a key typed string or on a value that is not thenable passes",
+  run: Effect.gen(function* () {
+    expect(
+      yield* violationsOf({
+        "a.ts":
+          'const method = "then";\nexport const keyed = (promise: Promise<number>) => promise[method](String);\nexport const either = (promise: Promise<number>, key: "catch") => promise[key](() => 0);\n',
+        "b.ts":
+          "export const first = (calls: readonly (() => number)[]) => calls[0]?.();\nexport const read = (record: Record<string, () => number>, key: string) => record[key]?.();\nexport const loose = (promise: Promise<number> & Record<string, () => void>, key: string) => promise[key]?.();\n",
+      }),
+    ).toEqual([chained("a.ts:2", "then"), chained("a.ts:3", "catch")]);
+  }).pipe(Effect.provide(ProjectQueryCachesLive)),
+});
+
 export const callsOnValuesThatAreNotThenablePass = Task.make({
   name: "Effect.catch and Stream.catch pass by name, through a renamed import, through a namespace import of effect/Effect or inside a pipe, as do catch and finally on an object literal and catch on a class instance that have no then, and any call whose receiver is any or unresolved",
   run: Effect.gen(function* () {
