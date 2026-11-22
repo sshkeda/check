@@ -8,7 +8,7 @@
         "@effect/platform-bun": "4.1.0",
         "@effect/tsgo": "0.67.4",
         "@oxlint/plugins": "1.88.0",
-        "@sshkeda/task": "3.0.4",
+        "@sshkeda/task": "3.1.0",
         "oxc-parser": "0.153.0",
         "oxc-resolver": "11.24.2",
         "oxlint": "1.88.0",
@@ -183,7 +183,7 @@
 
     "@oxlint/plugins": ["@oxlint/plugins@1.88.0", "", {}, "sha512-G2xbfWTrbqYRhR/vfeKNMQf/sS3/ti0iKJAAkRxHuXWZH/hne/dyIb9QKk5LuR6cJLARxsL6FMoAYmfspd74MQ=="],
 
-    "@sshkeda/task": ["@sshkeda/task@3.0.4", "", { "dependencies": { "@effect/platform-bun": "^4.1.0" }, "peerDependencies": { "effect": "^4.1.0" } }, "sha512-pOdyzMTh1ymgc/Zap7BbCtYKOjGCvLBzbqJobGGpJveZoErdoYNBgYx50WgMA0rEqY0h4glWd9iCu6wXMJD35Q=="],
+    "@sshkeda/task": ["@sshkeda/task@3.1.0", "", { "dependencies": { "@effect/platform-bun": "^4.1.0" }, "peerDependencies": { "effect": "^4.1.0" } }, "sha512-Lt36p3I6Kqn4Kbaty/fu/1jC64JGy2L2Xe+EJagzGy9KDM1ijO7B5myyfhpQ4FoRiDc5Ek8TGAlUhhKGhLeoRQ=="],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.4", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A=="],
 

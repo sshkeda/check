@@ -1,19 +1,27 @@
 import { isBuiltin } from "node:module";
 
-const DIRECTIVE = /^\s*(?:(?:oxlint|eslint)-(?:disable|enable)|@ts-nocheck|@effect-diagnostics)/u;
+const DIRECTIVE = /^\s*(?:(?:oxlint|eslint)-(?:disable|enable)|@effect-diagnostics)/u;
 
-const TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE =
-  /(?:^|\n)[\s*/]*@ts-(?:ignore|expect-error)[^\n]*$/u;
+const LINE_COMMENT = "Line";
 
-export const TYPESCRIPT_NO_CHECK = /^\/?\s*@ts-nocheck(?![a-z-])/iu;
+const TYPESCRIPT_SUPPRESSION_IN_A_LINE_COMMENT = /^\/*[ \t]*@ts-(?:ignore|expect-error)/u;
 
-export const isTypeScriptSuppression = (commentText: string) =>
-  TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE.test(commentText);
+const TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE_OF_A_BLOCK_COMMENT =
+  /(?:^|[\n\r\u2028\u2029])[ \t*]*@ts-(?:ignore|expect-error)[^\n\r\u2028\u2029]*$/u;
 
-export const isDirective = (commentText: string) =>
-  DIRECTIVE.test(commentText) ||
-  isTypeScriptSuppression(commentText) ||
-  TYPESCRIPT_NO_CHECK.test(commentText);
+const TYPESCRIPT_NO_CHECK_IN_A_LINE_COMMENT =
+  /^\/?[ \t]*@[Tt][Ss]-[Nn][Oo][Cc][Hh][Ee][Cc][Kk](?![A-Za-z-])/u;
+
+const isTypeScriptSuppression = (comment: { readonly type: string; readonly value: string }) =>
+  comment.type === LINE_COMMENT
+    ? TYPESCRIPT_SUPPRESSION_IN_A_LINE_COMMENT.test(comment.value)
+    : TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE_OF_A_BLOCK_COMMENT.test(comment.value);
+
+const isTypeScriptNoCheck = (comment: { readonly type: string; readonly value: string }) =>
+  comment.type === LINE_COMMENT && TYPESCRIPT_NO_CHECK_IN_A_LINE_COMMENT.test(comment.value);
+
+export const isDirective = (comment: { readonly type: string; readonly value: string }) =>
+  DIRECTIVE.test(comment.value) || isTypeScriptSuppression(comment) || isTypeScriptNoCheck(comment);
 
 export const EFFECT_OPERATION_RULES = {
   "no-dropped-failures": {

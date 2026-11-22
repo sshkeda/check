@@ -11,7 +11,7 @@ export const noComments = defineRule({
     return {
       "Program:exit"() {
         for (const comment of context.sourceCode.getAllComments()) {
-          const isCodeComment = comment.type !== "Shebang" && !isDirective(comment.value);
+          const isCodeComment = comment.type !== "Shebang" && !isDirective(comment);
           if (isCodeComment) {
             context.report({ loc: comment.loc, messageId: "comment" });
           }
