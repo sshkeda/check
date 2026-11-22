@@ -28,7 +28,7 @@ export const keepsTaskStateOutOfHome = Task.make({
         Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
       ),
     );
-    expect(printed).toContain(`wrote the trace to ${path.join(taskStateDirectory, "traces")}`);
+    expect(printed).toContain(`run: ${path.join(taskStateDirectory, "runs")}/`);
     expect(yield* fileSystem.exists(path.join(home, ".sshkeda-task"))).toBe(false);
   }).pipe(Effect.scoped),
 });

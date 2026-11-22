@@ -286,6 +286,82 @@ export const unansweredRequestsFailAtTheDeadline = Task.make({
 
 const sourceModule = (file: string) => new URL(`../../src/${file}`, import.meta.url).href;
 
+const requestFailureAfterTheProcessStopsEarly = (stopping: readonly string[]) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* fileSystem.makeTempDirectoryScoped();
+      yield* linkNodeModulesWithCheck(directory);
+      yield* fileSystem.writeFileString(
+        path.join(directory, "run.ts"),
+        [
+          'import { EventEmitter } from "node:events";',
+          'import { Effect } from "effect";',
+          'import { API } from "typescript/unstable/async";',
+          `import { typeScriptRequest } from ${yield* encodeJson(sourceModule("lib/tasks/shared/query-the-typescript-project.ts"))};`,
+          `import { openedApi, TypeScriptApiLaunch } from ${yield* encodeJson(sourceModule("lib/tasks/shared/watch-the-typescript-api-process.ts"))};`,
+          'const client = Object.getPrototypeOf(Reflect.get(new API(), "client"));',
+          "client.connect = function () {",
+          "  const child = Object.assign(new EventEmitter(), {",
+          "    stdout: Object.assign(new EventEmitter(), { destroyed: false }),",
+          "    exitCode: null,",
+          "    signalCode: null,",
+          "    kill: () => true,",
+          "  });",
+          "  this.process = child;",
+          "  queueMicrotask(() => {",
+          ...stopping,
+          "  });",
+          "  return Promise.resolve();",
+          "};",
+          "client.apiRequest = () => new Promise(() => {});",
+          "client.close = () => Promise.resolve();",
+          "const program = Effect.gen(function* () {",
+          "  const api = yield* openedApi(new Map());",
+          '  return yield* typeScriptRequest("parse /project/a.json", () => api.parseConfigFile("/project/a.json"));',
+          "}).pipe(",
+          "  Effect.scoped,",
+          '  Effect.provideService(TypeScriptApiLaunch, { requestDeadline: "5 seconds" }),',
+          '  Effect.match({ onFailure: (failure) => failure.message, onSuccess: () => "answered" }),',
+          ");",
+          "console.log(await Effect.runPromise(program));",
+          "",
+        ].join("\n"),
+      );
+      const printed = yield* Task.exec("bun", ["run.ts"], { cwd: directory });
+      return printed.trim();
+    }),
+  );
+
+export const startupNoticesAnExitBeforeTheListenersAttach = Task.make({
+  name: "when the TypeScript API process exits after it connects but before Check attaches its listeners, the next request fails naming its exit code instead of waiting",
+  timeout: WATCHDOG,
+  run: Effect.gen(function* () {
+    const printed = yield* requestFailureAfterTheProcessStopsEarly([
+      "    child.exitCode = 23;",
+      '    child.emit("exit", 23, null);',
+    ]);
+    expect(printed).toBe(
+      failedToParse("/project/a.json", "the TypeScript API process exited with code 23"),
+    );
+  }),
+});
+
+export const startupNamesAnEarlySignalExitAfterTheOutputClosed = Task.make({
+  name: "when the TypeScript API process exits on a signal and its output closes before Check attaches its listeners, the next request fails naming the signal",
+  timeout: WATCHDOG,
+  run: Effect.gen(function* () {
+    const printed = yield* requestFailureAfterTheProcessStopsEarly([
+      '    child.signalCode = "SIGTERM";',
+      "    child.stdout.destroyed = true;",
+    ]);
+    expect(printed).toBe(
+      failedToParse("/project/a.json", "the TypeScript API process exited on signal SIGTERM"),
+    );
+  }),
+});
+
 export const typedChecksFailWhenTheApiProcessDiesMidRun = Task.make({
   name: "the directives and checker-queries tasks of a run whose TypeScript API process dies after loading the project fail naming its exit code instead of waiting forever",
   timeout: WATCHDOG,
@@ -338,8 +414,8 @@ export const typedChecksFailWhenTheApiProcessDiesMidRun = Task.make({
       );
       const exited =
         "the TypeScript API failed to read a source file: the TypeScript API process exited with code 23";
-      expect(printed).toMatch(new RegExp(`^\\[directives\\] .*${exited}`, "mu"));
-      expect(printed).toMatch(new RegExp(`^\\[checker-queries\\] .*${exited}`, "mu"));
+      expect(printed).toMatch(new RegExp(`^error: \\[directives\\] .*${exited}`, "mu"));
+      expect(printed).toMatch(new RegExp(`^error: \\[checker-queries\\] .*${exited}`, "mu"));
       expect(yield* fake.living).toBe("");
       const launched = yield* fake.launched;
       expect(launched.length).toBeGreaterThan(0);

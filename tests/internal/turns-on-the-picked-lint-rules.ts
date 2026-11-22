@@ -45,6 +45,7 @@ const PICKED_RULES = {
   "typescript/prefer-regexp-exec": "error",
   "typescript/prefer-string-starts-ends-with": "error",
   "sshkeda/no-native-prototype-writes": "error",
+  "sshkeda/no-promise-combinators": "error",
   "sshkeda/no-unsorted-type-constituents": "error",
   "typescript/strict-boolean-expressions": "error",
   "typescript/strict-void-return": "error",

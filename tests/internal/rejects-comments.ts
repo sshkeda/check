@@ -98,6 +98,10 @@ export const leavesDisableDirectivesToTheDirectivesTask = Task.make({
       "// @ts-expect-error\nlog();",
       "// @ts-nocheck\nlog();",
       "/*\n * @ts-ignore */\nlog();",
+      "/// @ts-nocheck\nlog();",
+      "// @TS-NOCHECK\nlog();",
+      "/// @ts-ignore\nlog();",
+      "/** @ts-expect-error */\nlog();",
       `// ${EFFECT_DIRECTIVE} floatingEffect:off\nlog();`,
       "// @effect-diagnostics floatingEffect:off\nlog();",
     ],
@@ -128,6 +132,43 @@ export const directivesTaskFindsEveryDisableDirective = Task.make({
     expect(taggedViolations(violations).map((violation) => violation.split(": error ")[0])).toEqual(
       directives.map((_directive, index) => `${file}:${index + 1}`),
     );
+  }).pipe(Effect.scoped),
+});
+
+export const directivesTaskFindsEveryTypeScriptDirectiveFormTscHonors = Task.make({
+  name: "the directives task reports @ts-nocheck after three slashes, in any case or before a period, and @ts-ignore and @ts-expect-error after more than two slashes or in a one-line JSDoc comment, as tsc honors each",
+  run: Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fileSystem.makeTempDirectoryScoped();
+    const file = path.join(directory, "main.ts");
+    yield* fileSystem.writeFileString(
+      file,
+      [
+        "/// @ts-nocheck",
+        "///@ts-nocheck",
+        "// @TS-NOCHECK",
+        "// @ts-nocheck. Generated file.",
+        "/// @ts-ignore",
+        "//// @ts-ignore",
+        "/** @ts-ignore */",
+        "/// @ts-expect-error",
+        "/** @ts-expect-error */",
+        "export const answer = 42;",
+      ].join("\n"),
+    );
+    const violations = yield* disableDirectivesIn(file);
+    expect(taggedViolations(violations)).toEqual([
+      `${file}:1: error DisableDirective: has disable directive @ts-nocheck`,
+      `${file}:2: error DisableDirective: has disable directive @ts-nocheck`,
+      `${file}:3: error DisableDirective: has disable directive @TS-NOCHECK`,
+      `${file}:4: error DisableDirective: has disable directive @ts-nocheck. Generated file.`,
+      `${file}:5: error DisableDirective: has disable directive @ts-ignore`,
+      `${file}:6: error DisableDirective: has disable directive @ts-ignore`,
+      `${file}:7: error DisableDirective: has disable directive * @ts-ignore`,
+      `${file}:8: error DisableDirective: has disable directive @ts-expect-error`,
+      `${file}:9: error DisableDirective: has disable directive * @ts-expect-error`,
+    ]);
   }).pipe(Effect.scoped),
 });
 

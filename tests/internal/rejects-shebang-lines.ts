@@ -117,7 +117,14 @@ export const aShebangInAnIgnoredImportedFileIsReported = Task.make({
     expect(
       printed
         .split("\n")
-        .filter((line) => line.includes("src/internal/value.ts") && line.includes("shebang")),
-    ).toEqual([`[oxlint] ${shebangOutsideBin("src/internal/value.ts")}`]);
+        .filter(
+          (line) =>
+            line.startsWith("error: ") &&
+            line.includes("src/internal/value.ts") &&
+            line.includes("shebang"),
+        ),
+    ).toEqual([
+      "error: [oxlint] src/internal/value.ts:1: ShebangOutsideBin: starts with a shebang line, but package.json does not list it under bin",
+    ]);
   }).pipe(Effect.scoped),
 });

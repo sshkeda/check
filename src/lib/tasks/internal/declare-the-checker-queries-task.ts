@@ -11,6 +11,7 @@ import { findIndexReExportViolations } from "../lib/judge-index-re-exports/index
 import { findExportPlacementViolations } from "../lib/place-exports-in-the-narrowest-directory/index.ts";
 import { findErrorMappingsToDone } from "../lib/refuse-error-mappings-that-end-streams/index.ts";
 import { findUnobservedForkFailures } from "../lib/refuse-forks-whose-failures-nothing-observes/index.ts";
+import { findPromiseChains } from "../lib/refuse-promise-chains/index.ts";
 import { findServiceLayerViolations } from "../lib/require-separate-service-layers/index.ts";
 import { inEachPackage } from "../shared/check-each-nested-package.ts";
 import { lintConfigFile } from "../shared/declare-lint-config-task.ts";
@@ -36,6 +37,7 @@ export const checkerQueries = Task.make({
           "layer-provides": findLayerProvidesOutsideProgramStarts,
           "error-mappings": findErrorMappingsToDone,
           "fork-failures": findUnobservedForkFailures,
+          "promise-chains": findPromiseChains,
           "re-exports": findIndexReExportViolations,
         }),
       ),

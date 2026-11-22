@@ -185,9 +185,10 @@ export const runsChecksFromPackedTarball = Task.make({
         taskStateDirectory,
       }).pipe(printedByAFailedRun);
       expect(configMistake).toContain(
-        '[lint-config] oxlint.config.ts: error MalformedGrant: "scripts/*": is a glob',
+        'error: [lint-config] oxlint.config.ts: MalformedGrant: "scripts/*": is a glob',
       );
-      expect(configMistake).toContain("[oxlint] error AwaitedTaskFailed: lint-config failed");
+      expect(configMistake).toMatch(/^ended: \[oxlint\], [\d.]+s, failed$/mu);
+      expect(configMistake).not.toMatch(/^error: \[oxlint\] /mu);
       expect(configMistake).not.toContain("/dist/");
       expect(pointersToTheGuide(configMistake)).toEqual([pointerTo(installedGuide)]);
       expect(yield* fileSystem.exists(path.join(consumer, installedGuide))).toBe(true);
@@ -201,13 +202,13 @@ export const runsChecksFromPackedTarball = Task.make({
         taskStateDirectory,
       }).pipe(printedByAFailedRun);
       expect(failure).toMatch(
-        /^\[oxlint\] src\/index\.ts:1:14: error sshkeda\(no-loose-literal-constants\): const greeting/mu,
+        /^error: \[oxlint\] src\/index\.ts:1:14: sshkeda\(no-loose-literal-constants\): const greeting/mu,
       );
       expect(failure).toMatch(
-        /^\[oxlint\] src\/index\.ts:2:\d+: error typescript\(no-unnecessary-type-conversion\): /mu,
+        /^error: \[oxlint\] src\/index\.ts:2:\d+: typescript\(no-unnecessary-type-conversion\): /mu,
       );
       expect(failure).toContain(
-        "[layout] Notes.json: error NotKebabCase: Notes.json is not kebab-case",
+        "error: [layout] Notes.json: NotKebabCase: Notes.json is not kebab-case",
       );
       expect(pointersToTheGuide(failure)).toEqual([pointerTo(installedGuide)]);
       yield* fileSystem.remove(misnamedFile);
@@ -238,8 +239,7 @@ export const runsChecksFromPackedTarball = Task.make({
         ...options,
         taskStateDirectory,
       });
-      expect(throughTheCheckTask(strictest)).toContain("[type-check] passed");
-      expect(strictest).toContain("passed");
+      expect(strictest).toMatch(/^passed: /mu);
     }),
   ),
 });
@@ -331,7 +331,7 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make({
       }).pipe(printedByAFailedRun);
       const printedByCheck = throughTheCheckTask(failure);
       expect(printedByCheck).toContain(
-        "[oxlint] src/index.ts:1:14: error sshkeda(no-loose-literal-constants)",
+        "error: [oxlint] src/index.ts:1:14: sshkeda(no-loose-literal-constants)",
       );
       const hoistedGuide = path.join("../..", GUIDE_IN_THE_PACKAGE);
       expect(pointersToTheGuide(printedByCheck)).toEqual([pointerTo(hoistedGuide)]);
@@ -341,9 +341,8 @@ export const installsPackedTarballInAHoistedWorkspacePackage = Task.make({
         ...options,
         taskStateDirectory,
       });
-      expect(throughTheCheckTask(passing)).toMatch(/^passed: /mu);
       expect(passing).toMatch(/^passed: 1 task, /mu);
-      expect(pointersToTheGuide(throughTheCheckTask(passing))).toEqual([]);
+      expect(throughTheCheckTask(passing)).toBe("");
     }),
   ),
 });
@@ -409,7 +408,7 @@ export const formatsAPackedConsumerWithItsFormatConfig = Task.make({
           Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
         ),
       );
-      const unformattedSource = "[bun-fmt] src/index.ts: error UnformattedFile: is not formatted";
+      const unformattedSource = "error: [bun-fmt] src/index.ts: UnformattedFile: is not formatted";
       const unformatted = yield* checkOutput;
       expect(unformatted).toContain(unformattedSource);
       yield* Task.exec("bun", ["fmt"], options);

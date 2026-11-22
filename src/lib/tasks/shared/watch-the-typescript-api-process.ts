@@ -44,21 +44,36 @@ const TYPESCRIPT_API_CLIENT = Schema.declare(
     CLIENT_MEMBERS.every((member) => Predicate.hasProperty(value, member)),
 );
 
-const PROCESS_MEMBERS = ["once", "on", "kill", "stdout"] as const;
+const PROCESS_MEMBERS = ["once", "on", "kill", "stdout", "exitCode", "signalCode"] as const;
+
+const OUTPUT_MEMBERS = ["once", "destroyed"] as const;
 
 const isWatchableProcess = Schema.is(
   Schema.declare(
     (
       value,
     ): value is {
-      readonly stdout: { once(event: "close", listener: () => void): void } | null;
+      readonly stdout: {
+        readonly destroyed: boolean;
+        once(event: "close", listener: () => void): void;
+      } | null;
+      readonly exitCode: number | null;
+      readonly signalCode: NodeJS.Signals | null;
       once(
         event: "exit",
         listener: (code: number | null, signal: NodeJS.Signals | null) => void,
       ): void;
       on(event: "error", listener: (error: Error) => void): void;
       kill(signal: NodeJS.Signals): boolean;
-    } => PROCESS_MEMBERS.every((member) => Predicate.hasProperty(value, member)),
+    } => {
+      const hasProcessMembers = PROCESS_MEMBERS.every((member) =>
+        Predicate.hasProperty(value, member),
+      );
+      const output = Predicate.hasProperty(value, "stdout") ? value.stdout : undefined;
+      const hasOutputMembers =
+        output === null || OUTPUT_MEMBERS.every((member) => Predicate.hasProperty(output, member));
+      return hasProcessMembers && hasOutputMembers;
+    },
   ),
 );
 
@@ -85,22 +100,36 @@ const watchedProcess = (
 ) => {
   const child: unknown = client[CLIENT_PROCESS_FIELD];
   if (!isWatchableProcess(child)) {
-    return client.close().then(() => Option.none());
+    return Option.none();
   }
   const output = { closed: false };
-  child.once("exit", (code, signal) => {
+  const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
     stopWith(stopped, child, exitReason(code, signal, output.closed));
     Deferred.doneUnsafe(exited, Effect.void);
-  });
+  };
+  const onOutputClosed = () => {
+    output.closed = true;
+    child.kill(TERMINATING_SIGNAL);
+  };
+  child.once("exit", onExit);
   child.on("error", (error) => {
     stopWith(stopped, child, `the TypeScript API process failed: ${error.message}`);
   });
-  child.stdout?.once("close", () => {
-    output.closed = true;
-    child.kill(TERMINATING_SIGNAL);
-  });
-  return Promise.resolve(Option.some(child));
+  child.stdout?.once("close", onOutputClosed);
+  const hasExited = child.exitCode !== null || child.signalCode !== null;
+  if (hasExited) {
+    onExit(child.exitCode, child.signalCode);
+  }
+  if (child.stdout?.destroyed === true) {
+    onOutputClosed();
+  }
+  return Option.some(child);
 };
+
+const startupFailed = (reason: string) => new TypeScriptApiFailed({ operation: STARTING, reason });
+
+const startupStep = <Value>(step: () => Promise<Value>) =>
+  Effect.tryPromise({ try: step, catch: (cause) => startupFailed(String(cause)) });
 
 const answered = <Answer>(
   stopped: Deferred.Deferred<never, TypeScriptApiProcessStopped>,
@@ -137,19 +166,17 @@ const startedSession = (sourceTextOverrides: ReadonlyMap<string, string>) =>
     );
     const client = yield* Schema.decodeUnknownEffect(TYPESCRIPT_API_CLIENT)(
       api[API_CLIENT_FIELD],
-    ).pipe(
-      Effect.mapError(
-        () => new TypeScriptApiFailed({ operation: STARTING, reason: CLIENT_CHANGED }),
-      ),
-    );
+    ).pipe(Effect.mapError(() => startupFailed(CLIENT_CHANGED)));
     const stopped = yield* Deferred.make<never, TypeScriptApiProcessStopped>();
     const exited = yield* Deferred.make<void>();
-    const watched = yield* Effect.tryPromise({
-      try: () => client.connect().then(() => watchedProcess(client, stopped, exited)),
-      catch: (cause) => new TypeScriptApiFailed({ operation: STARTING, reason: String(cause) }),
+    yield* startupStep(() => client.connect());
+    const watched = yield* Effect.try({
+      try: () => watchedProcess(client, stopped, exited),
+      catch: (cause) => startupFailed(String(cause)),
     });
     if (Option.isNone(watched)) {
-      return yield* new TypeScriptApiFailed({ operation: STARTING, reason: CLIENT_CHANGED });
+      yield* startupStep(() => client.close());
+      return yield* startupFailed(CLIENT_CHANGED);
     }
     const child = watched.value;
     const runPromise = Effect.runPromiseWith(yield* Effect.context());

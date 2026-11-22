@@ -78,7 +78,7 @@ export const quietToolFailure =
             failQuietly(
               tool,
               exited,
-              Arrays.append(report.violations, exitError(exited, report.notes)),
+              Arrays.prepend(report.violations, exitError(exited, report.notes)),
             ),
           ),
           Effect.catchTag("ToolReportUndecodable", (unreadableReport) =>

@@ -12,7 +12,7 @@ import {
   stagedCheckModule,
 } from "../shared/checked-project.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, taskStatesOf, traceFileOf } from "../shared/run-task-files.ts";
 
 const TYPE_CHECK_TASK = stagedCheckModule("src/lib/tasks/lib/type-check-with-bun-check/index.ts");
 
@@ -100,41 +100,52 @@ export const printsToolOutputWithDetailInTrace = Task.make({
         ),
       );
       expect(failures).toMatch(
-        /^\[type-check\] error ToolExited: bun exited with code [1-9]\d*$/mu,
+        /^error: \[type-check\] ToolExited: bun exited with code [1-9]\d*$/mu,
       );
       expect(failures).not.toMatch(/^\[type-check\]\s+\[/mu);
       expect(failures).toMatch(
-        /^\[type-check\] index\.ts:1:50: error TS2322: Type 'number' is not assignable to type 'string'\.$/mu,
+        /^error: \[type-check\] index\.ts:1:50: TS2322: Type 'number' is not assignable to type 'string'\.$/mu,
       );
       expect(failures).toMatch(
-        /^\[effect-tsgo\] (?:\S*\/)?index\.ts:2:27: error effect\(cryptoRandomUUID\): /mu,
+        /^error: \[effect-tsgo\] (?:\S*\/)?index\.ts:2:27: effect\(cryptoRandomUUID\): /mu,
       );
       expect(failures).toMatch(
-        /^\[effect-tsgo\] error ToolExited: effect-tsgo exited with code [1-9]\d*$/mu,
+        /^error: \[effect-tsgo\] ToolExited: effect-tsgo exited with code [1-9]\d*$/mu,
       );
       expect(failures).toContain("cryptoRandomUUID");
       expect(failures).toMatch(
-        /^\[oxlint\] index\.ts:3:14: error sshkeda\(no-loose-literal-constants\): const greeting is not in CAPITAL_SNAKE_CASE$/mu,
+        /^error: \[oxlint\] index\.ts:3:14: sshkeda\(no-loose-literal-constants\): const greeting is not in CAPITAL_SNAKE_CASE$/mu,
       );
-      expect(failures).toMatch(/^\[oxlint\] error ToolExited: oxlint exited with code 1$/mu);
+      expect(failures).toMatch(/^error: \[oxlint\] ToolExited: oxlint exited with code 1$/mu);
       expect(failures).toMatch(
-        /^\[oxlint\] index\.ts:5:\d+: error typescript\(no-redundant-type-constituents\): a hint: b is overridden by string in this union type\.$/mu,
-      );
-      expect(failures).toMatch(
-        /^\[oxlint\] index\.ts:6:\d+: error sshkeda\(no-timer-globals\): global setTimeout is used$/mu,
+        /^error: \[oxlint\] index\.ts:5:\d+: typescript\(no-redundant-type-constituents\): a hint: b is overridden by string in this union type\.$/mu,
       );
       expect(failures).toMatch(
-        /^\[oxlint\] index\.ts:4:\d+: error eslint\(no-restricted-properties\): 'JSON\.parse' is restricted from being used\.$/mu,
+        /^error: \[oxlint\] index\.ts:6:\d+: sshkeda\(no-timer-globals\): global setTimeout is used$/mu,
       );
-      expect(failures).not.toMatch(/^\[(?:type-check|effect-tsgo|oxlint)\]\s+detected at /mu);
-      expect(failures).not.toMatch(/^\[[^\]]+\]\s+hint: /mu);
-      expect(failures.match(/error sshkeda\(no-loose-literal-constants\)/gu)?.length).toBe(1);
+      expect(failures).toMatch(
+        /^error: \[oxlint\] index\.ts:4:\d+: eslint\(no-restricted-properties\): 'JSON\.parse' is restricted from being used\.$/mu,
+      );
+      expect(failures).not.toMatch(
+        /^(?:error: )?\[(?:type-check|effect-tsgo|oxlint)\]\s+detected at /mu,
+      );
+      expect(failures).not.toMatch(/^(?:error: )?\[[^\]]+\]\s+hint: /mu);
+      expect(failures.match(/^error: .*: sshkeda\(no-loose-literal-constants\)/gmu)?.length).toBe(
+        1,
+      );
       expect(failures).not.toContain("--lspconfig");
       expect(failures).not.toContain("node_modules/.bin/");
-      expect(failures).not.toMatch(/^\[[^\]]+\]\s+at /mu);
-      const trace = yield* fileSystem.readFileString(
-        /wrote the trace to (?<file>\S+)/u.exec(failures)?.[1] ?? "",
-      );
+      expect(failures).not.toMatch(/^(?:error: )?\[[^\]]+\]\s+at /mu);
+      for (const task of ["type-check", "effect-tsgo", "oxlint"]) {
+        expect(failures).toMatch(
+          new RegExp(
+            `^recap: \\[${task}\\] \\d+\\.output \\| (?:\\S*/)?index\\.ts:\\d+:\\d+: `,
+            "mu",
+          ),
+        );
+      }
+      expect(failures).not.toMatch(/^recap: .*ToolExited/mu);
+      const trace = yield* fileSystem.readFileString(traceFileOf(failures));
       expect(trace).toContain("check.failure");
       expect(trace).toContain("bun check --project tsconfig.json --no-pretty --all --build");
       expect(trace).toContain("--lspconfig");
@@ -143,7 +154,7 @@ export const printsToolOutputWithDetailInTrace = Task.make({
 });
 
 export const printsEachViolationWithItsTag = Task.make({
-  name: "a checker query prints each violation as location: error <check> <Tag>: message",
+  name: "a checker query prints each violation as location: <check> <Tag>: message",
   run: Effect.scoped(
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -196,10 +207,65 @@ export const program = Effect.gen(function* () {
       );
       const lines = printed.split("\n");
       const violationLine = lines.indexOf(
-        "[checker-queries] index.ts:5:18: error service-yields RepeatedServiceYield: service WorkerPool was already yielded at 4:17",
+        "error: [checker-queries] index.ts:5:18: service-yields RepeatedServiceYield: service WorkerPool was already yielded at 4:17",
       );
       expect(violationLine).toBeGreaterThan(-1);
       expect(printed).not.toContain("detected at");
+    }),
+  ),
+});
+
+export const reportsJsonDecodedThroughThenAsAPromiseChain = Task.make({
+  name: "the whole check gives one report on the line of a json() body handed straight to a Schema decoder through then, as a Promise chain by the promise-chains check, and never reports it as JSON parsed without a Schema",
+  run: Effect.scoped(
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* fileSystem.makeTempDirectoryScoped();
+      const taskStateDirectory = yield* fileSystem.makeTempDirectoryScoped();
+      const options = { cwd: directory };
+      yield* linkNodeModulesWithCheck(directory);
+      const files = {
+        ".gitignore": "node_modules\nrun.ts\noxlint.config.ts\noxfmt.config.ts\n",
+        "oxlint.config.ts": `import { lintConfig } from "@sshkeda/check";\nexport default lintConfig({});\n`,
+        "oxfmt.config.ts": FORMAT_CONFIG_TEXT,
+        "package.json": `${yield* encodeIndentedJson({ name: path.basename(directory), type: "module", main: "./index.ts" })}\n`,
+        "tsconfig.json": `${yield* encodeIndentedJson(SERVICE_YIELDS_TSCONFIG)}\n`,
+        "index.ts": [
+          'import { Schema } from "effect";',
+          "",
+          "const Body = Schema.Struct({ name: Schema.String });",
+          "export const decoded = (response: { readonly json: () => Promise<unknown> }) =>",
+          "  response.json().then(Schema.decodeUnknownOption(Body));",
+          "",
+        ].join("\n"),
+      };
+      for (const [file, text] of Object.entries(files)) {
+        yield* fileSystem.writeFileString(path.join(directory, file), text);
+      }
+      yield* Task.exec("git", ["init", "--quiet"], options);
+      yield* Task.exec("bun", ["fmt", "."], options);
+      const printed = yield* runTaskFile(yield* theCheckCommand, {
+        ...options,
+        taskStateDirectory,
+      }).pipe(
+        Effect.as(""),
+        Effect.catchTag("CommandFailed", (failure) =>
+          Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
+        ),
+      );
+      const chained = [
+        ...printed.matchAll(
+          /^error: \[checker-queries\] index\.ts:(?<line>\d+):\d+: promise-chains PromiseChained: then is called on a Promise$/gmu,
+        ),
+      ];
+      expect(chained).toHaveLength(1);
+      expect(printed).not.toContain("parses JSON without a Schema");
+      const chainLine = chained[0]?.groups?.["line"] ?? "";
+      const reportsOnTheChainLine = printed
+        .split("\n")
+        .filter((line) => line.startsWith("error: ") && line.includes(` index.ts:${chainLine}:`));
+      expect(reportsOnTheChainLine).toHaveLength(1);
     }),
   ),
 });
@@ -259,38 +325,38 @@ export const reportsEachCauseOnce = Task.make({
           Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
         ),
       );
-      expect(printed).toMatch(/^\[oxlint\] index\.ts:2:\d+: error eslint\(no-console\): .*$/mu);
+      expect(printed).toMatch(/^error: \[oxlint\] index\.ts:2:\d+: eslint\(no-console\): .*$/mu);
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:3:\d+: error eslint\(no-restricted-properties\): 'Date\.now' is restricted from being used\.$/mu,
+        /^error: \[oxlint\] index\.ts:3:\d+: eslint\(no-restricted-properties\): 'Date\.now' is restricted from being used\.$/mu,
       );
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:4:\d+: error eslint\(no-restricted-properties\): 'JSON\.parse' is restricted from being used\.$/mu,
+        /^error: \[oxlint\] index\.ts:4:\d+: eslint\(no-restricted-properties\): 'JSON\.parse' is restricted from being used\.$/mu,
       );
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:\d+:\d+: error typescript\(no-restricted-types\): Do not use `Record<string, unknown>` as a type$/mu,
+        /^error: \[oxlint\] index\.ts:\d+:\d+: typescript\(no-restricted-types\): Do not use `Record<string, unknown>` as a type$/mu,
       );
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:5:\d+: error sshkeda\(no-clock-reads-and-sleeps\)/mu,
+        /^error: \[oxlint\] index\.ts:5:\d+: sshkeda\(no-clock-reads-and-sleeps\)/mu,
       );
-      expect(printed).toMatch(/^\[directives\] index\.ts:6: error DisableDirective: /mu);
+      expect(printed).toMatch(/^error: \[directives\] index\.ts:6: DisableDirective: /mu);
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:7:\d+: error typescript\(no-non-null-assertion\)/mu,
+        /^error: \[oxlint\] index\.ts:7:\d+: typescript\(no-non-null-assertion\)/mu,
       );
-      expect(printed).toMatch(/^\[effect-tsgo\] index\.ts:8:\d+: error effect\(asyncFunction\)/mu);
+      expect(printed).toMatch(/^error: \[effect-tsgo\] index\.ts:8:\d+: effect\(asyncFunction\)/mu);
       expect(printed).toMatch(
-        /^\[effect-tsgo\] index\.ts:13:\d+: error effect\(schemaNumber\): Schema\.Number accepts NaN, Infinity and -Infinity$/mu,
+        /^error: \[effect-tsgo\] index\.ts:13:\d+: effect\(schemaNumber\): Schema\.Number accepts NaN, Infinity and -Infinity$/mu,
       );
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:14:\d+: error typescript\(no-explicit-any\): /mu,
+        /^error: \[oxlint\] index\.ts:14:\d+: typescript\(no-explicit-any\): /mu,
       );
       expect(printed).not.toMatch(/^\[[^\]]+\]\s+hint: /mu);
       expect(printed).toMatch(
-        /^\[oxlint\] index\.ts:\d+:\d+: error eslint\(no-await-in-loop\): .*$/mu,
+        /^error: \[oxlint\] index\.ts:\d+:\d+: eslint\(no-await-in-loop\): .*$/mu,
       );
       expect(printed).not.toContain("Promise.all");
       expect(
         printed.match(
-          /^\[oxlint\] index\.ts:\d+:\d+: error sshkeda\(no-unnamed-recovery\): Effect\.catch handles failures it does not name$/gmu,
+          /^error: \[oxlint\] index\.ts:\d+:\d+: sshkeda\(no-unnamed-recovery\): Effect\.catch handles failures it does not name$/gmu,
         )?.length,
       ).toBe(TWICE);
       expect(printed).not.toContain("catchConditionalRefailToCatchIf");
@@ -348,13 +414,16 @@ export const typeCheckIgnoresCheckScriptsAboveTheTemporaryDirectory = Task.make(
             Effect.succeed(`${failure.standardOutput}${failure.standardError}`),
           ),
         );
-      expect(yield* typeCheckIn()).toContain("[type-check] passed");
+      expect(yield* taskStatesOf(yield* typeCheckIn())).toContainEqual({
+        task: "type-check",
+        state: "passed",
+      });
       yield* fileSystem.writeFileString(
         path.join(directory, "index.ts"),
         'export const COUNT: number = "one";\n',
       );
       const failed = yield* typeCheckIn();
-      expect(failed).toMatch(/^\[type-check\] index\.ts:1:14: error TS2322: /mu);
+      expect(failed).toMatch(/^error: \[type-check\] index\.ts:1:14: TS2322: /mu);
       expect(failed).not.toContain("SHADOWED");
     }),
   ),
@@ -400,28 +469,29 @@ const fullCheckOutputWith = (
   });
 
 export const everyCheckNamesAnUnreadablePackageJson = Task.make({
-  name: 'a nested package.json whose name is no string, such as { "name": 5 }, is printed at its path with why on one line by every check that looks for the nested packages to check, the cached checks whose inputs list them included, and the typed checks wait for the TypeScript config check it fails',
+  name: 'a nested package.json whose name is no string, such as { "name": 5 }, is printed at its path with why on one line by every check that looks for the nested packages to check, the cached checks whose inputs list them included, while the typed checks wait for the TypeScript config check and the file-type check for the lint config check, which it fails',
   run: Effect.scoped(
     Effect.gen(function* () {
       const failures = yield* fullCheckOutputWith({ "sub/package.json": '{ "name": 5 }\n' });
       const printed = failures
         .split("\n")
-        .filter((line) => line.includes("PackageManifestUnreadable") && line.startsWith("["));
+        .filter(
+          (line) => line.includes("PackageManifestUnreadable") && line.startsWith("error: ["),
+        );
       expect(printed.toSorted()).toEqual(
         [
           "bun-fmt",
           "duplicate-functions",
-          "file-types",
           "formatter-files",
           "layout",
           "lint-config",
           "typescript-config",
         ].map(
           (check) =>
-            `[${check}] sub/package.json: error PackageManifestUnreadable: cannot be read as a package.json whose name, if any, is a string: Expected string at ["name"]`,
+            `error: [${check}] sub/package.json: PackageManifestUnreadable: cannot be read as a package.json whose name, if any, is a string: Expected string at ["name"]`,
         ),
       );
-      expect(failures).not.toMatch(/^\[[^\]]+\]\s+at \[/mu);
+      expect(failures).not.toMatch(/^(?:error: )?\[[^\]]+\]\s+at \[/mu);
     }),
   ),
 });
@@ -438,20 +508,20 @@ export const aPathThroughAFileOrASymlinkLoopFindsNoPackageJson = Task.make({
         },
         [["loop", "loop"]],
       );
-      const errors = failures.split("\n").filter((line) => /^\[[^\]]+\] .*\berror\b/u.test(line));
+      const errors = failures.split("\n").filter((line) => line.startsWith("error: ["));
       expect(
         errors.filter((line) =>
           /package\.json|ModuleRequestUnresolvable|cannot be judged/u.test(line),
         ),
       ).toEqual([]);
-      expect(errors.filter((line) => line.includes("error TS2307"))).toEqual(
+      expect(errors.filter((line) => line.includes(": TS2307: "))).toEqual(
         [
           ["1", "./a.ts/b.ts"],
           ["2", "../loop/c.ts"],
           ["3", "../loop/d.ts"],
         ].map(
           ([line, request]) =>
-            `[type-check] index.ts:${line}:19: error TS2307: Cannot find module '${request}' or its corresponding type declarations.`,
+            `error: [type-check] index.ts:${line}:19: TS2307: Cannot find module '${request}' or its corresponding type declarations.`,
         ),
       );
     }),
@@ -465,10 +535,10 @@ export const exceptionalFileTypeHasOneRecoveryDiagnostic = Task.make({
       const output = yield* fullCheckOutputWith({ "src/native.c": "" });
       const failures = output
         .split("\n")
-        .filter((line) => line.startsWith("[file-types] src/native.c: error FileTypeNotGranted:"));
+        .filter((line) => line.startsWith("error: [file-types] src/native.c: FileTypeNotGranted:"));
       expect(failures).toHaveLength(1);
       expect(failures[0]).toBe(
-        "[file-types] src/native.c: error FileTypeNotGranted: has file type .c, which is not allowed by default",
+        "error: [file-types] src/native.c: FileTypeNotGranted: has file type .c, which is not allowed by default",
       );
     }),
   ),

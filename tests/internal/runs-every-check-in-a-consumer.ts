@@ -13,7 +13,7 @@ import {
 } from "../shared/checked-project.ts";
 import { failureAsValue } from "../shared/failure-as-value.ts";
 import { encodeIndentedJson } from "../shared/indented-json.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, taskStatesOf, traceFileOf } from "../shared/run-task-files.ts";
 
 const consumerCheckout = (directory: string, packageName: string) =>
   Effect.gen(function* () {
@@ -75,9 +75,7 @@ const spansInTheTraceOfACheckWith = (imports: number) =>
     const output = yield* runCheckIn(directory, taskStateDirectory).pipe(
       Effect.catchTag("CommandFailed", (failure) => Effect.succeed(failure.standardOutput)),
     );
-    const trace = yield* fileSystem.readFileString(
-      /wrote the trace to (?<file>\S+)/u.exec(output)?.groups?.["file"] ?? "",
-    );
+    const trace = yield* fileSystem.readFileString(traceFileOf(output));
     return trace.split('"spanId":').length;
   });
 
@@ -133,6 +131,7 @@ export const ignoredProjectConfigsAreRead = Task.make({
     const output = yield* runCheckIn(directory, taskStateDirectory).pipe(
       Effect.catchTag("CommandFailed", (failure) => Effect.succeed(failure.standardOutput)),
     );
+    const states = yield* taskStatesOf(output);
     for (const name of [
       "directives",
       "oxlint",
@@ -140,7 +139,7 @@ export const ignoredProjectConfigsAreRead = Task.make({
       "checker-queries",
       "linted-files-type-checked",
     ]) {
-      expect(output).toContain(`[${name}] passed`);
+      expect(states).toContainEqual({ task: name, state: "passed" });
     }
   }).pipe(Effect.scoped),
 });
@@ -196,7 +195,7 @@ export const rerunsChecksWhenAnIgnoredImportGoesMissing = Task.make({
       yield* fileSystem.remove(path.join(directory, ".generated/page.txt"));
       const failure = yield* runCheckIn(directory, taskStateDirectory).pipe(failureAsValue);
       expect(failure.message).toContain(
-        "[checker-queries] src/index.ts:1: error import-boundaries ImportOfMissingIgnoredFile: imports ../.generated/page.txt, but .generated/page.txt does not exist and is gitignored",
+        "error: [checker-queries] src/index.ts:1: import-boundaries ImportOfMissingIgnoredFile: imports ../.generated/page.txt, but .generated/page.txt does not exist and is gitignored",
       );
     }),
   ),
@@ -247,13 +246,13 @@ const checkWithAConditionedFactory = (factory: {
   }).pipe(Effect.scoped);
 
 const UNUSED_ENTRY =
-  "[checker-queries] src/internal/entry.ts:3: error export-placement UnusedExport: export default is used by nothing";
+  "error: [checker-queries] src/internal/entry.ts:3: export-placement UnusedExport: export default is used by nothing";
 
 const ORPHAN_TEST =
-  "[checker-queries] tests/orphan.ts: error export-placement TestNotRun: is a test that no file directly in scripts/ reaches through its imports";
+  "error: [checker-queries] tests/orphan.ts: export-placement TestNotRun: is a test that no file directly in scripts/ reaches through its imports";
 
 const factoryUsedOnlyByTheEntry = (name: string) =>
-  `[checker-queries] src/internal/factory.ts:1: error export-placement UnusedExport: export ${name} is used only by unreached code, such as src/internal/entry.ts`;
+  `error: [checker-queries] src/internal/factory.ts:1: export-placement UnusedExport: export ${name} is used only by unreached code, such as src/internal/entry.ts`;
 
 export const aConditionalImportIsNeverATaskImport = Task.make({
   name: "a default export that calls make on a binding from a conditional #import is not a task default export, so export placement still reports an orphan test and the unused default export when the inactive condition points at a package whose manifest does not decode, and when it points at @sshkeda/task",
@@ -315,6 +314,6 @@ export const theLayoutCheckReadsNoImports = Task.make({
       Effect.catchTag("CommandFailed", (failure) => Effect.succeed(failure.standardOutput)),
     );
     expect(output).not.toContain("ModuleRequestUnresolvable");
-    expect(output).toContain("[layout] passed");
+    expect(yield* taskStatesOf(output)).toContainEqual({ task: "layout", state: "passed" });
   }).pipe(Effect.scoped),
 });

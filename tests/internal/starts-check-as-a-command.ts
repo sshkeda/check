@@ -6,11 +6,13 @@ import { Effect, FileSystem, Path } from "effect";
 import { PROJECT_DIRECTORY_VARIABLE } from "../../src/lib/project-directory/index.ts";
 import { REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT } from "../../src/lib/tasks/shared/project-config-and-tool-errors.ts";
 import { theCheckCommand, makeProject as makeProjectWith } from "../shared/checked-project.ts";
-import { runTaskFile } from "../shared/run-task-files.ts";
+import { runTaskFile, taskStatesOf } from "../shared/run-task-files.ts";
 
 const makeProject = makeProjectWith.bind(undefined, REQUIRED_VALUES_OF_OPTIONS_OFF_BY_DEFAULT);
 
-const MISNAMED_FILE = "[layout] Bad_Name.ts: error NotKebabCase: Bad_Name.ts is not kebab-case";
+const MISNAMED_FILE = "error: [layout] Bad_Name.ts: NotKebabCase: Bad_Name.ts is not kebab-case";
+
+const USAGE_ERROR = 2;
 
 const TASKS_RUN_BY_LAYOUT = 2;
 
@@ -36,10 +38,18 @@ const commandOutcome = (
     ),
   );
 
+const isOutputFileLine = (line: string) => / its output is in /u.test(line);
+
+const errorLines = (printed: string) =>
+  printed.split("\n").filter((line) => line.startsWith("error: ") && !isOutputFileLine(line));
+
+const CHECK_SOURCE_LOCATION = /^(?<prefix>error: \[start-directory\] )src\/[\w./-]+\.ts:\d+:\d+: /u;
+
+const refusalLines = (printed: string) =>
+  errorLines(printed).map((line) => line.replace(CHECK_SOURCE_LOCATION, "$<prefix>"));
+
 const reportedLines = (printed: string) =>
-  printed
-    .split("\n")
-    .filter((line) => / error /u.test(line) && line.startsWith("["))
+  errorLines(printed)
     .map((line) => line.replace(/\[[\d.]+ms\]$/u, ""))
     .toSorted();
 
@@ -63,7 +73,9 @@ export const checksTheDirectoryItIsStartedIn = Task.make({
     expect(reportedLines(startedWithTheVariableSet.printed)).toEqual(
       reportedLines(started.printed),
     );
-    expect(started.printed.split("\n").filter((line) => /^\[[\w-]+\] \//u.test(line))).toEqual([]);
+    expect(
+      started.printed.split("\n").filter((line) => /^(?:error: )?\[[\w-]+\] \//u.test(line)),
+    ).toEqual([]);
   }).pipe(Effect.scoped),
 });
 
@@ -91,7 +103,7 @@ export const keepsPathsThatOnlyContainTheProjectPath = Task.make({
     );
     const { printed } = yield* commandOutcome(directory, taskStateDirectory);
     const namingEach = (outside: string) =>
-      printed.split("\n").filter((line) => line.startsWith("[") && line.includes(outside));
+      printed.split("\n").filter((line) => line.startsWith("error: [") && line.includes(outside));
     expect(namingEach(containingTheProjectPath)).not.toEqual([]);
     expect(
       namingEach(besideIt).filter((line) => !line.includes(containingTheProjectPath)),
@@ -100,7 +112,7 @@ export const keepsPathsThatOnlyContainTheProjectPath = Task.make({
 });
 
 export const refusesToRunWithoutAProjectToCheck = Task.make({
-  name: "the check command fails with one line naming why, and runs no other check, when it is given a flag no task reads, when its directory has no package.json and when its directory is outside a git repository, where start-directory names why and check names only the task it awaited",
+  name: "the check command fails with one line naming why, and runs no other check, when it is given a flag no task reads, when its directory has no package.json and when its directory is outside a git repository, where start-directory names why and check, which only awaited it, prints no error of its own",
   run: Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -112,9 +124,9 @@ export const refusesToRunWithoutAProjectToCheck = Task.make({
     const unversioned = yield* fileSystem.realPath(yield* fileSystem.makeTempDirectoryScoped());
     yield* fileSystem.writeFileString(path.join(unversioned, "package.json"), "{}\n");
     const givenAFlag = yield* commandOutcome(directory, taskStateDirectory, {}, " --fix");
-    expect(givenAFlag.code).toBe(1);
-    expect(givenAFlag.printed.split("\n").filter((line) => line.includes("error "))).toEqual([
-      "error FlagNotRead: the flag --fix is not read by any task",
+    expect(givenAFlag.code).toBe(USAGE_ERROR);
+    expect(errorLines(givenAFlag.printed)).toEqual([
+      "error: FlagNotRead: the flag --fix is not read by any task",
     ]);
     expect(givenAFlag.printed).not.toContain("[check]");
     for (const [startedIn, refusal] of [
@@ -123,11 +135,8 @@ export const refusesToRunWithoutAProjectToCheck = Task.make({
     ] as const) {
       const { code, printed } = yield* commandOutcome(startedIn, taskStateDirectory);
       expect(code).toBe(1);
-      expect(printed.split("\n").filter((line) => line.includes(" error "))).toEqual([
-        `[start-directory] error ${refusal}`,
-        "[check] error AwaitedTaskFailed: start-directory failed",
-      ]);
-      expect(printed).toContain("failed: start-directory (1 of 2 tasks)");
+      expect(refusalLines(printed)).toEqual([`error: [start-directory] ${refusal}`]);
+      expect(printed).toContain("failed: [start-directory] (1 of 2 tasks)");
     }
   }).pipe(Effect.scoped),
 });
@@ -145,20 +154,9 @@ export const refusesToStartOneCheckWithoutAProjectToCheck = Task.make({
       [bare, `PackageManifestMissing: ${bare} has no package.json`],
       [unversioned, `RepositoryNotFound: ${unversioned} is not inside a git repository`],
     ] as const) {
-      for (const [startedTask, awaitingLines, taskCount] of [
-        [
-          "layout",
-          ["[layout] error AwaitedTaskFailed: start-directory failed"],
-          TASKS_RUN_BY_LAYOUT,
-        ],
-        [
-          "typed-checks",
-          [
-            "[typescript-config] error AwaitedTaskFailed: start-directory failed",
-            "[typed-checks] error AwaitedTaskFailed: typescript-config failed",
-          ],
-          TASKS_RUN_BY_TYPED_CHECKS,
-        ],
+      for (const [startedTask, taskCount] of [
+        ["layout", TASKS_RUN_BY_LAYOUT],
+        ["typed-checks", TASKS_RUN_BY_TYPED_CHECKS],
       ] as const) {
         const { code, printed } = yield* commandOutcome(
           startedIn,
@@ -167,11 +165,8 @@ export const refusesToStartOneCheckWithoutAProjectToCheck = Task.make({
           ` ${startedTask}`,
         );
         expect(code).toBe(1);
-        expect(printed.split("\n").filter((line) => line.includes(" error "))).toEqual([
-          `[start-directory] error ${refusal}`,
-          ...awaitingLines,
-        ]);
-        expect(printed).toContain(`failed: start-directory (1 of ${taskCount} tasks)`);
+        expect(refusalLines(printed)).toEqual([`error: [start-directory] ${refusal}`]);
+        expect(printed).toContain(`failed: [start-directory] (1 of ${taskCount} tasks)`);
       }
     }
   }).pipe(Effect.scoped),
@@ -188,9 +183,14 @@ export const startsOneCheckByName = Task.make({
     const { code, printed } = yield* commandOutcome(directory, taskStateDirectory, {}, " layout");
     expect(code).toBe(1);
     expect(printed).toContain(MISNAMED_FILE);
-    expect(reportedLines(printed).filter((line) => !line.startsWith("[layout] "))).toEqual([]);
-    expect(printed).toContain("[start-directory] passed");
-    expect(printed).toContain("failed: layout (1 of 2 tasks)");
+    expect(reportedLines(printed).filter((line) => !line.startsWith("error: [layout] "))).toEqual(
+      [],
+    );
+    expect(yield* taskStatesOf(printed)).toContainEqual({
+      task: "start-directory",
+      state: "passed",
+    });
+    expect(printed).toContain("failed: [layout] (1 of 2 tasks)");
     expect(printed).not.toContain("how-to-make-check-pass.md");
   }).pipe(Effect.scoped),
 });
