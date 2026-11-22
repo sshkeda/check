@@ -165,3 +165,51 @@ export const destructuringOutsideADeclarationIsRejected = Task.make({
     ],
   }),
 });
+
+export const combinatorsReachedThroughAConstantKeyOrANestedPatternAreRejected = Task.make({
+  name: "no-promise-combinators reports a combinator destructured by a constant computed key or from Promise nested in a container pattern, once even with a default, including a default subclass that defines that member, and through a subclass whose own statics have a symbol key, also through a container, or a constant key that folds to another name",
+  run: ruleTest("no-promise-combinators", {
+    valid: [],
+    invalid: [
+      combinator(
+        "all",
+        'const key = "all"; const { [key]: join } = Promise; join.call(Promise, [1]);',
+      ),
+      combinator("all", "const { Promise: { all: join } } = globalThis;"),
+      combinator("race", "const { Promise: { race } = {} } = window;"),
+      combinator("all", "const { Promise: { all } = Promise } = window;"),
+      combinator(
+        "all",
+        "class Pending extends Promise<number> { static get [Symbol.species]() { return Promise; } } Pending.all(work);",
+      ),
+      combinator(
+        "all",
+        "class Pending extends Promise<number> { static get [globalThis.Symbol.species]() { return Promise; } } Pending.all(work);",
+      ),
+      combinator(
+        "all",
+        `const metadata = "metadata"; class Pending extends Promise<number> { static [\`\${metadata}Label\`]() { return "pending"; } } Pending.all([1]);`,
+      ),
+      combinator(
+        "race",
+        'class Pending extends Promise<number> { static ["ra" + "ce" + 1]() { return 1; } } Pending.race([1]);',
+      ),
+      combinator(
+        "all",
+        'class Custom extends Promise<number> { static all(): never { throw new Error("unsupported"); } } const { Promise: { all } = Custom } = globalThis;',
+      ),
+    ],
+  }),
+});
+
+export const aSubclassWithAnUnresolvedStaticKeyPasses = Task.make({
+  name: "no-promise-combinators passes a combinator called on a Promise subclass that defines it under a constant key that folds to its name, or defines a static member whose computed key it cannot resolve, since that member may be the combinator",
+  run: ruleTest("no-promise-combinators", {
+    valid: [
+      'class Pending extends Promise<number> { static ["ra" + "ce"]() { return 1; } } Pending.race([1]);',
+      `const prefix = "a"; class Pending extends Promise<number> { static [\`\${prefix}ll\`] = collect; } Pending.all(work);`,
+      "class Pending extends Promise<number> { static [name] = collect; } class Child extends Pending {} Child.all(work);",
+    ],
+    invalid: [],
+  }),
+});

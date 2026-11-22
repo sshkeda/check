@@ -1,7 +1,10 @@
-const LINE_BREAK = /\n/gu;
+const LINE_BREAK = /\r\n?|[\n\u2028\u2029]/gu;
 
 export const lineNumbersIn = (text: string) => {
-  const lineStarts = [0, ...Array.from(text.matchAll(LINE_BREAK), (match) => match.index + 1)];
+  const lineStarts = [
+    0,
+    ...Array.from(text.matchAll(LINE_BREAK), (match) => match.index + match[0].length),
+  ];
   const linesStartingBy = (offset: number, low: number, high: number): number => {
     if (low >= high) {
       return low;

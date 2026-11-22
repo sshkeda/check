@@ -24,14 +24,64 @@ const CHAINING_METHODS: ReadonlySet<string> = new Set([THEN, "catch", "finally"]
 
 const memberCalledBy = (callee: Node) => {
   if (isPropertyAccessExpression(callee)) {
-    return { receiver: callee.expression, key: callee.name };
+    return { receiver: callee.expression, key: callee.name, method: callee.name.text };
   }
   if (!isElementAccessExpression(callee)) {
     return;
   }
   const key = callee.argumentExpression;
-  return isStringLiteralLikeNode(key) ? { receiver: callee.expression, key } : undefined;
+  return {
+    receiver: callee.expression,
+    key,
+    method: isStringLiteralLikeNode(key) ? key.text : undefined,
+  };
 };
+
+const chainingMethodOf = (keyType: Type | undefined) =>
+  Effect.gen(function* () {
+    const members = keyType === undefined ? [] : yield* typeMembers(keyType);
+    const methods = members.flatMap((member) => {
+      const isChainingMethodName =
+        member.isStringLiteralType() && CHAINING_METHODS.has(member.value);
+      return isChainingMethodName ? [member.value] : [];
+    });
+    return methods[0];
+  });
+
+const withComputedMethods = (checker: Checker, members: ReturnType<typeof chainedCallsIn>) =>
+  Effect.gen(function* () {
+    const named = members.flatMap(({ receiver, key, method }) =>
+      method === undefined ? [] : [{ receiver, key, method }],
+    );
+    const computed = members.filter(({ method }) => method === undefined);
+    if (computed.length === 0) {
+      return named;
+    }
+    const keyTypes = yield* typeScriptRequest("read the types of computed member keys", () =>
+      checker.getTypeAtLocation(computed.map(({ key }) => key)),
+    );
+    const distinctKeyTypes = [
+      ...new Map(
+        keyTypes.flatMap((keyType) =>
+          keyType === undefined ? [] : [[keyType.id, keyType] as const],
+        ),
+      ).values(),
+    ];
+    const distinctMethods = yield* Effect.forEach(distinctKeyTypes, (keyType) =>
+      chainingMethodOf(keyType),
+    );
+    const methodOfKeyType = new Map(
+      distinctKeyTypes.map((keyType, index) => [keyType.id, distinctMethods[index]] as const),
+    );
+    return [
+      ...named,
+      ...computed.flatMap(({ receiver, key }, index) => {
+        const keyType = keyTypes[index];
+        const method = keyType === undefined ? undefined : methodOfKeyType.get(keyType.id);
+        return method === undefined ? [] : [{ receiver, key, method }];
+      }),
+    ];
+  });
 
 const hasCallableThen = (checker: Checker, member: Type) =>
   Effect.gen(function* () {
@@ -70,8 +120,9 @@ const isThenable = (checker: Checker, receiver: Type) =>
 const chainedCallsIn = (sourceFile: SourceFile) =>
   callsIn(sourceFile).flatMap((call) => {
     const member = memberCalledBy(withoutWrappers(call.expression));
-    const isChaining = member !== undefined && CHAINING_METHODS.has(member.key.text);
-    return isChaining ? [member] : [];
+    const mayChain =
+      member !== undefined && (member.method === undefined || CHAINING_METHODS.has(member.method));
+    return mayChain ? [member] : [];
   });
 
 const projectViolations = (
@@ -85,10 +136,17 @@ const projectViolations = (
     });
     const files = yield* Effect.forEach(
       candidates,
-      ({ sourceFile, displayName, chained }) =>
-        typeScriptRequest("read the types of chained receivers", () =>
-          checker.getTypeAtLocation(chained.map(({ receiver }) => receiver)),
-        ).pipe(Effect.map((types) => ({ sourceFile, displayName, chained, types }))),
+      ({ sourceFile, displayName, chained: members }) =>
+        Effect.gen(function* () {
+          const chained = yield* withComputedMethods(checker, members);
+          const types =
+            chained.length === 0
+              ? []
+              : yield* typeScriptRequest("read the types of chained receivers", () =>
+                  checker.getTypeAtLocation(chained.map(({ receiver }) => receiver)),
+                );
+          return { sourceFile, displayName, chained, types };
+        }),
       { concurrency: CONCURRENT_TYPESCRIPT_REQUESTS },
     );
     const distinctTypes = [
@@ -111,11 +169,11 @@ const projectViolations = (
           return type !== undefined && thenableTypeIds.has(type.id);
         })
         .toSorted((left, right) => left.key.pos - right.key.pos)
-        .map(({ key }) => {
+        .map(({ key, method }) => {
           const { line, column } = nodePosition(sourceFile, key);
           return new PromiseChained({
             location: `${displayName}:${line}:${column}`,
-            method: key.text,
+            method,
           });
         }),
     );

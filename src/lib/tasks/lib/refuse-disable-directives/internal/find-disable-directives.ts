@@ -3,7 +3,7 @@ import { parseSync } from "oxc-parser";
 import type { Comment } from "oxc-parser";
 
 import { FORMAT_CONFIG_FILE } from "../../../../../shared/config-file-names.ts";
-import { isDirective } from "../../../../../shared/lint-rule-messages-and-patterns.ts";
+import { directivesAmong as directiveCommentsAmong } from "../../../../../shared/lint-rule-messages-and-patterns.ts";
 import { lineNumbersIn, lineOfTheFirstLabel } from "../../../shared/count-the-line-of-an-offset.ts";
 import { scriptFiles } from "../../../shared/list-linted-files.ts";
 import { ownedFilesAmong } from "../../../shared/list-owned-files.ts";
@@ -54,11 +54,7 @@ export const disableDirectivesIn = (file: string, directory = ".") =>
           }),
       );
     }
-    return directivesAmong(
-      file,
-      text,
-      parsed.comments.filter((comment) => isDirective(comment)),
-    );
+    return directivesAmong(file, text, directiveCommentsAmong(text, parsed.comments));
   });
 
 export const findDisableDirectivesInLintedFilesOf = (directory: string) =>

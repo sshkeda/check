@@ -1,6 +1,6 @@
 import { isBuiltin } from "node:module";
 
-const DIRECTIVE = /^\s*(?:(?:oxlint|eslint)-(?:disable|enable)|@effect-diagnostics)/u;
+const DIRECTIVE = /^[\s\u0085]*(?:(?:oxlint|eslint)-(?:disable|enable)|@effect-diagnostics)/u;
 
 const LINE_COMMENT = "Line";
 
@@ -12,6 +12,10 @@ const TYPESCRIPT_SUPPRESSION_ON_THE_LAST_LINE_OF_A_BLOCK_COMMENT =
 const TYPESCRIPT_NO_CHECK_IN_A_LINE_COMMENT =
   /^\/?[ \t]*@[Tt][Ss]-[Nn][Oo][Cc][Hh][Ee][Cc][Kk](?![A-Za-z-])/u;
 
+const SHEBANG = /^#![^\n\r\u2028\u2029]*/u;
+
+const ONLY_WHITESPACE = /^[\s\u0085]*$/u;
+
 const isTypeScriptSuppression = (comment: { readonly type: string; readonly value: string }) =>
   comment.type === LINE_COMMENT
     ? TYPESCRIPT_SUPPRESSION_IN_A_LINE_COMMENT.test(comment.value)
@@ -20,8 +24,38 @@ const isTypeScriptSuppression = (comment: { readonly type: string; readonly valu
 const isTypeScriptNoCheck = (comment: { readonly type: string; readonly value: string }) =>
   comment.type === LINE_COMMENT && TYPESCRIPT_NO_CHECK_IN_A_LINE_COMMENT.test(comment.value);
 
-export const isDirective = (comment: { readonly type: string; readonly value: string }) =>
-  DIRECTIVE.test(comment.value) || isTypeScriptSuppression(comment) || isTypeScriptNoCheck(comment);
+const countOfLeadingComments = (
+  text: string,
+  comments: readonly { readonly start: number; readonly end: number }[],
+) => {
+  const codeStart = SHEBANG.exec(text)?.[0].length ?? 0;
+  const firstAfterCode = comments.findIndex((comment, index) => {
+    const gapStart = index === 0 ? codeStart : (comments[index - 1]?.end ?? codeStart);
+    return !ONLY_WHITESPACE.test(text.slice(gapStart, comment.start));
+  });
+  return firstAfterCode === -1 ? comments.length : firstAfterCode;
+};
+
+export const directivesAmong = <
+  Comment extends {
+    readonly type: string;
+    readonly value: string;
+    readonly start: number;
+    readonly end: number;
+  },
+>(
+  text: string,
+  allComments: readonly Comment[],
+) => {
+  const comments = allComments.filter((comment) => comment.type !== "Shebang");
+  const leadingComments = countOfLeadingComments(text, comments);
+  return comments.filter(
+    (comment, index) =>
+      DIRECTIVE.test(comment.value) ||
+      isTypeScriptSuppression(comment) ||
+      (index < leadingComments && isTypeScriptNoCheck(comment)),
+  );
+};
 
 export const EFFECT_OPERATION_RULES = {
   "no-dropped-failures": {
